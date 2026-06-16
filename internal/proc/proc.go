@@ -41,6 +41,7 @@ func buildEnv(spec Spec) []string {
 	for k, v := range spec.Env {
 		env = append(env, k+"="+v)
 	}
+	// Appended last so it takes precedence on exec (last matching entry wins).
 	env = append(env, "MARSHAL_INSTANCE_ID="+strconv.Itoa(spec.InstanceID))
 	return env
 }

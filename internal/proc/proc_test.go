@@ -47,7 +47,10 @@ func TestInstanceIDInjected(t *testing.T) {
 	if err := p.Wait(); err != nil {
 		t.Fatalf("wait: %v", err)
 	}
-	data, _ := os.ReadFile(f.Name())
+	data, err := os.ReadFile(f.Name())
+	if err != nil {
+		t.Fatalf("read temp file: %v", err)
+	}
 	if string(data) != "2" {
 		t.Fatalf("MARSHAL_INSTANCE_ID = %q, want 2", string(data))
 	}
