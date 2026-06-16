@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -76,5 +77,43 @@ apps:
 `))
 	if err == nil {
 		t.Fatal("expected error for bad restart mode")
+	}
+}
+
+func TestDurationJSONRoundTrip(t *testing.T) {
+	type wrap struct {
+		KT Duration `json:"kt"`
+	}
+	in := wrap{KT: Duration{Duration: 7 * time.Second}}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if string(b) != `{"kt":"7s"}` {
+		t.Fatalf("got %s, want {\"kt\":\"7s\"}", b)
+	}
+	var out wrap
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.KT.Duration != 7*time.Second {
+		t.Fatalf("got %v, want 7s", out.KT.Duration)
+	}
+}
+
+func TestPrepareAppliesDefaultsAndValidates(t *testing.T) {
+	cfg := &Config{Apps: []App{{Name: "api", Cmd: "./server"}}}
+	if err := cfg.Prepare(); err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	a := cfg.Apps[0]
+	if a.Instances != 1 || a.Restart != RestartAlways || a.MaxRestarts != 16 ||
+		a.KillTimeout.Duration != 5*time.Second {
+		t.Fatalf("defaults not applied: %+v", a)
+	}
+
+	bad := &Config{Apps: []App{{Name: "x"}}} // no cmd
+	if err := bad.Prepare(); err == nil {
+		t.Fatal("Prepare: want error for missing cmd")
 	}
 }

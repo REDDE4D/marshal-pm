@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -25,6 +26,25 @@ type Duration struct{ time.Duration }
 func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 	var s string
 	if err := value.Decode(&s); err != nil {
+		return err
+	}
+	parsed, err := time.ParseDuration(s)
+	if err != nil {
+		return fmt.Errorf("invalid duration %q: %w", s, err)
+	}
+	d.Duration = parsed
+	return nil
+}
+
+// MarshalJSON renders the duration as a Go duration string (e.g. "5s").
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return []byte(strconv.Quote(d.Duration.String())), nil
+}
+
+// UnmarshalJSON parses a Go duration string.
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
 		return err
 	}
 	parsed, err := time.ParseDuration(s)
@@ -68,11 +88,16 @@ func Parse(data []byte) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
-	cfg.applyDefaults()
-	if err := cfg.validate(); err != nil {
+	if err := cfg.Prepare(); err != nil {
 		return nil, err
 	}
 	return &cfg, nil
+}
+
+// Prepare applies per-app defaults and validates the config in place.
+func (c *Config) Prepare() error {
+	c.applyDefaults()
+	return c.validate()
 }
 
 func (c *Config) applyDefaults() {
