@@ -114,7 +114,8 @@ func (c *Config) validate() error {
 		default:
 			return fmt.Errorf("app %q has invalid restart mode %q", a.Name, a.Restart)
 		}
-		if a.Instances < 1 {
+		// applyDefaults has already promoted Instances == 0 to 1; only negatives remain invalid.
+		if a.Instances < 0 {
 			return fmt.Errorf("app %q has invalid instances %d", a.Name, a.Instances)
 		}
 	}

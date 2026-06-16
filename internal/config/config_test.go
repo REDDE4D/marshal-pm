@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestLoadAppliesDefaults(t *testing.T) {
+func TestParseAppliesDefaults(t *testing.T) {
 	cfg, err := Parse([]byte(`
 apps:
   - name: api
