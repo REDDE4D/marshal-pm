@@ -1,6 +1,7 @@
 package store
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -48,5 +49,19 @@ func TestLoadMissingReturnsEmpty(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("got %d apps, want 0", len(got))
+	}
+}
+
+func TestEnsureDirIsPrivate(t *testing.T) {
+	s := NewAt(filepath.Join(t.TempDir(), "state"))
+	if err := s.EnsureDir(); err != nil {
+		t.Fatalf("EnsureDir: %v", err)
+	}
+	info, err := os.Stat(s.Dir())
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("dir perm = %o, want 700", perm)
 	}
 }

@@ -127,6 +127,10 @@ func Run(ctx context.Context, st *store.Store) error {
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", sock, err)
 	}
+	if err := os.Chmod(sock, 0o600); err != nil {
+		_ = lis.Close()
+		return fmt.Errorf("chmod socket: %w", err)
+	}
 
 	gs := grpc.NewServer()
 	srv := &Server{mgr: mgr, store: st}

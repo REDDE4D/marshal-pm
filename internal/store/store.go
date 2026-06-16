@@ -43,7 +43,7 @@ func (s *Store) LogPath() string { return filepath.Join(s.base, "marshald.log") 
 func (s *Store) dumpPath() string { return filepath.Join(s.base, "dump.json") }
 
 // EnsureDir creates the state directory if it does not exist.
-func (s *Store) EnsureDir() error { return os.MkdirAll(s.base, 0o755) }
+func (s *Store) EnsureDir() error { return os.MkdirAll(s.base, 0o700) }
 
 // Save writes app definitions to dump.json atomically.
 func (s *Store) Save(apps []config.App) error {
