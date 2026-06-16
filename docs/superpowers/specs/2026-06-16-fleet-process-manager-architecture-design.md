@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-16
 **Status:** Approved (architecture spec); sub-project specs to follow
-**Working name:** `fleetpm` (placeholder — final name TBD)
+**Name:** **Marshal** (CLI/binary: `marshal`) — to *marshal* = to organize and command forces.
 
 ## 1. Purpose & Motivation
 
