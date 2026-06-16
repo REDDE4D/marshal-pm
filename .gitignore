@@ -1,0 +1,12 @@
+# Build artifacts
+*.exe
+bin/
+dist/
+
+# Data dirs
+data/
+*.db
+*.sqlite
+
+# OS
+.DS_Store
