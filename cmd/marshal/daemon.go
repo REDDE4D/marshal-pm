@@ -29,9 +29,3 @@ func daemonCmd() *cobra.Command {
 		},
 	}
 }
-
-// runDaemonForTest runs the daemon serve loop with an explicit context and store.
-// It exists so e2e tests can run the daemon in-process with hermetic teardown.
-func runDaemonForTest(ctx context.Context, st *store.Store) error {
-	return daemon.Run(ctx, st)
-}
