@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package marshal.v1;
+
+option go_package = "marshal/internal/pb;pb";
+
+// Daemon is the control surface marshald exposes over the Unix socket.
+// M2 implements every RPC except Logs (reserved for M3).
+service Daemon {
+  rpc Start(StartRequest) returns (ProcList);
+  rpc Stop(Selector) returns (ProcList);
+  rpc Restart(Selector) returns (ProcList);
+  rpc Delete(Selector) returns (ProcList);
+  rpc List(Empty) returns (ProcList);
+  rpc Describe(Selector) returns (ProcList);
+  rpc Save(Empty) returns (Ack);
+  rpc Resurrect(Empty) returns (ProcList);
+  rpc Kill(Empty) returns (Ack);
+  rpc Logs(LogRequest) returns (stream LogLine); // M3 — defined, not implemented
+}
+
+message Empty {}
+
+message Ack {
+  bool ok = 1;
+  string message = 2;
+}
+
+// AppSpec mirrors config.App. kill_timeout is a Go duration string ("5s").
+message AppSpec {
+  string name = 1;
+  string cmd = 2;
+  repeated string args = 3;
+  string cwd = 4;
+  int32 instances = 5;
+  map<string, string> env = 6;
+  string restart = 7; // always | on-failure | no
+  int32 max_restarts = 8;
+  string kill_timeout = 9;
+}
+
+message StartRequest { repeated AppSpec apps = 1; }
+
+// Selector resolves to a name, a numeric id, or the literal "all".
+message Selector { string target = 1; }
+
+// ProcInfo mirrors a supervised instance snapshot. cpu/mem are reserved for M3.
+message ProcInfo {
+  int32 id = 1;
+  string name = 2;
+  int32 instance_id = 3;
+  string state = 4;
+  int32 pid = 5;
+  int64 uptime_ms = 6;
+  int32 restarts = 7;
+  double cpu = 8; // M3
+  int64 mem = 9;  // M3
+}
+
+message ProcList { repeated ProcInfo procs = 1; }
+
+// M3 — log streaming.
+message LogRequest {
+  string target = 1;
+  int32 lines = 2;
+  bool follow = 3;
+}
+
+message LogLine {
+  string name = 1;
+  int32 instance_id = 2;
+  bool stderr = 3;
+  string line = 4;
+}
