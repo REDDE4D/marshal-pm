@@ -3,6 +3,7 @@ package proc
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
@@ -16,6 +17,8 @@ type Spec struct {
 	Cwd        string
 	Env        map[string]string
 	InstanceID int
+	Stdout     io.Writer // nil → inherit os.Stdout
+	Stderr     io.Writer // nil → inherit os.Stderr
 }
 
 // Process is a running OS process.
@@ -23,8 +26,8 @@ type Process struct {
 	cmd *exec.Cmd
 }
 
-// Start launches the process described by spec. Stdout/stderr inherit the
-// parent's (file capture arrives in milestone M3).
+// Start launches the process described by spec.
+// Stdout/Stderr go to spec.Stdout/spec.Stderr when set, else inherit the parent's.
 //
 // Each process is placed in its own process group (Setpgid) so that Signal and
 // Kill reach the whole tree — a supervised command that itself spawns children
@@ -33,8 +36,14 @@ func Start(spec Spec) (*Process, error) {
 	cmd := exec.Command(spec.Cmd, spec.Args...)
 	cmd.Dir = spec.Cwd
 	cmd.Env = buildEnv(spec)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = spec.Stdout
+	if cmd.Stdout == nil {
+		cmd.Stdout = os.Stdout
+	}
+	cmd.Stderr = spec.Stderr
+	if cmd.Stderr == nil {
+		cmd.Stderr = os.Stderr
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start %q: %w", spec.Cmd, err)
