@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -183,4 +187,64 @@ func printProcs(cmd *cobra.Command, list *pb.ProcList) {
 			p.GetId(), p.GetName(), p.GetInstanceId(), p.GetState(), p.GetPid(), uptime, p.GetRestarts())
 	}
 	_ = w.Flush()
+}
+
+func logsCmd() *cobra.Command {
+	var lines int
+	var follow bool
+	cmd := &cobra.Command{
+		Use:   "logs <name|id|all>",
+		Short: "Stream captured stdout/stderr for app(s)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			st, err := store.New()
+			if err != nil {
+				return err
+			}
+			c, conn, err := client.Connect(st)
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			// Follow streams until Ctrl-C; one-shot backfill gets a 30s cap.
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer cancel()
+			if !follow {
+				var c2 context.CancelFunc
+				ctx, c2 = context.WithTimeout(ctx, 30*time.Second)
+				defer c2()
+			}
+
+			stream, err := c.Logs(ctx, &pb.LogRequest{Target: args[0], Lines: int32(lines), Follow: follow})
+			if err != nil {
+				return err
+			}
+			for {
+				ln, err := stream.Recv()
+				if err == io.EOF {
+					return nil
+				}
+				if err != nil {
+					if ctx.Err() != nil {
+						return nil // expected on Ctrl-C
+					}
+					return err
+				}
+				printLogLine(cmd, ln)
+			}
+		},
+	}
+	cmd.Flags().IntVarP(&lines, "lines", "n", 15, "number of backfilled lines to show")
+	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "stream new lines as they arrive")
+	return cmd
+}
+
+// printLogLine writes a tagged log line: stdout lines to stdout, stderr to stderr.
+func printLogLine(cmd *cobra.Command, ln *pb.LogLine) {
+	w := cmd.OutOrStdout()
+	if ln.GetStderr() {
+		w = cmd.ErrOrStderr()
+	}
+	fmt.Fprintf(w, "%s#%d | %s\n", ln.GetName(), ln.GetInstanceId(), ln.GetLine())
 }

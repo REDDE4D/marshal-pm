@@ -58,6 +58,7 @@ func rootCmd() *cobra.Command {
 			}),
 		listCmd(),
 		describeCmd(),
+		logsCmd(),
 		saveCmd(),
 		resurrectCmd(),
 		killCmd(),
