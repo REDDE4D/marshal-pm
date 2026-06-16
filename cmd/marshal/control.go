@@ -174,17 +174,35 @@ func killCmd() *cobra.Command {
 	}
 }
 
+func humanizeBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%dB", b)
+	}
+	suffixes := []string{"KB", "MB", "GB", "TB"}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit && exp < len(suffixes)-1; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f%s", float64(b)/float64(div), suffixes[exp])
+}
+
 // printProcs renders a ProcList as an aligned table.
 func printProcs(cmd *cobra.Command, list *pb.ProcList) {
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tNAME\tINST\tSTATE\tPID\tUPTIME\tRESTARTS")
+	fmt.Fprintln(w, "ID\tNAME\tINST\tSTATE\tPID\tCPU\tMEM\tUPTIME\tRESTARTS")
 	for _, p := range list.GetProcs() {
-		uptime := "-"
+		uptime, cpu, mem := "-", "-", "-"
 		if p.GetUptimeMs() > 0 {
 			uptime = (time.Duration(p.GetUptimeMs()) * time.Millisecond).Round(time.Second).String()
 		}
-		fmt.Fprintf(w, "%d\t%s\t%d\t%s\t%d\t%s\t%d\n",
-			p.GetId(), p.GetName(), p.GetInstanceId(), p.GetState(), p.GetPid(), uptime, p.GetRestarts())
+		if p.GetState() == "online" {
+			cpu = fmt.Sprintf("%.1f%%", p.GetCpu())
+			mem = humanizeBytes(p.GetMem())
+		}
+		fmt.Fprintf(w, "%d\t%s\t%d\t%s\t%d\t%s\t%s\t%s\t%d\n",
+			p.GetId(), p.GetName(), p.GetInstanceId(), p.GetState(), p.GetPid(), cpu, mem, uptime, p.GetRestarts())
 	}
 	_ = w.Flush()
 }
