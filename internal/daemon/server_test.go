@@ -3,8 +3,11 @@ package daemon
 import (
 	"context"
 	"testing"
+	"time"
 
+	"marshal/internal/logs"
 	"marshal/internal/manager"
+	"marshal/internal/metrics"
 	"marshal/internal/pb"
 
 	"google.golang.org/grpc/codes"
@@ -71,4 +74,60 @@ func TestStartInvalidSpecIsInvalidArgument(t *testing.T) {
 	if status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("got %v, want InvalidArgument", err)
 	}
+}
+
+func TestListIncludesMetricsAfterSample(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	reg := newTestRegistry(t)
+	mgr := manager.New(ctx, manager.WithLogs(reg))
+	sampler := metricsSampler(t)
+	srv := &Server{mgr: mgr, logs: reg, metrics: sampler}
+	defer mgr.StopAll()
+
+	if _, err := srv.Start(ctx, &pb.StartRequest{Apps: []*pb.AppSpec{sleepSpec("a", 1)}}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	// wait until online, then sample once
+	waitListOnline(t, srv, 1)
+	sampler.SampleOnce(srv.testInstances())
+
+	list, err := srv.List(ctx, &pb.Empty{})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list.Procs) != 1 || list.Procs[0].Mem == 0 {
+		t.Fatalf("proc = %+v, want non-zero Mem", list.GetProcs())
+	}
+}
+
+func newTestRegistry(t *testing.T) *logs.Registry {
+	t.Helper()
+	return logs.NewRegistry(t.TempDir())
+}
+
+func metricsSampler(t *testing.T) *metrics.Sampler {
+	t.Helper()
+	return metrics.NewSampler(time.Hour)
+}
+
+func (s *Server) testInstances() []metrics.Instance { return metricsSnapshot(s.mgr)() }
+
+func waitListOnline(t *testing.T, srv *Server, want int) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		list, _ := srv.List(context.Background(), &pb.Empty{})
+		online := 0
+		for _, p := range list.GetProcs() {
+			if p.GetState() == "online" {
+				online++
+			}
+		}
+		if online >= want {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %d online", want)
 }

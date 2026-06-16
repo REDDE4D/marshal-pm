@@ -68,6 +68,10 @@ func (s *Sampler) Run(ctx context.Context, snapshot func() []Instance) {
 	}
 }
 
+// SampleOnce performs a single synchronous sample (used by the daemon's tests
+// and any caller that wants an immediate reading without waiting for a tick).
+func (s *Sampler) SampleOnce(insts []Instance) { s.sample(insts) }
+
 func (s *Sampler) sample(insts []Instance) {
 	live := map[int32]bool{}
 	result := make(map[string]Sample, len(insts))

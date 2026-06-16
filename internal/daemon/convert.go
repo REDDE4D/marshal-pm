@@ -36,8 +36,8 @@ func appSpecToConfig(s *pb.AppSpec) (config.App, error) {
 	return cfg.Apps[0], nil
 }
 
-// snapshotToProc converts a manager snapshot into a wire ProcInfo.
-func snapshotToProc(s manager.InstanceSnapshot) *pb.ProcInfo {
+// snapshotToProc converts a manager snapshot + metrics into a wire ProcInfo.
+func snapshotToProc(s manager.InstanceSnapshot, cpu float64, mem uint64) *pb.ProcInfo {
 	var uptimeMs int64
 	if s.State == supervisor.StateOnline && !s.StartedAt.IsZero() {
 		uptimeMs = time.Since(s.StartedAt).Milliseconds()
@@ -50,13 +50,23 @@ func snapshotToProc(s manager.InstanceSnapshot) *pb.ProcInfo {
 		Pid:        int32(s.Pid),
 		UptimeMs:   uptimeMs,
 		Restarts:   int32(s.Restarts),
+		Cpu:        cpu,
+		Mem:        int64(mem),
 	}
 }
 
-func toProcList(snaps []manager.InstanceSnapshot) *pb.ProcList {
+// procList renders snapshots as a ProcList, merging in the latest metrics.
+func (srv *Server) procList(snaps []manager.InstanceSnapshot) *pb.ProcList {
 	procs := make([]*pb.ProcInfo, 0, len(snaps))
 	for _, s := range snaps {
-		procs = append(procs, snapshotToProc(s))
+		var cpu float64
+		var mem uint64
+		if srv.metrics != nil {
+			if sm, ok := srv.metrics.Get(s.Label); ok {
+				cpu, mem = sm.Cpu, sm.Mem
+			}
+		}
+		procs = append(procs, snapshotToProc(s, cpu, mem))
 	}
 	return &pb.ProcList{Procs: procs}
 }
