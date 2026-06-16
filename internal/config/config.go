@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -35,17 +36,36 @@ func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// MarshalJSON renders the duration as a Go duration string (e.g. "5s").
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return []byte(strconv.Quote(d.Duration.String())), nil
+}
+
+// UnmarshalJSON parses a Go duration string.
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	parsed, err := time.ParseDuration(s)
+	if err != nil {
+		return fmt.Errorf("invalid duration %q: %w", s, err)
+	}
+	d.Duration = parsed
+	return nil
+}
+
 // App is one supervised application definition.
 type App struct {
-	Name        string            `yaml:"name"`
-	Cmd         string            `yaml:"cmd"`
-	Args        []string          `yaml:"args"`
-	Cwd         string            `yaml:"cwd"`
-	Instances   int               `yaml:"instances"`
-	Env         map[string]string `yaml:"env"`
-	Restart     RestartMode       `yaml:"restart"`
-	MaxRestarts int               `yaml:"max_restarts"`
-	KillTimeout Duration          `yaml:"kill_timeout"`
+	Name        string            `yaml:"name" json:"name"`
+	Cmd         string            `yaml:"cmd" json:"cmd"`
+	Args        []string          `yaml:"args" json:"args"`
+	Cwd         string            `yaml:"cwd" json:"cwd"`
+	Instances   int               `yaml:"instances" json:"instances"`
+	Env         map[string]string `yaml:"env" json:"env"`
+	Restart     RestartMode       `yaml:"restart" json:"restart"`
+	MaxRestarts int               `yaml:"max_restarts" json:"max_restarts"`
+	KillTimeout Duration          `yaml:"kill_timeout" json:"kill_timeout"`
 }
 
 // Config is the top-level marshal.yaml document.
@@ -68,11 +88,16 @@ func Parse(data []byte) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
-	cfg.applyDefaults()
-	if err := cfg.validate(); err != nil {
+	if err := cfg.Prepare(); err != nil {
 		return nil, err
 	}
 	return &cfg, nil
+}
+
+// Prepare applies per-app defaults and validates the config in place.
+func (c *Config) Prepare() error {
+	c.applyDefaults()
+	return c.validate()
 }
 
 func (c *Config) applyDefaults() {

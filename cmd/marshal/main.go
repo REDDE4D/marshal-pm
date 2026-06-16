@@ -1,4 +1,4 @@
-// Command marshal is the foreground supervisor CLI (milestone M1).
+// Command marshal is the control CLI and daemon entry point for Marshal.
 package main
 
 import (
@@ -13,6 +13,7 @@ import (
 
 	"marshal/internal/config"
 	"marshal/internal/manager"
+	"marshal/internal/pb"
 	"marshal/internal/version"
 )
 
@@ -29,10 +30,32 @@ func rootCmd() *cobra.Command {
 		Short:   "Marshal — a free process supervisor",
 		Version: version.String(),
 	}
-	root.AddCommand(runCmd())
+	root.AddCommand(
+		runCmd(),
+		daemonCmd(),
+		startCmd(),
+		selectorCmd("stop <name|id|all>", "Gracefully stop app(s)",
+			func(ctx context.Context, c pb.DaemonClient, sel *pb.Selector) (*pb.ProcList, error) {
+				return c.Stop(ctx, sel)
+			}),
+		selectorCmd("restart <name|id|all>", "Restart app(s)",
+			func(ctx context.Context, c pb.DaemonClient, sel *pb.Selector) (*pb.ProcList, error) {
+				return c.Restart(ctx, sel)
+			}),
+		selectorCmd("delete <name|id|all>", "Stop and remove app(s) from management",
+			func(ctx context.Context, c pb.DaemonClient, sel *pb.Selector) (*pb.ProcList, error) {
+				return c.Delete(ctx, sel)
+			}),
+		listCmd(),
+		describeCmd(),
+		saveCmd(),
+		resurrectCmd(),
+		killCmd(),
+	)
 	return root
 }
 
+// runCmd keeps the M1 foreground supervisor (no daemon), now on the dynamic manager.
 func runCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "run <marshal.yaml>",
@@ -47,9 +70,13 @@ func runCmd() *cobra.Command {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			m := manager.New(cfg)
+			m := manager.New(ctx)
+			for _, app := range cfg.Apps {
+				if _, err := m.Add(app); err != nil {
+					return err
+				}
+			}
 
-			// Periodic status line until shutdown.
 			go func() {
 				ticker := time.NewTicker(2 * time.Second)
 				defer ticker.Stop()
@@ -64,7 +91,8 @@ func runCmd() *cobra.Command {
 			}()
 
 			fmt.Fprintf(cmd.OutOrStdout(), "marshal: supervising %d app(s); press Ctrl-C to stop\n", len(cfg.Apps))
-			m.Run(ctx) // blocks until ctx canceled and all instances stop
+			<-ctx.Done()
+			m.StopAll()
 			fmt.Fprintln(cmd.OutOrStdout(), "marshal: all processes stopped")
 			return nil
 		},
@@ -72,7 +100,7 @@ func runCmd() *cobra.Command {
 }
 
 func printStatus(cmd *cobra.Command, m *manager.Manager) {
-	for _, s := range m.Snapshot() {
+	for _, s := range m.List() {
 		fmt.Fprintf(cmd.OutOrStdout(), "  %-16s %-10s pid=%d restarts=%d\n",
 			s.Label, s.State, s.Pid, s.Restarts)
 	}
