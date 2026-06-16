@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -98,6 +99,23 @@ func TestDurationJSONRoundTrip(t *testing.T) {
 	}
 	if out.KT.Duration != 7*time.Second {
 		t.Fatalf("got %v, want 7s", out.KT.Duration)
+	}
+}
+
+func TestAppJSONUsesSchemaKeys(t *testing.T) {
+	b, err := json.Marshal(App{Name: "api", Cmd: "./server", MaxRestarts: 16,
+		KillTimeout: Duration{Duration: 5 * time.Second}})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	s := string(b)
+	for _, key := range []string{`"name"`, `"cmd"`, `"max_restarts"`, `"kill_timeout"`} {
+		if !strings.Contains(s, key) {
+			t.Fatalf("App JSON missing %s: %s", key, s)
+		}
+	}
+	if strings.Contains(s, `"MaxRestarts"`) {
+		t.Fatalf("App JSON has Go-cased key: %s", s)
 	}
 }
 

@@ -57,15 +57,15 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 
 // App is one supervised application definition.
 type App struct {
-	Name        string            `yaml:"name"`
-	Cmd         string            `yaml:"cmd"`
-	Args        []string          `yaml:"args"`
-	Cwd         string            `yaml:"cwd"`
-	Instances   int               `yaml:"instances"`
-	Env         map[string]string `yaml:"env"`
-	Restart     RestartMode       `yaml:"restart"`
-	MaxRestarts int               `yaml:"max_restarts"`
-	KillTimeout Duration          `yaml:"kill_timeout"`
+	Name        string            `yaml:"name" json:"name"`
+	Cmd         string            `yaml:"cmd" json:"cmd"`
+	Args        []string          `yaml:"args" json:"args"`
+	Cwd         string            `yaml:"cwd" json:"cwd"`
+	Instances   int               `yaml:"instances" json:"instances"`
+	Env         map[string]string `yaml:"env" json:"env"`
+	Restart     RestartMode       `yaml:"restart" json:"restart"`
+	MaxRestarts int               `yaml:"max_restarts" json:"max_restarts"`
+	KillTimeout Duration          `yaml:"kill_timeout" json:"kill_timeout"`
 }
 
 // Config is the top-level marshal.yaml document.

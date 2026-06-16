@@ -55,10 +55,14 @@ func (s *Store) Save(apps []config.App) error {
 		return fmt.Errorf("encode dump: %w", err)
 	}
 	tmp := s.dumpPath() + ".tmp"
+	defer os.Remove(tmp)
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return fmt.Errorf("write dump: %w", err)
 	}
-	return os.Rename(tmp, s.dumpPath())
+	if err := os.Rename(tmp, s.dumpPath()); err != nil {
+		return fmt.Errorf("rename dump: %w", err)
+	}
+	return nil
 }
 
 // Load reads dump.json. A missing file yields an empty slice and no error.
