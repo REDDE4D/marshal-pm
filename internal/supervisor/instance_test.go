@@ -66,6 +66,18 @@ func TestInstanceErroredAfterMaxRestarts(t *testing.T) {
 	}
 }
 
+func TestInstanceRestartNoStopsOnFailure(t *testing.T) {
+	i := NewInstance(proc.Spec{Cmd: "sh", Args: []string{"-c", "exit 1"}}, testPolicy(config.RestartNo))
+	_, wait := runInstance(i)
+	wait()
+	if got := i.Snapshot().Restarts; got != 0 {
+		t.Fatalf("restarts = %d, want 0 (restart: no)", got)
+	}
+	if got := i.Snapshot().State; got != StateErrored {
+		t.Fatalf("state = %q, want errored (restart: no + failed exit)", got)
+	}
+}
+
 func TestInstanceGracefulStopFallsBackToKill(t *testing.T) {
 	// Ignores SIGTERM, so the KillTimeout path must SIGKILL it.
 	i := NewInstance(

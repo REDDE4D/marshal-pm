@@ -53,8 +53,12 @@ func (i *Instance) Snapshot() Snapshot {
 	return Snapshot{State: i.state, Pid: i.pid, Restarts: i.restarts, StartedAt: i.startedAt}
 }
 
+// set updates observable state under the lock. A pid < 0 leaves the stored pid
+// unchanged; pass the real pid when going Online, or 0 to clear it when the
+// process is no longer running. A zero startedAt likewise leaves it unchanged.
 func (i *Instance) set(state State, pid int, startedAt time.Time) {
 	i.mu.Lock()
+	defer i.mu.Unlock()
 	i.state = state
 	if pid >= 0 {
 		i.pid = pid
@@ -62,21 +66,20 @@ func (i *Instance) set(state State, pid int, startedAt time.Time) {
 	if !startedAt.IsZero() {
 		i.startedAt = startedAt
 	}
-	i.mu.Unlock()
 }
 
 // Run supervises the process until ctx is canceled, then gracefully stops it.
 func (i *Instance) Run(ctx context.Context) {
 	for {
+		started := time.Now()
 		p, err := proc.Start(i.spec)
 		if err != nil {
-			// Treat spawn failure like a crash for restart accounting.
-			if !i.handleExit(ctx, time.Now(), true) {
+			// Spawn failure: treat like an immediate crash for restart accounting.
+			if !i.handleExit(ctx, started, true) {
 				return
 			}
 			continue
 		}
-		started := time.Now()
 		i.set(StateOnline, p.Pid(), started)
 
 		exited := make(chan error, 1)
@@ -85,7 +88,7 @@ func (i *Instance) Run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			i.stop(p, exited)
-			i.set(StateStopped, -1, time.Time{})
+			i.set(StateStopped, 0, time.Time{})
 			return
 		case waitErr := <-exited:
 			failed := waitErr != nil
@@ -96,10 +99,10 @@ func (i *Instance) Run(ctx context.Context) {
 	}
 }
 
-// handleExit decides whether to restart. Returns false to terminate Run.
+// handleExit runs after a process terminates (or fails to spawn) and decides whether to restart. It returns false to terminate Run.
 func (i *Instance) handleExit(ctx context.Context, started time.Time, failed bool) bool {
 	if ctx.Err() != nil {
-		i.set(StateStopped, -1, time.Time{})
+		i.set(StateStopped, 0, time.Time{})
 		return false
 	}
 
@@ -115,9 +118,9 @@ func (i *Instance) handleExit(ctx context.Context, started time.Time, failed boo
 	}
 	if !restart {
 		if failed {
-			i.set(StateErrored, -1, time.Time{})
+			i.set(StateErrored, 0, time.Time{})
 		} else {
-			i.set(StateStopped, -1, time.Time{})
+			i.set(StateStopped, 0, time.Time{})
 		}
 		return false
 	}
@@ -125,6 +128,7 @@ func (i *Instance) handleExit(ctx context.Context, started time.Time, failed boo
 	// Stability accounting.
 	uptime := time.Since(started)
 	i.mu.Lock()
+	// restarts is a monotonic total; unstable counts only consecutive sub-MinUptime cycles.
 	i.restarts++
 	if uptime < i.policy.MinUptime {
 		i.unstable++
@@ -135,15 +139,15 @@ func (i *Instance) handleExit(ctx context.Context, started time.Time, failed boo
 	i.mu.Unlock()
 
 	if unstable > i.policy.MaxRestarts {
-		i.set(StateErrored, -1, time.Time{})
+		i.set(StateErrored, 0, time.Time{})
 		return false
 	}
 
-	i.set(StateRestarting, -1, time.Time{})
+	i.set(StateRestarting, 0, time.Time{})
 	delay := Backoff(unstable, i.policy.BaseBackoff, i.policy.MaxBackoff)
 	select {
 	case <-ctx.Done():
-		i.set(StateStopped, -1, time.Time{})
+		i.set(StateStopped, 0, time.Time{})
 		return false
 	case <-time.After(delay):
 		return true
@@ -154,7 +158,7 @@ func (i *Instance) handleExit(ctx context.Context, started time.Time, failed boo
 // exited channel (fed by Run's single p.Wait goroutine) rather than calling
 // p.Wait again — os/exec.Wait is not safe to call twice.
 func (i *Instance) stop(p *proc.Process, exited <-chan error) {
-	i.set(StateStopping, -1, time.Time{})
+	i.set(StateStopping, 0, time.Time{})
 	_ = p.Signal(syscall.SIGTERM)
 	select {
 	case <-exited:
