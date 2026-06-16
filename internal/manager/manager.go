@@ -42,8 +42,11 @@ type managedApp struct {
 
 // Manager supervises apps and their instances under a base context.
 type Manager struct {
-	ctx    context.Context
-	cancel context.CancelFunc
+	ctx context.Context
+
+	// opMu serializes mutating operations (Add/Stop/Restart/Delete/StopAll) so a
+	// blocking stop cannot interleave with another mutator and orphan goroutines.
+	opMu sync.Mutex
 
 	mu     sync.Mutex
 	apps   []*managedApp
@@ -53,8 +56,7 @@ type Manager struct {
 // New builds an empty manager rooted at ctx. Instances spawned by Add run until
 // ctx is canceled, the manager is StopAll'd, or they are individually stopped.
 func New(ctx context.Context) *Manager {
-	mctx, cancel := context.WithCancel(ctx)
-	return &Manager{ctx: mctx, cancel: cancel}
+	return &Manager{ctx: ctx}
 }
 
 func policyFor(app config.App) supervisor.Policy {
@@ -89,6 +91,8 @@ func (m *Manager) startInstance(app config.App, idx int) *managedInstance {
 
 // Add registers a new app (already defaulted/validated) and starts its instances.
 func (m *Manager) Add(app config.App) ([]InstanceSnapshot, error) {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, a := range m.apps {
@@ -107,6 +111,8 @@ func (m *Manager) Add(app config.App) ([]InstanceSnapshot, error) {
 
 // Stop gracefully stops the selected apps' instances; the apps remain listed.
 func (m *Manager) Stop(sel string) ([]InstanceSnapshot, error) {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
 	m.mu.Lock()
 	apps, err := m.resolve(sel)
 	if err != nil {
@@ -122,6 +128,8 @@ func (m *Manager) Stop(sel string) ([]InstanceSnapshot, error) {
 
 // Restart stops then recreates the selected apps' instances.
 func (m *Manager) Restart(sel string) ([]InstanceSnapshot, error) {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
 	m.mu.Lock()
 	apps, err := m.resolve(sel)
 	if err != nil {
@@ -147,6 +155,8 @@ func (m *Manager) Restart(sel string) ([]InstanceSnapshot, error) {
 
 // Delete stops the selected apps and removes them from management.
 func (m *Manager) Delete(sel string) ([]InstanceSnapshot, error) {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
 	m.mu.Lock()
 	apps, err := m.resolve(sel)
 	if err != nil {
@@ -212,6 +222,8 @@ func (m *Manager) Specs() []config.App {
 
 // StopAll gracefully stops every instance (used on daemon shutdown).
 func (m *Manager) StopAll() {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
 	m.mu.Lock()
 	insts := collectInstances(m.apps)
 	m.mu.Unlock()

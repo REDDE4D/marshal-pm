@@ -152,6 +152,51 @@ func TestSelectorByIDAndAll(t *testing.T) {
 	m.StopAll()
 }
 
+func TestDeleteOneOfManyLeavesOthers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := New(ctx)
+	if _, err := m.Add(sleepApp("a", 1)); err != nil {
+		t.Fatalf("Add a: %v", err)
+	}
+	if _, err := m.Add(sleepApp("b", 1)); err != nil {
+		t.Fatalf("Add b: %v", err)
+	}
+	waitOnline(m, 2)
+	if _, err := m.Delete("a"); err != nil {
+		t.Fatalf("Delete a: %v", err)
+	}
+	list := m.List()
+	if len(list) != 1 || list[0].Name != "b" {
+		t.Fatalf("after deleting a, list = %+v, want only b", list)
+	}
+	if list[0].State != supervisor.StateOnline {
+		t.Fatalf("b should still be online, got %s", list[0].State)
+	}
+	m.StopAll()
+}
+
+func TestStopAllSelector(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := New(ctx)
+	if _, err := m.Add(sleepApp("a", 1)); err != nil {
+		t.Fatalf("Add a: %v", err)
+	}
+	if _, err := m.Add(sleepApp("b", 2)); err != nil {
+		t.Fatalf("Add b: %v", err)
+	}
+	waitOnline(m, 3)
+	if _, err := m.Stop("all"); err != nil {
+		t.Fatalf("Stop all: %v", err)
+	}
+	for _, s := range m.List() {
+		if s.State != supervisor.StateStopped {
+			t.Fatalf("after Stop all, %s state = %s, want stopped", s.Label, s.State)
+		}
+	}
+}
+
 func TestSpecsReflectsAddedApps(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
