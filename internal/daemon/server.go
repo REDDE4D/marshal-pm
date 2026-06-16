@@ -103,7 +103,7 @@ func (s *Server) Resurrect(_ context.Context, _ *pb.Empty) (*pb.ProcList, error)
 
 func (s *Server) Kill(_ context.Context, _ *pb.Empty) (*pb.Ack, error) {
 	if s.kill != nil {
-		go s.kill() // shut down after this RPC returns
+		go s.kill() // async: GracefulStop waits for in-flight RPCs, so calling it inline here would deadlock on this very RPC
 	}
 	return &pb.Ack{Ok: true, Message: "stopping"}, nil
 }
@@ -135,15 +135,18 @@ func Run(ctx context.Context, st *store.Store) error {
 	srv.kill = func() { once.Do(func() { close(stopped) }) }
 	pb.RegisterDaemonServer(gs, srv)
 
+	serveCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	go func() {
 		select {
-		case <-ctx.Done():
+		case <-serveCtx.Done():
 		case <-stopped:
 		}
 		gs.GracefulStop()
 	}()
 
 	serveErr := gs.Serve(lis)
+	cancel() // unblock the watcher if Serve returned on its own
 	mgr.StopAll()
 	_ = os.Remove(sock)
 	if serveErr != nil && !errors.Is(serveErr, grpc.ErrServerStopped) {
