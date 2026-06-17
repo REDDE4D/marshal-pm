@@ -28,6 +28,7 @@ type AgentMessage struct {
 	//	*AgentMessage_Hello
 	//	*AgentMessage_Snapshot
 	//	*AgentMessage_Metrics
+	//	*AgentMessage_Logs
 	Msg           isAgentMessage_Msg `protobuf_oneof:"msg"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -97,6 +98,15 @@ func (x *AgentMessage) GetMetrics() *MetricBatch {
 	return nil
 }
 
+func (x *AgentMessage) GetLogs() *LogBatch {
+	if x != nil {
+		if x, ok := x.Msg.(*AgentMessage_Logs); ok {
+			return x.Logs
+		}
+	}
+	return nil
+}
+
 type isAgentMessage_Msg interface {
 	isAgentMessage_Msg()
 }
@@ -113,11 +123,17 @@ type AgentMessage_Metrics struct {
 	Metrics *MetricBatch `protobuf:"bytes,3,opt,name=metrics,proto3,oneof"` // raw CPU/mem samples (M8)
 }
 
+type AgentMessage_Logs struct {
+	Logs *LogBatch `protobuf:"bytes,4,opt,name=logs,proto3,oneof"` // captured stdout/stderr lines (M8b)
+}
+
 func (*AgentMessage_Hello) isAgentMessage_Msg() {}
 
 func (*AgentMessage_Snapshot) isAgentMessage_Msg() {}
 
 func (*AgentMessage_Metrics) isAgentMessage_Msg() {}
+
+func (*AgentMessage_Logs) isAgentMessage_Msg() {}
 
 type ServerMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -240,6 +256,7 @@ func (x *Hello) GetMarshalVersion() string {
 type HelloAck struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	LastMetricTsMs int64                  `protobuf:"varint,1,opt,name=last_metric_ts_ms,json=lastMetricTsMs,proto3" json:"last_metric_ts_ms,omitempty"` // server's stored high-water-mark for this agent (0 = none)
+	LastLogTsMs    int64                  `protobuf:"varint,2,opt,name=last_log_ts_ms,json=lastLogTsMs,proto3" json:"last_log_ts_ms,omitempty"`          // server's stored log high-water-mark (0 = none)
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -277,6 +294,13 @@ func (*HelloAck) Descriptor() ([]byte, []int) {
 func (x *HelloAck) GetLastMetricTsMs() int64 {
 	if x != nil {
 		return x.LastMetricTsMs
+	}
+	return 0
+}
+
+func (x *HelloAck) GetLastLogTsMs() int64 {
+	if x != nil {
+		return x.LastLogTsMs
 	}
 	return 0
 }
@@ -586,6 +610,231 @@ func (x *MetricBatch) GetSamples() []*MetricSample {
 	return nil
 }
 
+// One captured log line, flattened to map 1:1 to a logstore row.
+type LogShipLine struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TsMs          int64                  `protobuf:"varint,1,opt,name=ts_ms,json=tsMs,proto3" json:"ts_ms,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"` // "app#instance"
+	Stderr        bool                   `protobuf:"varint,3,opt,name=stderr,proto3" json:"stderr,omitempty"`
+	Text          string                 `protobuf:"bytes,4,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogShipLine) Reset() {
+	*x = LogShipLine{}
+	mi := &file_marshal_v1_fleet_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogShipLine) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogShipLine) ProtoMessage() {}
+
+func (x *LogShipLine) ProtoReflect() protoreflect.Message {
+	mi := &file_marshal_v1_fleet_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogShipLine.ProtoReflect.Descriptor instead.
+func (*LogShipLine) Descriptor() ([]byte, []int) {
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *LogShipLine) GetTsMs() int64 {
+	if x != nil {
+		return x.TsMs
+	}
+	return 0
+}
+
+func (x *LogShipLine) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *LogShipLine) GetStderr() bool {
+	if x != nil {
+		return x.Stderr
+	}
+	return false
+}
+
+func (x *LogShipLine) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+type LogBatch struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Lines         []*LogShipLine         `protobuf:"bytes,1,rep,name=lines,proto3" json:"lines,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogBatch) Reset() {
+	*x = LogBatch{}
+	mi := &file_marshal_v1_fleet_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogBatch) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogBatch) ProtoMessage() {}
+
+func (x *LogBatch) ProtoReflect() protoreflect.Message {
+	mi := &file_marshal_v1_fleet_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogBatch.ProtoReflect.Descriptor instead.
+func (*LogBatch) Descriptor() ([]byte, []int) {
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *LogBatch) GetLines() []*LogShipLine {
+	if x != nil {
+		return x.Lines
+	}
+	return nil
+}
+
+type FleetLogsHistoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AgentName     string                 `protobuf:"bytes,1,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	Selector      string                 `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`                        // app name or "name#instance" label
+	Lines         int32                  `protobuf:"varint,3,opt,name=lines,proto3" json:"lines,omitempty"`                             // backfill count
+	Stream        LogStream              `protobuf:"varint,4,opt,name=stream,proto3,enum=marshal.v1.LogStream" json:"stream,omitempty"` // reuse daemon.proto enum; unspecified = merged
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FleetLogsHistoryRequest) Reset() {
+	*x = FleetLogsHistoryRequest{}
+	mi := &file_marshal_v1_fleet_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FleetLogsHistoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FleetLogsHistoryRequest) ProtoMessage() {}
+
+func (x *FleetLogsHistoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_marshal_v1_fleet_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FleetLogsHistoryRequest.ProtoReflect.Descriptor instead.
+func (*FleetLogsHistoryRequest) Descriptor() ([]byte, []int) {
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *FleetLogsHistoryRequest) GetAgentName() string {
+	if x != nil {
+		return x.AgentName
+	}
+	return ""
+}
+
+func (x *FleetLogsHistoryRequest) GetSelector() string {
+	if x != nil {
+		return x.Selector
+	}
+	return ""
+}
+
+func (x *FleetLogsHistoryRequest) GetLines() int32 {
+	if x != nil {
+		return x.Lines
+	}
+	return 0
+}
+
+func (x *FleetLogsHistoryRequest) GetStream() LogStream {
+	if x != nil {
+		return x.Stream
+	}
+	return LogStream_LOG_STREAM_UNSPECIFIED
+}
+
+type FleetLogsHistoryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Lines         []*LogLine             `protobuf:"bytes,1,rep,name=lines,proto3" json:"lines,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FleetLogsHistoryResponse) Reset() {
+	*x = FleetLogsHistoryResponse{}
+	mi := &file_marshal_v1_fleet_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FleetLogsHistoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FleetLogsHistoryResponse) ProtoMessage() {}
+
+func (x *FleetLogsHistoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_marshal_v1_fleet_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FleetLogsHistoryResponse.ProtoReflect.Descriptor instead.
+func (*FleetLogsHistoryResponse) Descriptor() ([]byte, []int) {
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *FleetLogsHistoryResponse) GetLines() []*LogLine {
+	if x != nil {
+		return x.Lines
+	}
+	return nil
+}
+
 type FleetMetricsHistoryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AgentName     string                 `protobuf:"bytes,1,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
@@ -598,7 +847,7 @@ type FleetMetricsHistoryRequest struct {
 
 func (x *FleetMetricsHistoryRequest) Reset() {
 	*x = FleetMetricsHistoryRequest{}
-	mi := &file_marshal_v1_fleet_proto_msgTypes[10]
+	mi := &file_marshal_v1_fleet_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -610,7 +859,7 @@ func (x *FleetMetricsHistoryRequest) String() string {
 func (*FleetMetricsHistoryRequest) ProtoMessage() {}
 
 func (x *FleetMetricsHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_fleet_proto_msgTypes[10]
+	mi := &file_marshal_v1_fleet_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -623,7 +872,7 @@ func (x *FleetMetricsHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FleetMetricsHistoryRequest.ProtoReflect.Descriptor instead.
 func (*FleetMetricsHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{10}
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *FleetMetricsHistoryRequest) GetAgentName() string {
@@ -659,11 +908,12 @@ var File_marshal_v1_fleet_proto protoreflect.FileDescriptor
 const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"\n" +
 	"\x16marshal/v1/fleet.proto\x12\n" +
-	"marshal.v1\x1a\x17marshal/v1/daemon.proto\"\xae\x01\n" +
+	"marshal.v1\x1a\x17marshal/v1/daemon.proto\"\xda\x01\n" +
 	"\fAgentMessage\x12)\n" +
 	"\x05hello\x18\x01 \x01(\v2\x11.marshal.v1.HelloH\x00R\x05hello\x127\n" +
 	"\bsnapshot\x18\x02 \x01(\v2\x19.marshal.v1.StateSnapshotH\x00R\bsnapshot\x123\n" +
-	"\ametrics\x18\x03 \x01(\v2\x17.marshal.v1.MetricBatchH\x00R\ametricsB\x05\n" +
+	"\ametrics\x18\x03 \x01(\v2\x17.marshal.v1.MetricBatchH\x00R\ametrics\x12*\n" +
+	"\x04logs\x18\x04 \x01(\v2\x14.marshal.v1.LogBatchH\x00R\x04logsB\x05\n" +
 	"\x03msg\"K\n" +
 	"\rServerMessage\x123\n" +
 	"\thello_ack\x18\x01 \x01(\v2\x14.marshal.v1.HelloAckH\x00R\bhelloAckB\x05\n" +
@@ -671,9 +921,10 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"\x05Hello\x12\x1d\n" +
 	"\n" +
 	"agent_name\x18\x01 \x01(\tR\tagentName\x12'\n" +
-	"\x0fmarshal_version\x18\x02 \x01(\tR\x0emarshalVersion\"5\n" +
+	"\x0fmarshal_version\x18\x02 \x01(\tR\x0emarshalVersion\"Z\n" +
 	"\bHelloAck\x12)\n" +
-	"\x11last_metric_ts_ms\x18\x01 \x01(\x03R\x0elastMetricTsMs\";\n" +
+	"\x11last_metric_ts_ms\x18\x01 \x01(\x03R\x0elastMetricTsMs\x12#\n" +
+	"\x0elast_log_ts_ms\x18\x02 \x01(\x03R\vlastLogTsMs\";\n" +
 	"\rStateSnapshot\x12*\n" +
 	"\x05procs\x18\x01 \x03(\v2\x14.marshal.v1.ProcInfoR\x05procs\"\x12\n" +
 	"\x10ListFleetRequest\"C\n" +
@@ -692,17 +943,33 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"\x03cpu\x18\x03 \x01(\x01R\x03cpu\x12\x10\n" +
 	"\x03mem\x18\x04 \x01(\x03R\x03mem\"A\n" +
 	"\vMetricBatch\x122\n" +
-	"\asamples\x18\x01 \x03(\v2\x18.marshal.v1.MetricSampleR\asamples\"\x8f\x01\n" +
+	"\asamples\x18\x01 \x03(\v2\x18.marshal.v1.MetricSampleR\asamples\"d\n" +
+	"\vLogShipLine\x12\x13\n" +
+	"\x05ts_ms\x18\x01 \x01(\x03R\x04tsMs\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12\x16\n" +
+	"\x06stderr\x18\x03 \x01(\bR\x06stderr\x12\x12\n" +
+	"\x04text\x18\x04 \x01(\tR\x04text\"9\n" +
+	"\bLogBatch\x12-\n" +
+	"\x05lines\x18\x01 \x03(\v2\x17.marshal.v1.LogShipLineR\x05lines\"\x99\x01\n" +
+	"\x17FleetLogsHistoryRequest\x12\x1d\n" +
+	"\n" +
+	"agent_name\x18\x01 \x01(\tR\tagentName\x12\x1a\n" +
+	"\bselector\x18\x02 \x01(\tR\bselector\x12\x14\n" +
+	"\x05lines\x18\x03 \x01(\x05R\x05lines\x12-\n" +
+	"\x06stream\x18\x04 \x01(\x0e2\x15.marshal.v1.LogStreamR\x06stream\"E\n" +
+	"\x18FleetLogsHistoryResponse\x12)\n" +
+	"\x05lines\x18\x01 \x03(\v2\x13.marshal.v1.LogLineR\x05lines\"\x8f\x01\n" +
 	"\x1aFleetMetricsHistoryRequest\x12\x1d\n" +
 	"\n" +
 	"agent_name\x18\x01 \x01(\tR\tagentName\x12\x1a\n" +
 	"\bselector\x18\x02 \x01(\tR\bselector\x12\x19\n" +
 	"\bsince_ms\x18\x03 \x01(\x03R\asinceMs\x12\x1b\n" +
-	"\tbucket_ms\x18\x04 \x01(\x03R\bbucketMs2\xf8\x01\n" +
+	"\tbucket_ms\x18\x04 \x01(\x03R\bbucketMs2\xd7\x02\n" +
 	"\x05Fleet\x12B\n" +
 	"\aConnect\x12\x18.marshal.v1.AgentMessage\x1a\x19.marshal.v1.ServerMessage(\x010\x01\x12H\n" +
 	"\tListFleet\x12\x1c.marshal.v1.ListFleetRequest\x1a\x1d.marshal.v1.ListFleetResponse\x12a\n" +
-	"\x13FleetMetricsHistory\x12&.marshal.v1.FleetMetricsHistoryRequest\x1a\".marshal.v1.MetricsHistoryResponseB\x18Z\x16marshal/internal/pb;pbb\x06proto3"
+	"\x13FleetMetricsHistory\x12&.marshal.v1.FleetMetricsHistoryRequest\x1a\".marshal.v1.MetricsHistoryResponse\x12]\n" +
+	"\x10FleetLogsHistory\x12#.marshal.v1.FleetLogsHistoryRequest\x1a$.marshal.v1.FleetLogsHistoryResponseB\x18Z\x16marshal/internal/pb;pbb\x06proto3"
 
 var (
 	file_marshal_v1_fleet_proto_rawDescOnce sync.Once
@@ -716,7 +983,7 @@ func file_marshal_v1_fleet_proto_rawDescGZIP() []byte {
 	return file_marshal_v1_fleet_proto_rawDescData
 }
 
-var file_marshal_v1_fleet_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_marshal_v1_fleet_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_marshal_v1_fleet_proto_goTypes = []any{
 	(*AgentMessage)(nil),               // 0: marshal.v1.AgentMessage
 	(*ServerMessage)(nil),              // 1: marshal.v1.ServerMessage
@@ -728,30 +995,42 @@ var file_marshal_v1_fleet_proto_goTypes = []any{
 	(*AgentState)(nil),                 // 7: marshal.v1.AgentState
 	(*MetricSample)(nil),               // 8: marshal.v1.MetricSample
 	(*MetricBatch)(nil),                // 9: marshal.v1.MetricBatch
-	(*FleetMetricsHistoryRequest)(nil), // 10: marshal.v1.FleetMetricsHistoryRequest
-	(*ProcInfo)(nil),                   // 11: marshal.v1.ProcInfo
-	(*MetricsHistoryResponse)(nil),     // 12: marshal.v1.MetricsHistoryResponse
+	(*LogShipLine)(nil),                // 10: marshal.v1.LogShipLine
+	(*LogBatch)(nil),                   // 11: marshal.v1.LogBatch
+	(*FleetLogsHistoryRequest)(nil),    // 12: marshal.v1.FleetLogsHistoryRequest
+	(*FleetLogsHistoryResponse)(nil),   // 13: marshal.v1.FleetLogsHistoryResponse
+	(*FleetMetricsHistoryRequest)(nil), // 14: marshal.v1.FleetMetricsHistoryRequest
+	(*ProcInfo)(nil),                   // 15: marshal.v1.ProcInfo
+	(LogStream)(0),                     // 16: marshal.v1.LogStream
+	(*LogLine)(nil),                    // 17: marshal.v1.LogLine
+	(*MetricsHistoryResponse)(nil),     // 18: marshal.v1.MetricsHistoryResponse
 }
 var file_marshal_v1_fleet_proto_depIdxs = []int32{
 	2,  // 0: marshal.v1.AgentMessage.hello:type_name -> marshal.v1.Hello
 	4,  // 1: marshal.v1.AgentMessage.snapshot:type_name -> marshal.v1.StateSnapshot
 	9,  // 2: marshal.v1.AgentMessage.metrics:type_name -> marshal.v1.MetricBatch
-	3,  // 3: marshal.v1.ServerMessage.hello_ack:type_name -> marshal.v1.HelloAck
-	11, // 4: marshal.v1.StateSnapshot.procs:type_name -> marshal.v1.ProcInfo
-	7,  // 5: marshal.v1.ListFleetResponse.agents:type_name -> marshal.v1.AgentState
-	11, // 6: marshal.v1.AgentState.procs:type_name -> marshal.v1.ProcInfo
-	8,  // 7: marshal.v1.MetricBatch.samples:type_name -> marshal.v1.MetricSample
-	0,  // 8: marshal.v1.Fleet.Connect:input_type -> marshal.v1.AgentMessage
-	5,  // 9: marshal.v1.Fleet.ListFleet:input_type -> marshal.v1.ListFleetRequest
-	10, // 10: marshal.v1.Fleet.FleetMetricsHistory:input_type -> marshal.v1.FleetMetricsHistoryRequest
-	1,  // 11: marshal.v1.Fleet.Connect:output_type -> marshal.v1.ServerMessage
-	6,  // 12: marshal.v1.Fleet.ListFleet:output_type -> marshal.v1.ListFleetResponse
-	12, // 13: marshal.v1.Fleet.FleetMetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
-	11, // [11:14] is the sub-list for method output_type
-	8,  // [8:11] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	11, // 3: marshal.v1.AgentMessage.logs:type_name -> marshal.v1.LogBatch
+	3,  // 4: marshal.v1.ServerMessage.hello_ack:type_name -> marshal.v1.HelloAck
+	15, // 5: marshal.v1.StateSnapshot.procs:type_name -> marshal.v1.ProcInfo
+	7,  // 6: marshal.v1.ListFleetResponse.agents:type_name -> marshal.v1.AgentState
+	15, // 7: marshal.v1.AgentState.procs:type_name -> marshal.v1.ProcInfo
+	8,  // 8: marshal.v1.MetricBatch.samples:type_name -> marshal.v1.MetricSample
+	10, // 9: marshal.v1.LogBatch.lines:type_name -> marshal.v1.LogShipLine
+	16, // 10: marshal.v1.FleetLogsHistoryRequest.stream:type_name -> marshal.v1.LogStream
+	17, // 11: marshal.v1.FleetLogsHistoryResponse.lines:type_name -> marshal.v1.LogLine
+	0,  // 12: marshal.v1.Fleet.Connect:input_type -> marshal.v1.AgentMessage
+	5,  // 13: marshal.v1.Fleet.ListFleet:input_type -> marshal.v1.ListFleetRequest
+	14, // 14: marshal.v1.Fleet.FleetMetricsHistory:input_type -> marshal.v1.FleetMetricsHistoryRequest
+	12, // 15: marshal.v1.Fleet.FleetLogsHistory:input_type -> marshal.v1.FleetLogsHistoryRequest
+	1,  // 16: marshal.v1.Fleet.Connect:output_type -> marshal.v1.ServerMessage
+	6,  // 17: marshal.v1.Fleet.ListFleet:output_type -> marshal.v1.ListFleetResponse
+	18, // 18: marshal.v1.Fleet.FleetMetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
+	13, // 19: marshal.v1.Fleet.FleetLogsHistory:output_type -> marshal.v1.FleetLogsHistoryResponse
+	16, // [16:20] is the sub-list for method output_type
+	12, // [12:16] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_marshal_v1_fleet_proto_init() }
@@ -764,6 +1043,7 @@ func file_marshal_v1_fleet_proto_init() {
 		(*AgentMessage_Hello)(nil),
 		(*AgentMessage_Snapshot)(nil),
 		(*AgentMessage_Metrics)(nil),
+		(*AgentMessage_Logs)(nil),
 	}
 	file_marshal_v1_fleet_proto_msgTypes[1].OneofWrappers = []any{
 		(*ServerMessage_HelloAck)(nil),
@@ -774,7 +1054,7 @@ func file_marshal_v1_fleet_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_marshal_v1_fleet_proto_rawDesc), len(file_marshal_v1_fleet_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
