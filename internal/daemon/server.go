@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,24 +38,50 @@ type Server struct {
 	logPolicyDefault logs.Policy        // effective default log policy (from WithLogRetention)
 }
 
-// Start admits and launches one or more apps.
-func (s *Server) Start(_ context.Context, req *pb.StartRequest) (*pb.ProcList, error) {
+// doStart admits and launches one or more apps from wire specs.
+// It is the shared core used by Start (gRPC) and handleFleetCommand (fleet).
+func (s *Server) doStart(specs []*pb.AppSpec) ([]manager.InstanceSnapshot, error) {
 	var out []manager.InstanceSnapshot
-	for _, spec := range req.GetApps() {
+	for _, spec := range specs {
 		app, err := appSpecToConfig(spec)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+			return nil, fmt.Errorf("%w", err)
 		}
 		if s.logs != nil {
 			s.logs.SetPolicy(app.Name, logPolicy(app, s.logPolicyDefault))
 		}
 		snaps, err := s.mgr.Add(app)
 		if err != nil {
-			return nil, status.Errorf(codes.AlreadyExists, "%v", err)
+			return nil, err
 		}
 		out = append(out, snaps...)
 	}
-	return s.procList(out), nil
+	return out, nil
+}
+
+// Start admits and launches one or more apps.
+func (s *Server) Start(_ context.Context, req *pb.StartRequest) (*pb.ProcList, error) {
+	snaps, err := s.doStart(req.GetApps())
+	if err != nil {
+		// Preserve original gRPC status codes: config errors → InvalidArgument, duplicates → AlreadyExists.
+		// We check via string matching is impractical; use type to distinguish: appSpecToConfig returns
+		// plain errors (config validation), mgr.Add returns "already exists"-style errors.
+		// Use the existing approach: try to detect by wrapping context.
+		if isAlreadyExists(err) {
+			return nil, status.Errorf(codes.AlreadyExists, "%v", err)
+		}
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	return s.procList(snaps), nil
+}
+
+// isAlreadyExists reports whether err came from mgr.Add duplicate detection.
+// The manager returns errors containing "already exists" for duplicate app names.
+func isAlreadyExists(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "already")
 }
 
 func (s *Server) Stop(_ context.Context, sel *pb.Selector) (*pb.ProcList, error) {
@@ -237,7 +264,8 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 		fc := fleet.New(sc.Address, name, version.String(),
 			fleetSnapshot(mgr, sampler),
 			fleet.WithMetrics(metricsSince(mdb)),
-			fleet.WithLogs(logsSince(reg)))
+			fleet.WithLogs(logsSince(reg)),
+			fleet.WithCommands(srv.handleFleetCommand))
 		go fc.Run(serveCtx)
 	}
 	go sampler.Run(serveCtx, metricsSnapshot(mgr))
