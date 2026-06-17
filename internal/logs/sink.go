@@ -14,10 +14,10 @@ import (
 )
 
 const (
-	maxSizeMB    = 10   // rotate at 10MB
-	maxBackups   = 5    // keep 5 rotated files
-	ringCap      = 1000 // ~1000 lines/instance in memory
-	subBuffer    = 256  // per-subscriber channel buffer
+	maxSizeMB    = 10        // rotate at 10MB
+	maxBackups   = 5         // keep 5 rotated files
+	ringCap      = 1000      // ~1000 lines/instance in memory
+	subBuffer    = 256       // per-subscriber channel buffer
 	maxLineBytes = 64 * 1024 // force-flush a newline-less line at this size
 )
 
