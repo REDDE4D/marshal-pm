@@ -1,6 +1,8 @@
 package startup
 
 import (
+	"encoding/xml"
+	"io"
 	"strings"
 	"testing"
 )
@@ -73,5 +75,19 @@ func TestLaunchdXDGAndEscape(t *testing.T) {
 	}
 	if strings.Contains(out, "/d&d<") || strings.Contains(out, ">/d&d") {
 		t.Error("raw unescaped ampersand present")
+	}
+}
+
+func TestLaunchdPlistIsValidXML(t *testing.T) {
+	p := launchd{}.InstallPlan(macConfig(true))
+	dec := xml.NewDecoder(strings.NewReader(p.Content))
+	for {
+		_, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("invalid plist XML: %v", err)
+		}
 	}
 }

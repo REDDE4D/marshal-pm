@@ -35,6 +35,27 @@ func (c Cmd) String() string {
 	return strings.Join(append([]string{c.Name}, c.Args...), " ")
 }
 
+// shellQuote returns s safe to paste into a POSIX shell, single-quoting it only
+// when it contains shell-significant characters.
+func shellQuote(s string) string {
+	if s != "" && !strings.ContainsAny(s, " \t\n\"'\\$`&;|<>(){}[]*?#~") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// Display renders the command shell-quoted, for printing to a human (the
+// --system flow). Use String() for the exec/recorder path, which never goes
+// through a shell.
+func (c Cmd) Display() string {
+	parts := make([]string, 0, len(c.Args)+1)
+	parts = append(parts, shellQuote(c.Name))
+	for _, a := range c.Args {
+		parts = append(parts, shellQuote(a))
+	}
+	return strings.Join(parts, " ")
+}
+
 // Plan is the fully-resolved set of side effects. Building it is pure.
 type Plan struct {
 	UnitPath    string // where the unit/plist file belongs
@@ -133,7 +154,7 @@ func StageAndPrint(p Plan, out io.Writer) error {
 	fmt.Fprintln(out, "Run these commands to install the system service:")
 	fmt.Fprintln(out)
 	for _, c := range p.PostInstall {
-		fmt.Fprintf(out, "  %s\n", c)
+		fmt.Fprintf(out, "  %s\n", c.Display())
 	}
 	fmt.Fprintln(out)
 	return nil

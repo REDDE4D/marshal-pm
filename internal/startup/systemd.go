@@ -47,6 +47,8 @@ func (systemd) InstallPlan(c Config) Plan {
 	}
 }
 
+// RemovePlan reuses InstallPlan; only UnitPath and PostRemove are meaningful to
+// Remove (Content/PostInstall are ignored for uninstall).
 func (s systemd) RemovePlan(c Config) Plan { return s.InstallPlan(c) }
 
 func renderSystemdUnit(c Config) string {
@@ -75,8 +77,9 @@ func renderSystemdUnit(c Config) string {
 }
 
 func systemdEnv(key, val string) string {
-	if strings.ContainsAny(val, " \t") {
-		return fmt.Sprintf("Environment=\"%s=%s\"\n", key, val)
+	if strings.ContainsAny(val, " \t\"\\") {
+		r := strings.NewReplacer(`\`, `\\`, `"`, `\"`)
+		return fmt.Sprintf("Environment=\"%s=%s\"\n", key, r.Replace(val))
 	}
 	return fmt.Sprintf("Environment=%s=%s\n", key, val)
 }

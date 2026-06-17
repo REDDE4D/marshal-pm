@@ -100,3 +100,11 @@ func contains(ss []string, want string) bool {
 	}
 	return false
 }
+
+func TestSystemdEnvEscapesQuotes(t *testing.T) {
+	c := linuxConfig(false)
+	c.Home = `/home/a"b`
+	if !strings.Contains(systemd{}.InstallPlan(c).Content, `Environment="HOME=/home/a\"b"`) {
+		t.Errorf("double-quote in env value not escaped:\n%s", systemd{}.InstallPlan(c).Content)
+	}
+}

@@ -50,6 +50,8 @@ func (launchd) InstallPlan(c Config) Plan {
 	}
 }
 
+// RemovePlan reuses InstallPlan; only UnitPath and PostRemove are meaningful to
+// Remove (Content/PostInstall are ignored for uninstall).
 func (l launchd) RemovePlan(c Config) Plan { return l.InstallPlan(c) }
 
 func renderLaunchdPlist(c Config) string {
