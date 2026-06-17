@@ -103,7 +103,7 @@ func (s *Store) SaveServer(sc *config.ServerConfig) error {
 	}
 	tmp := s.serverPath() + ".tmp"
 	defer os.Remove(tmp)
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return fmt.Errorf("write fleet config: %w", err)
 	}
 	if err := os.Rename(tmp, s.serverPath()); err != nil {
