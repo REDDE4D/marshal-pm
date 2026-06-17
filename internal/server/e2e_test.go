@@ -124,6 +124,26 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 	// After reconnect the watermark is seeded from the persisted max(ts), so the
 	// client ships only the gap line — total 3 lines proves backfill works.
 	waitForLogs(t, conn2, "web-1", "api", 3)
+
+	// Prove backfill shipped only the gap line: exactly 3 lines, no duplicates.
+	ctxF, cancelF := context.WithTimeout(context.Background(), time.Second)
+	defer cancelF()
+	final, err := pb.NewFleetClient(conn2).FleetLogsHistory(ctxF, &pb.FleetLogsHistoryRequest{
+		AgentName: "web-1", Selector: "api", Lines: 100,
+	})
+	if err != nil {
+		t.Fatalf("final FleetLogsHistory: %v", err)
+	}
+	got := final.GetLines()
+	if len(got) != 3 {
+		t.Fatalf("final history = %d lines, want exactly 3 (a resend would duplicate)", len(got))
+	}
+	wantTexts := []string{"line1", "line2", "line3"}
+	for i, w := range wantTexts {
+		if got[i].GetLine() != w {
+			t.Fatalf("line[%d] = %q, want %q", i, got[i].GetLine(), w)
+		}
+	}
 }
 
 func TestE2EMetricsIngestAndBackfill(t *testing.T) {

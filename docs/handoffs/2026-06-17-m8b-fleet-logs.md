@@ -95,8 +95,7 @@ On disk: `/tmp/m8bsmoke/marshal-server/agents/dev-1/logs.db` (alongside `metrics
 
 1. **Reconnect backfill bounded by the ring (~1000 lines)**, not the 7-day rotated files.
    A long disconnect on a busy app loses lines beyond the ring. By design for M8b.
-2. **Same-ms watermark edge:** a line sharing the exact millisecond of the last stored
-   line may be dropped on reconnect (identical to the metrics watermark).
+2. **Same-ms watermark edge (steady-state for logs):** the ring filter is `ts > sinceMs`, so a burst of lines sharing one millisecond that straddles a 2s push-tick boundary can drop the trailing same-ms line even on a live connection (not just on reconnect). Logs have a larger collision surface than metrics (which sample at controlled ~1s intervals). This is the accepted watermark semantics; a future tightening would key on `(ts, label, text)` or a per-tick sequence instead of `ts` alone.
 3. **No live `--follow` over the fleet** — backfill-only this milestone.
 4. **Selector is name / label-prefix only** server-side (no numeric-ID resolution).
 5. **High-volume shipping** copies each sink's whole ring per 2s tick (`RingSince`); fine
