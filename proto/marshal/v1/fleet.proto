@@ -16,6 +16,8 @@ service Fleet {
   rpc FleetMetricsHistory(FleetMetricsHistoryRequest) returns (MetricsHistoryResponse);
   // Log history for one agent's app/instance (M8b); reuses daemon.proto's LogLine.
   rpc FleetLogsHistory(FleetLogsHistoryRequest) returns (FleetLogsHistoryResponse);
+  // Route a control command to one agent and return its result (M9).
+  rpc FleetControl(FleetControlRequest) returns (FleetControlResponse);
 }
 
 message AgentMessage {
@@ -24,13 +26,14 @@ message AgentMessage {
     StateSnapshot snapshot = 2; // full process-state snapshot (periodic)
     MetricBatch metrics = 3;    // raw CPU/mem samples (M8)
     LogBatch logs = 4;          // captured stdout/stderr lines (M8b)
+    CommandResult result = 5;   // M9: result of a routed command
   }
 }
 
 message ServerMessage {
   oneof msg {
     HelloAck hello_ack = 1;
-    // reserved: command messages land here in M9
+    Command  command   = 2; // M9: control command routed down to the agent
   }
 }
 
@@ -92,3 +95,26 @@ message FleetMetricsHistoryRequest {
   int64  since_ms   = 3;
   int64  bucket_ms  = 4;
 }
+
+// M9 — control-plane command surface, shared by the down-stream Command and the
+// CLI's unary FleetControl so the op/result shapes have one definition.
+message ControlOp {
+  oneof op {
+    Selector     stop    = 1;
+    Selector     restart = 2;
+    Selector     delete  = 3;
+    StartRequest start   = 4; // reuses AppSpec from daemon.proto
+  }
+}
+
+message ControlResult {
+  bool              ok    = 1;
+  string            error = 2; // set when ok == false
+  repeated ProcInfo procs = 3; // affected instances on success
+}
+
+message Command       { uint64 request_id = 1; ControlOp     op     = 2; } // server -> agent
+message CommandResult { uint64 request_id = 1; ControlResult result = 2; } // agent -> server
+
+message FleetControlRequest  { string agent_name = 1; ControlOp op = 2; }
+message FleetControlResponse { ControlResult result = 1; }
