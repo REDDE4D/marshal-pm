@@ -82,6 +82,15 @@ func streamFromFlags(stdoutOnly, stderrOnly bool) (pb.LogStream, error) {
 	}
 }
 
+// persistServer writes the central-server config to the store so the
+// (auto-spawned) daemon picks it up at startup. No-op without a server block.
+func persistServer(st *store.Store, cfg *config.Config) error {
+	if cfg.Server == nil {
+		return nil
+	}
+	return st.SaveServer(cfg.Server)
+}
+
 func startCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "start <marshal.yaml>",
@@ -90,6 +99,13 @@ func startCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load(args[0])
 			if err != nil {
+				return err
+			}
+			st, err := store.New()
+			if err != nil {
+				return err
+			}
+			if err := persistServer(st, cfg); err != nil {
 				return err
 			}
 			specs := make([]*pb.AppSpec, 0, len(cfg.Apps))
