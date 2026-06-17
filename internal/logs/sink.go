@@ -13,10 +13,11 @@ import (
 )
 
 const (
-	maxSizeMB  = 10   // rotate at 10MB
-	maxBackups = 5    // keep 5 rotated files
-	ringCap    = 1000 // ~1000 lines/instance in memory
-	subBuffer  = 256  // per-subscriber channel buffer
+	maxSizeMB    = 10   // rotate at 10MB
+	maxBackups   = 5    // keep 5 rotated files
+	ringCap      = 1000 // ~1000 lines/instance in memory
+	subBuffer    = 256  // per-subscriber channel buffer
+	maxLineBytes = 64 * 1024 // force-flush a newline-less line at this size
 )
 
 // Line is one captured output line with its origin.
@@ -110,6 +111,10 @@ func (s *Sink) write(stderr bool, p []byte) (int, error) {
 		text := string((*part)[:i])
 		*part = (*part)[i+1:]
 		s.emit(Line{Ts: s.now(), Stderr: stderr, Text: text})
+	}
+	for len(*part) >= maxLineBytes {
+		s.emit(Line{Ts: s.now(), Stderr: stderr, Text: string((*part)[:maxLineBytes])})
+		*part = (*part)[maxLineBytes:]
 	}
 	return len(p), nil
 }

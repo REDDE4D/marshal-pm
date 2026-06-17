@@ -1,6 +1,7 @@
 package logs
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -152,5 +153,24 @@ func TestDefaultPolicyAppliedByNewSink(t *testing.T) {
 	defer s.Close()
 	if s.outFile.MaxAge != DefaultPolicy.MaxAgeDays || !s.outFile.Compress {
 		t.Fatalf("newSink did not apply DefaultPolicy: %+v", s.outFile)
+	}
+}
+
+func TestPartialLineCapForcesFlush(t *testing.T) {
+	s := newSink(t.TempDir(), "app#0", stepClock())
+	defer s.Close()
+	w := s.Writer(false)
+	// 200 KiB with no newline must not stay buffered; it flushes in <=64 KiB chunks.
+	if _, err := w.Write(bytes.Repeat([]byte("x"), 200*1024)); err != nil {
+		t.Fatal(err)
+	}
+	got := s.Backfill(0)
+	if len(got) < 3 {
+		t.Fatalf("expected >=3 forced-flush lines, got %d", len(got))
+	}
+	for _, ln := range got {
+		if len(ln.Text) > maxLineBytes {
+			t.Fatalf("line exceeds cap: %d bytes", len(ln.Text))
+		}
 	}
 }
