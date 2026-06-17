@@ -19,8 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Fleet_Connect_FullMethodName   = "/marshal.v1.Fleet/Connect"
-	Fleet_ListFleet_FullMethodName = "/marshal.v1.Fleet/ListFleet"
+	Fleet_Connect_FullMethodName             = "/marshal.v1.Fleet/Connect"
+	Fleet_ListFleet_FullMethodName           = "/marshal.v1.Fleet/ListFleet"
+	Fleet_FleetMetricsHistory_FullMethodName = "/marshal.v1.Fleet/FleetMetricsHistory"
 )
 
 // FleetClient is the client API for Fleet service.
@@ -33,6 +34,8 @@ type FleetClient interface {
 	Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[AgentMessage, ServerMessage], error)
 	// Read path for the fleet CLI (and, later, the dashboard).
 	ListFleet(ctx context.Context, in *ListFleetRequest, opts ...grpc.CallOption) (*ListFleetResponse, error)
+	// Metric history for one agent's app/instance (M8); reuses daemon.proto's response.
+	FleetMetricsHistory(ctx context.Context, in *FleetMetricsHistoryRequest, opts ...grpc.CallOption) (*MetricsHistoryResponse, error)
 }
 
 type fleetClient struct {
@@ -66,6 +69,16 @@ func (c *fleetClient) ListFleet(ctx context.Context, in *ListFleetRequest, opts 
 	return out, nil
 }
 
+func (c *fleetClient) FleetMetricsHistory(ctx context.Context, in *FleetMetricsHistoryRequest, opts ...grpc.CallOption) (*MetricsHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MetricsHistoryResponse)
+	err := c.cc.Invoke(ctx, Fleet_FleetMetricsHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FleetServer is the server API for Fleet service.
 // All implementations must embed UnimplementedFleetServer
 // for forward compatibility.
@@ -76,6 +89,8 @@ type FleetServer interface {
 	Connect(grpc.BidiStreamingServer[AgentMessage, ServerMessage]) error
 	// Read path for the fleet CLI (and, later, the dashboard).
 	ListFleet(context.Context, *ListFleetRequest) (*ListFleetResponse, error)
+	// Metric history for one agent's app/instance (M8); reuses daemon.proto's response.
+	FleetMetricsHistory(context.Context, *FleetMetricsHistoryRequest) (*MetricsHistoryResponse, error)
 	mustEmbedUnimplementedFleetServer()
 }
 
@@ -91,6 +106,9 @@ func (UnimplementedFleetServer) Connect(grpc.BidiStreamingServer[AgentMessage, S
 }
 func (UnimplementedFleetServer) ListFleet(context.Context, *ListFleetRequest) (*ListFleetResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListFleet not implemented")
+}
+func (UnimplementedFleetServer) FleetMetricsHistory(context.Context, *FleetMetricsHistoryRequest) (*MetricsHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method FleetMetricsHistory not implemented")
 }
 func (UnimplementedFleetServer) mustEmbedUnimplementedFleetServer() {}
 func (UnimplementedFleetServer) testEmbeddedByValue()               {}
@@ -138,6 +156,24 @@ func _Fleet_ListFleet_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Fleet_FleetMetricsHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FleetMetricsHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FleetServer).FleetMetricsHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Fleet_FleetMetricsHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FleetServer).FleetMetricsHistory(ctx, req.(*FleetMetricsHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Fleet_ServiceDesc is the grpc.ServiceDesc for Fleet service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -148,6 +184,10 @@ var Fleet_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListFleet",
 			Handler:    _Fleet_ListFleet_Handler,
+		},
+		{
+			MethodName: "FleetMetricsHistory",
+			Handler:    _Fleet_FleetMetricsHistory_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

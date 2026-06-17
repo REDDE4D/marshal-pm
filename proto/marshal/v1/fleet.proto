@@ -12,12 +12,15 @@ service Fleet {
   rpc Connect(stream AgentMessage) returns (stream ServerMessage);
   // Read path for the fleet CLI (and, later, the dashboard).
   rpc ListFleet(ListFleetRequest) returns (ListFleetResponse);
+  // Metric history for one agent's app/instance (M8); reuses daemon.proto's response.
+  rpc FleetMetricsHistory(FleetMetricsHistoryRequest) returns (MetricsHistoryResponse);
 }
 
 message AgentMessage {
   oneof msg {
     Hello hello = 1;            // sent once on connect
     StateSnapshot snapshot = 2; // full process-state snapshot (periodic)
+    MetricBatch metrics = 3;    // raw CPU/mem samples (M8)
   }
 }
 
@@ -33,7 +36,9 @@ message Hello {
   string marshal_version = 2;
 }
 
-message HelloAck {}
+message HelloAck {
+  int64 last_metric_ts_ms = 1; // server's stored high-water-mark for this agent (0 = none)
+}
 
 message StateSnapshot { repeated ProcInfo procs = 1; } // ProcInfo from daemon.proto
 
@@ -46,4 +51,21 @@ message AgentState {
   bool connected = 2;
   int64 last_seen_unix = 3;
   repeated ProcInfo procs = 4;
+}
+
+// One stored metric row, flattened to map 1:1 to a metricstore row.
+message MetricSample {
+  int64  ts_ms = 1;
+  string label = 2; // "app#instance"
+  double cpu   = 3;
+  int64  mem   = 4;
+}
+
+message MetricBatch { repeated MetricSample samples = 1; }
+
+message FleetMetricsHistoryRequest {
+  string agent_name = 1;
+  string selector   = 2; // app name or "name#instance" label
+  int64  since_ms   = 3;
+  int64  bucket_ms  = 4;
 }
