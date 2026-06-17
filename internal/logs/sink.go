@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"io"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -128,6 +129,28 @@ func (s *Sink) emit(ln Line) {
 		default: // drop: a slow follower must never stall the process
 		}
 	}
+}
+
+// FileBackfill returns up to n lines for one stream read from the rotated
+// files on disk (deep history that outlives the in-memory ring).
+func (s *Sink) FileBackfill(stderr bool, n int) ([]Line, error) {
+	f := s.outFile.Filename
+	if stderr {
+		f = s.errFile.Filename
+	}
+	dir := filepath.Dir(f)
+	// base file name is "<label>.out.log"; strip ".out.log"/".err.log" to recover the label.
+	name := filepath.Base(f)
+	label := strings.TrimSuffix(strings.TrimSuffix(name, ".err.log"), ".out.log")
+	return fileBackfill(dir, label, stderr, n)
+}
+
+// RingSaturated reports whether the in-memory ring has wrapped — i.e. older
+// history exists on disk beyond what the ring can serve.
+func (s *Sink) RingSaturated() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ring.full
 }
 
 // Backfill returns the last n captured lines (merged across streams, in order).
