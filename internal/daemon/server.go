@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"marshal/internal/fleet"
 	"marshal/internal/logs"
 	"marshal/internal/manager"
 	"marshal/internal/metrics"
@@ -17,6 +18,7 @@ import (
 	"marshal/internal/pb"
 	"marshal/internal/store"
 	"marshal/internal/supervisor"
+	"marshal/internal/version"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -222,6 +224,16 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 
 	serveCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	if sc, err := st.LoadServer(); err == nil && sc != nil {
+		name := sc.Name
+		if name == "" {
+			if h, hErr := os.Hostname(); hErr == nil {
+				name = h
+			}
+		}
+		fc := fleet.New(sc.Address, name, version.String(), fleetSnapshot(mgr))
+		go fc.Run(serveCtx)
+	}
 	go sampler.Run(serveCtx, metricsSnapshot(mgr))
 	go func() {
 		t := time.NewTicker(10 * time.Minute)
