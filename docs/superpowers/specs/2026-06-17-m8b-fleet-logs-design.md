@@ -176,6 +176,15 @@ watermark behavior.
 
 ## 5. Daemon side
 
+> **Implementation refinement (2026-06-17, accepted):** the plan replaces the
+> subscribe-the-channel mechanism below with a **pull-based** `LogsFunc(sinceTsMs)`
+> that reads the ring each 2s push tick — the exact seam the metrics path uses. It
+> meets the same constraints (ring-bounded backfill, no new local store, no write
+> amplification) with no `Sink` changes, no tap, and no goroutines. A line becomes
+> queryable on the server up to one tick (~2s) later, which is immaterial for a
+> backfill-only feature. Sections 5.1–5.2 are retained for context; see
+> `docs/superpowers/plans/2026-06-17-m8b-fleet-logs.md` for the implemented design.
+
 ### 5.1 `logs.Registry` fleet-tap
 
 `logs.Registry` gains a tap that fans in lines from **all** sinks, including sinks created
