@@ -74,6 +74,39 @@ func TestLogsUnknownTargetNotFound(t *testing.T) {
 	}
 }
 
+func TestStreamMatch(t *testing.T) {
+	cases := []struct {
+		f      pb.LogStream
+		stderr bool
+		want   bool
+	}{
+		{pb.LogStream_LOG_STREAM_UNSPECIFIED, false, true},
+		{pb.LogStream_LOG_STREAM_UNSPECIFIED, true, true},
+		{pb.LogStream_LOG_STREAM_STDOUT, false, true},
+		{pb.LogStream_LOG_STREAM_STDOUT, true, false},
+		{pb.LogStream_LOG_STREAM_STDERR, true, true},
+		{pb.LogStream_LOG_STREAM_STDERR, false, false},
+	}
+	for _, c := range cases {
+		if got := streamMatch(c.f, c.stderr); got != c.want {
+			t.Fatalf("streamMatch(%v,%v)=%v want %v", c.f, c.stderr, got, c.want)
+		}
+	}
+}
+
+func TestBackfillRoutingPerStreamReadsFiles(t *testing.T) {
+	reg := logs.NewRegistry(t.TempDir())
+	out, errw := reg.WriterPair("app#0")
+	_, _ = out.Write([]byte("o1\no2\n"))
+	_, _ = errw.Write([]byte("e1\n"))
+	labeled := reg.ResolveLabeled([]string{"app#0"})
+
+	got := backfillLines(labeled, 10, pb.LogStream_LOG_STREAM_STDERR)
+	if len(got) != 1 || got[0].line.Text != "e1" || !got[0].line.Stderr {
+		t.Fatalf("stderr-only backfill wrong: %+v", got)
+	}
+}
+
 func TestLogsFollowStreamsLiveLines(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

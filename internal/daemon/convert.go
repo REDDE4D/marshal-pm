@@ -29,6 +29,25 @@ func appSpecToConfig(s *pb.AppSpec) (config.App, error) {
 		}
 		app.KillTimeout = config.Duration{Duration: d}
 	}
+	if lr := s.GetLogs(); lr != nil {
+		app.Logs = &config.LogRetention{}
+		if lr.MaxSizeMb != nil {
+			v := int(lr.GetMaxSizeMb())
+			app.Logs.MaxSizeMB = &v
+		}
+		if lr.MaxBackups != nil {
+			v := int(lr.GetMaxBackups())
+			app.Logs.MaxBackups = &v
+		}
+		if lr.MaxAgeDays != nil {
+			v := int(lr.GetMaxAgeDays())
+			app.Logs.MaxAgeDays = &v
+		}
+		if lr.Compress != nil {
+			v := lr.GetCompress()
+			app.Logs.Compress = &v
+		}
+	}
 	cfg := config.Config{Apps: []config.App{app}}
 	if err := cfg.Prepare(); err != nil {
 		return config.App{}, err
