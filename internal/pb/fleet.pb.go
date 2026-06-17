@@ -27,6 +27,7 @@ type AgentMessage struct {
 	//
 	//	*AgentMessage_Hello
 	//	*AgentMessage_Snapshot
+	//	*AgentMessage_Metrics
 	Msg           isAgentMessage_Msg `protobuf_oneof:"msg"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -87,6 +88,15 @@ func (x *AgentMessage) GetSnapshot() *StateSnapshot {
 	return nil
 }
 
+func (x *AgentMessage) GetMetrics() *MetricBatch {
+	if x != nil {
+		if x, ok := x.Msg.(*AgentMessage_Metrics); ok {
+			return x.Metrics
+		}
+	}
+	return nil
+}
+
 type isAgentMessage_Msg interface {
 	isAgentMessage_Msg()
 }
@@ -99,9 +109,15 @@ type AgentMessage_Snapshot struct {
 	Snapshot *StateSnapshot `protobuf:"bytes,2,opt,name=snapshot,proto3,oneof"` // full process-state snapshot (periodic)
 }
 
+type AgentMessage_Metrics struct {
+	Metrics *MetricBatch `protobuf:"bytes,3,opt,name=metrics,proto3,oneof"` // raw CPU/mem samples (M8)
+}
+
 func (*AgentMessage_Hello) isAgentMessage_Msg() {}
 
 func (*AgentMessage_Snapshot) isAgentMessage_Msg() {}
+
+func (*AgentMessage_Metrics) isAgentMessage_Msg() {}
 
 type ServerMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -222,9 +238,10 @@ func (x *Hello) GetMarshalVersion() string {
 }
 
 type HelloAck struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	LastMetricTsMs int64                  `protobuf:"varint,1,opt,name=last_metric_ts_ms,json=lastMetricTsMs,proto3" json:"last_metric_ts_ms,omitempty"` // server's stored high-water-mark for this agent (0 = none)
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *HelloAck) Reset() {
@@ -255,6 +272,13 @@ func (x *HelloAck) ProtoReflect() protoreflect.Message {
 // Deprecated: Use HelloAck.ProtoReflect.Descriptor instead.
 func (*HelloAck) Descriptor() ([]byte, []int) {
 	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *HelloAck) GetLastMetricTsMs() int64 {
+	if x != nil {
+		return x.LastMetricTsMs
+	}
+	return 0
 }
 
 type StateSnapshot struct {
@@ -449,15 +473,197 @@ func (x *AgentState) GetProcs() []*ProcInfo {
 	return nil
 }
 
+// One stored metric row, flattened to map 1:1 to a metricstore row.
+type MetricSample struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TsMs          int64                  `protobuf:"varint,1,opt,name=ts_ms,json=tsMs,proto3" json:"ts_ms,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"` // "app#instance"
+	Cpu           float64                `protobuf:"fixed64,3,opt,name=cpu,proto3" json:"cpu,omitempty"`
+	Mem           int64                  `protobuf:"varint,4,opt,name=mem,proto3" json:"mem,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MetricSample) Reset() {
+	*x = MetricSample{}
+	mi := &file_marshal_v1_fleet_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MetricSample) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MetricSample) ProtoMessage() {}
+
+func (x *MetricSample) ProtoReflect() protoreflect.Message {
+	mi := &file_marshal_v1_fleet_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MetricSample.ProtoReflect.Descriptor instead.
+func (*MetricSample) Descriptor() ([]byte, []int) {
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MetricSample) GetTsMs() int64 {
+	if x != nil {
+		return x.TsMs
+	}
+	return 0
+}
+
+func (x *MetricSample) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *MetricSample) GetCpu() float64 {
+	if x != nil {
+		return x.Cpu
+	}
+	return 0
+}
+
+func (x *MetricSample) GetMem() int64 {
+	if x != nil {
+		return x.Mem
+	}
+	return 0
+}
+
+type MetricBatch struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Samples       []*MetricSample        `protobuf:"bytes,1,rep,name=samples,proto3" json:"samples,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MetricBatch) Reset() {
+	*x = MetricBatch{}
+	mi := &file_marshal_v1_fleet_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MetricBatch) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MetricBatch) ProtoMessage() {}
+
+func (x *MetricBatch) ProtoReflect() protoreflect.Message {
+	mi := &file_marshal_v1_fleet_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MetricBatch.ProtoReflect.Descriptor instead.
+func (*MetricBatch) Descriptor() ([]byte, []int) {
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *MetricBatch) GetSamples() []*MetricSample {
+	if x != nil {
+		return x.Samples
+	}
+	return nil
+}
+
+type FleetMetricsHistoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AgentName     string                 `protobuf:"bytes,1,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	Selector      string                 `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"` // app name or "name#instance" label
+	SinceMs       int64                  `protobuf:"varint,3,opt,name=since_ms,json=sinceMs,proto3" json:"since_ms,omitempty"`
+	BucketMs      int64                  `protobuf:"varint,4,opt,name=bucket_ms,json=bucketMs,proto3" json:"bucket_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FleetMetricsHistoryRequest) Reset() {
+	*x = FleetMetricsHistoryRequest{}
+	mi := &file_marshal_v1_fleet_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FleetMetricsHistoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FleetMetricsHistoryRequest) ProtoMessage() {}
+
+func (x *FleetMetricsHistoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_marshal_v1_fleet_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FleetMetricsHistoryRequest.ProtoReflect.Descriptor instead.
+func (*FleetMetricsHistoryRequest) Descriptor() ([]byte, []int) {
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *FleetMetricsHistoryRequest) GetAgentName() string {
+	if x != nil {
+		return x.AgentName
+	}
+	return ""
+}
+
+func (x *FleetMetricsHistoryRequest) GetSelector() string {
+	if x != nil {
+		return x.Selector
+	}
+	return ""
+}
+
+func (x *FleetMetricsHistoryRequest) GetSinceMs() int64 {
+	if x != nil {
+		return x.SinceMs
+	}
+	return 0
+}
+
+func (x *FleetMetricsHistoryRequest) GetBucketMs() int64 {
+	if x != nil {
+		return x.BucketMs
+	}
+	return 0
+}
+
 var File_marshal_v1_fleet_proto protoreflect.FileDescriptor
 
 const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"\n" +
 	"\x16marshal/v1/fleet.proto\x12\n" +
-	"marshal.v1\x1a\x17marshal/v1/daemon.proto\"y\n" +
+	"marshal.v1\x1a\x17marshal/v1/daemon.proto\"\xae\x01\n" +
 	"\fAgentMessage\x12)\n" +
 	"\x05hello\x18\x01 \x01(\v2\x11.marshal.v1.HelloH\x00R\x05hello\x127\n" +
-	"\bsnapshot\x18\x02 \x01(\v2\x19.marshal.v1.StateSnapshotH\x00R\bsnapshotB\x05\n" +
+	"\bsnapshot\x18\x02 \x01(\v2\x19.marshal.v1.StateSnapshotH\x00R\bsnapshot\x123\n" +
+	"\ametrics\x18\x03 \x01(\v2\x17.marshal.v1.MetricBatchH\x00R\ametricsB\x05\n" +
 	"\x03msg\"K\n" +
 	"\rServerMessage\x123\n" +
 	"\thello_ack\x18\x01 \x01(\v2\x14.marshal.v1.HelloAckH\x00R\bhelloAckB\x05\n" +
@@ -465,9 +671,9 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"\x05Hello\x12\x1d\n" +
 	"\n" +
 	"agent_name\x18\x01 \x01(\tR\tagentName\x12'\n" +
-	"\x0fmarshal_version\x18\x02 \x01(\tR\x0emarshalVersion\"\n" +
-	"\n" +
-	"\bHelloAck\";\n" +
+	"\x0fmarshal_version\x18\x02 \x01(\tR\x0emarshalVersion\"5\n" +
+	"\bHelloAck\x12)\n" +
+	"\x11last_metric_ts_ms\x18\x01 \x01(\x03R\x0elastMetricTsMs\";\n" +
 	"\rStateSnapshot\x12*\n" +
 	"\x05procs\x18\x01 \x03(\v2\x14.marshal.v1.ProcInfoR\x05procs\"\x12\n" +
 	"\x10ListFleetRequest\"C\n" +
@@ -479,10 +685,24 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"agent_name\x18\x01 \x01(\tR\tagentName\x12\x1c\n" +
 	"\tconnected\x18\x02 \x01(\bR\tconnected\x12$\n" +
 	"\x0elast_seen_unix\x18\x03 \x01(\x03R\flastSeenUnix\x12*\n" +
-	"\x05procs\x18\x04 \x03(\v2\x14.marshal.v1.ProcInfoR\x05procs2\x95\x01\n" +
+	"\x05procs\x18\x04 \x03(\v2\x14.marshal.v1.ProcInfoR\x05procs\"]\n" +
+	"\fMetricSample\x12\x13\n" +
+	"\x05ts_ms\x18\x01 \x01(\x03R\x04tsMs\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12\x10\n" +
+	"\x03cpu\x18\x03 \x01(\x01R\x03cpu\x12\x10\n" +
+	"\x03mem\x18\x04 \x01(\x03R\x03mem\"A\n" +
+	"\vMetricBatch\x122\n" +
+	"\asamples\x18\x01 \x03(\v2\x18.marshal.v1.MetricSampleR\asamples\"\x8f\x01\n" +
+	"\x1aFleetMetricsHistoryRequest\x12\x1d\n" +
+	"\n" +
+	"agent_name\x18\x01 \x01(\tR\tagentName\x12\x1a\n" +
+	"\bselector\x18\x02 \x01(\tR\bselector\x12\x19\n" +
+	"\bsince_ms\x18\x03 \x01(\x03R\asinceMs\x12\x1b\n" +
+	"\tbucket_ms\x18\x04 \x01(\x03R\bbucketMs2\xf8\x01\n" +
 	"\x05Fleet\x12B\n" +
 	"\aConnect\x12\x18.marshal.v1.AgentMessage\x1a\x19.marshal.v1.ServerMessage(\x010\x01\x12H\n" +
-	"\tListFleet\x12\x1c.marshal.v1.ListFleetRequest\x1a\x1d.marshal.v1.ListFleetResponseB\x18Z\x16marshal/internal/pb;pbb\x06proto3"
+	"\tListFleet\x12\x1c.marshal.v1.ListFleetRequest\x1a\x1d.marshal.v1.ListFleetResponse\x12a\n" +
+	"\x13FleetMetricsHistory\x12&.marshal.v1.FleetMetricsHistoryRequest\x1a\".marshal.v1.MetricsHistoryResponseB\x18Z\x16marshal/internal/pb;pbb\x06proto3"
 
 var (
 	file_marshal_v1_fleet_proto_rawDescOnce sync.Once
@@ -496,34 +716,42 @@ func file_marshal_v1_fleet_proto_rawDescGZIP() []byte {
 	return file_marshal_v1_fleet_proto_rawDescData
 }
 
-var file_marshal_v1_fleet_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_marshal_v1_fleet_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_marshal_v1_fleet_proto_goTypes = []any{
-	(*AgentMessage)(nil),      // 0: marshal.v1.AgentMessage
-	(*ServerMessage)(nil),     // 1: marshal.v1.ServerMessage
-	(*Hello)(nil),             // 2: marshal.v1.Hello
-	(*HelloAck)(nil),          // 3: marshal.v1.HelloAck
-	(*StateSnapshot)(nil),     // 4: marshal.v1.StateSnapshot
-	(*ListFleetRequest)(nil),  // 5: marshal.v1.ListFleetRequest
-	(*ListFleetResponse)(nil), // 6: marshal.v1.ListFleetResponse
-	(*AgentState)(nil),        // 7: marshal.v1.AgentState
-	(*ProcInfo)(nil),          // 8: marshal.v1.ProcInfo
+	(*AgentMessage)(nil),               // 0: marshal.v1.AgentMessage
+	(*ServerMessage)(nil),              // 1: marshal.v1.ServerMessage
+	(*Hello)(nil),                      // 2: marshal.v1.Hello
+	(*HelloAck)(nil),                   // 3: marshal.v1.HelloAck
+	(*StateSnapshot)(nil),              // 4: marshal.v1.StateSnapshot
+	(*ListFleetRequest)(nil),           // 5: marshal.v1.ListFleetRequest
+	(*ListFleetResponse)(nil),          // 6: marshal.v1.ListFleetResponse
+	(*AgentState)(nil),                 // 7: marshal.v1.AgentState
+	(*MetricSample)(nil),               // 8: marshal.v1.MetricSample
+	(*MetricBatch)(nil),                // 9: marshal.v1.MetricBatch
+	(*FleetMetricsHistoryRequest)(nil), // 10: marshal.v1.FleetMetricsHistoryRequest
+	(*ProcInfo)(nil),                   // 11: marshal.v1.ProcInfo
+	(*MetricsHistoryResponse)(nil),     // 12: marshal.v1.MetricsHistoryResponse
 }
 var file_marshal_v1_fleet_proto_depIdxs = []int32{
-	2, // 0: marshal.v1.AgentMessage.hello:type_name -> marshal.v1.Hello
-	4, // 1: marshal.v1.AgentMessage.snapshot:type_name -> marshal.v1.StateSnapshot
-	3, // 2: marshal.v1.ServerMessage.hello_ack:type_name -> marshal.v1.HelloAck
-	8, // 3: marshal.v1.StateSnapshot.procs:type_name -> marshal.v1.ProcInfo
-	7, // 4: marshal.v1.ListFleetResponse.agents:type_name -> marshal.v1.AgentState
-	8, // 5: marshal.v1.AgentState.procs:type_name -> marshal.v1.ProcInfo
-	0, // 6: marshal.v1.Fleet.Connect:input_type -> marshal.v1.AgentMessage
-	5, // 7: marshal.v1.Fleet.ListFleet:input_type -> marshal.v1.ListFleetRequest
-	1, // 8: marshal.v1.Fleet.Connect:output_type -> marshal.v1.ServerMessage
-	6, // 9: marshal.v1.Fleet.ListFleet:output_type -> marshal.v1.ListFleetResponse
-	8, // [8:10] is the sub-list for method output_type
-	6, // [6:8] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	2,  // 0: marshal.v1.AgentMessage.hello:type_name -> marshal.v1.Hello
+	4,  // 1: marshal.v1.AgentMessage.snapshot:type_name -> marshal.v1.StateSnapshot
+	9,  // 2: marshal.v1.AgentMessage.metrics:type_name -> marshal.v1.MetricBatch
+	3,  // 3: marshal.v1.ServerMessage.hello_ack:type_name -> marshal.v1.HelloAck
+	11, // 4: marshal.v1.StateSnapshot.procs:type_name -> marshal.v1.ProcInfo
+	7,  // 5: marshal.v1.ListFleetResponse.agents:type_name -> marshal.v1.AgentState
+	11, // 6: marshal.v1.AgentState.procs:type_name -> marshal.v1.ProcInfo
+	8,  // 7: marshal.v1.MetricBatch.samples:type_name -> marshal.v1.MetricSample
+	0,  // 8: marshal.v1.Fleet.Connect:input_type -> marshal.v1.AgentMessage
+	5,  // 9: marshal.v1.Fleet.ListFleet:input_type -> marshal.v1.ListFleetRequest
+	10, // 10: marshal.v1.Fleet.FleetMetricsHistory:input_type -> marshal.v1.FleetMetricsHistoryRequest
+	1,  // 11: marshal.v1.Fleet.Connect:output_type -> marshal.v1.ServerMessage
+	6,  // 12: marshal.v1.Fleet.ListFleet:output_type -> marshal.v1.ListFleetResponse
+	12, // 13: marshal.v1.Fleet.FleetMetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
+	11, // [11:14] is the sub-list for method output_type
+	8,  // [8:11] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_marshal_v1_fleet_proto_init() }
@@ -535,6 +763,7 @@ func file_marshal_v1_fleet_proto_init() {
 	file_marshal_v1_fleet_proto_msgTypes[0].OneofWrappers = []any{
 		(*AgentMessage_Hello)(nil),
 		(*AgentMessage_Snapshot)(nil),
+		(*AgentMessage_Metrics)(nil),
 	}
 	file_marshal_v1_fleet_proto_msgTypes[1].OneofWrappers = []any{
 		(*ServerMessage_HelloAck)(nil),
@@ -545,7 +774,7 @@ func file_marshal_v1_fleet_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_marshal_v1_fleet_proto_rawDesc), len(file_marshal_v1_fleet_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -20,6 +20,7 @@ func fleetCmd() *cobra.Command {
 		Short: "Operate on the central server / fleet",
 	}
 	cmd.AddCommand(fleetPsCmd())
+	cmd.AddCommand(fleetMetricsCmd())
 	return cmd
 }
 
@@ -50,6 +51,44 @@ func fleetPsCmd() *cobra.Command {
 	return cmd
 }
 
+func fleetMetricsCmd() *cobra.Command {
+	var serverAddr string
+	var since, bucket time.Duration
+	var cpuOnly, memOnly bool
+	cmd := &cobra.Command{
+		Use:   "metrics <agent> <name|id>",
+		Short: "Show CPU/memory history for an app/instance on one agent",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			conn, err := grpc.NewClient(resolveServer(serverAddr),
+				grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			resp, err := pb.NewFleetClient(conn).FleetMetricsHistory(ctx, &pb.FleetMetricsHistoryRequest{
+				AgentName: args[0],
+				Selector:  args[1],
+				SinceMs:   since.Milliseconds(),
+				BucketMs:  bucket.Milliseconds(),
+			})
+			if err != nil {
+				return err
+			}
+			printMetrics(cmd.OutOrStdout(), resp, args[0]+"/"+args[1], since, cpuOnly, memOnly)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&serverAddr, "server", "", "central server address (default $MARSHAL_SERVER or localhost:9000)")
+	cmd.Flags().DurationVar(&since, "since", time.Hour, "history window (e.g. 30m, 6h)")
+	cmd.Flags().DurationVar(&bucket, "bucket", 0, "bucket width (0 = auto)")
+	cmd.Flags().BoolVar(&cpuOnly, "cpu", false, "show only CPU")
+	cmd.Flags().BoolVar(&memOnly, "mem", false, "show only memory")
+	return cmd
+}
+
 // resolveServer picks the server address: explicit flag, then $MARSHAL_SERVER,
 // then localhost:9000.
 func resolveServer(flag string) string {
@@ -65,7 +104,7 @@ func resolveServer(flag string) string {
 // printFleet renders fleet state grouped by agent.
 func printFleet(cmd *cobra.Command, resp *pb.ListFleetResponse) {
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "AGENT\tSTATUS\tID\tNAME\tINST\tSTATE\tPID\tUPTIME\tRESTARTS")
+	fmt.Fprintln(w, "AGENT\tSTATUS\tID\tNAME\tINST\tSTATE\tPID\tCPU\tMEM\tUPTIME\tRESTARTS")
 	for _, a := range resp.GetAgents() {
 		status := "offline"
 		if a.GetConnected() {
@@ -74,17 +113,21 @@ func printFleet(cmd *cobra.Command, resp *pb.ListFleetResponse) {
 			status = fmt.Sprintf("offline %s", time.Since(time.Unix(a.GetLastSeenUnix(), 0)).Round(time.Second))
 		}
 		if len(a.GetProcs()) == 0 {
-			fmt.Fprintf(w, "%s\t%s\t-\t-\t-\t-\t-\t-\t-\n", a.GetAgentName(), status)
+			fmt.Fprintf(w, "%s\t%s\t-\t-\t-\t-\t-\t-\t-\t-\t-\n", a.GetAgentName(), status)
 			continue
 		}
 		for _, p := range a.GetProcs() {
-			uptime := "-"
+			uptime, cpu, mem := "-", "-", "-"
 			if p.GetUptimeMs() > 0 {
 				uptime = (time.Duration(p.GetUptimeMs()) * time.Millisecond).Round(time.Second).String()
 			}
-			fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%d\t%s\t%d\t%s\t%d\n",
+			if p.GetState() == "online" {
+				cpu = fmt.Sprintf("%.1f%%", p.GetCpu())
+				mem = humanizeBytes(p.GetMem())
+			}
+			fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%d\t%s\t%d\t%s\t%s\t%s\t%d\n",
 				a.GetAgentName(), status, p.GetId(), p.GetName(), p.GetInstanceId(),
-				p.GetState(), p.GetPid(), uptime, p.GetRestarts())
+				p.GetState(), p.GetPid(), cpu, mem, uptime, p.GetRestarts())
 		}
 	}
 	_ = w.Flush()

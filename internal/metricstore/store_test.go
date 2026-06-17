@@ -117,3 +117,60 @@ func TestQueryRejectsZeroBucket(t *testing.T) {
 		t.Fatal("expected error for zero bucket width")
 	}
 }
+
+func TestMergeBucketsAndAutoBucket(t *testing.T) {
+	a := []Bucket{{TsMs: 1000, CpuAvg: 10, CpuMax: 15, MemAvg: 100, MemMax: 150}}
+	b := []Bucket{{TsMs: 1000, CpuAvg: 5, CpuMax: 20, MemAvg: 50, MemMax: 60}}
+	got := MergeBuckets([][]Bucket{a, b})
+	if len(got) != 1 || got[0].CpuAvg != 15 || got[0].CpuMax != 20 || got[0].MemAvg != 150 || got[0].MemMax != 150 {
+		t.Fatalf("MergeBuckets = %+v, want summed avgs + max maxes", got)
+	}
+	if w := AutoBucketMs(0, 600000); w != 600000 {
+		t.Fatalf("AutoBucketMs explicit = %d, want 600000", w)
+	}
+	if w := AutoBucketMs(60000, 0); w != 1000 {
+		t.Fatalf("AutoBucketMs auto-floored = %d, want 1000", w)
+	}
+	if w := AutoBucketMs(600000, 0); w != 10000 {
+		t.Fatalf("AutoBucketMs auto = %d, want 10000 (600000/60)", w)
+	}
+}
+
+func TestSamplesSinceMaxTsLabels(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "m.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	if mx, err := st.MaxTs(); err != nil || mx != 0 {
+		t.Fatalf("empty MaxTs = %d, %v; want 0, nil", mx, err)
+	}
+
+	_ = st.Append(1000, []Sample{{Label: "a#0", Cpu: 10, Mem: 100}})
+	_ = st.Append(2000, []Sample{{Label: "a#0", Cpu: 20, Mem: 200}, {Label: "b#0", Cpu: 5, Mem: 50}})
+
+	got, err := st.SamplesSince(1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("SamplesSince(1000) len = %d, want 2 (strictly newer than 1000)", len(got))
+	}
+	if got[0].TsMs != 2000 || (got[0].Label != "a#0" && got[0].Label != "b#0") {
+		t.Fatalf("unexpected first row: %+v", got[0])
+	}
+
+	mx, err := st.MaxTs()
+	if err != nil || mx != 2000 {
+		t.Fatalf("MaxTs = %d, %v; want 2000, nil", mx, err)
+	}
+
+	labels, err := st.Labels()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(labels) != 2 || labels[0] != "a#0" || labels[1] != "b#0" {
+		t.Fatalf("Labels = %v, want [a#0 b#0]", labels)
+	}
+}

@@ -3,20 +3,48 @@ package daemon
 import (
 	"marshal/internal/fleet"
 	"marshal/internal/manager"
+	"marshal/internal/metrics"
+	"marshal/internal/metricstore"
 	"marshal/internal/pb"
 )
 
-// procInfos adapts manager snapshots to wire ProcInfo. cpu/mem are zero in M7
-// (metric streaming is M8); it reuses snapshotToProc for the field mapping.
-func procInfos(snaps []manager.InstanceSnapshot) []*pb.ProcInfo {
-	out := make([]*pb.ProcInfo, 0, len(snaps))
-	for _, s := range snaps {
-		out = append(out, snapshotToProc(s, 0, 0))
+// fleetSnapshot returns a SnapshotFunc over the manager's current instances,
+// merging the sampler's latest cpu/mem (zero until the first sample tick).
+func fleetSnapshot(m *manager.Manager, smp *metrics.Sampler) fleet.SnapshotFunc {
+	return func() []*pb.ProcInfo {
+		snaps := m.List()
+		out := make([]*pb.ProcInfo, 0, len(snaps))
+		for _, s := range snaps {
+			var cpu float64
+			var mem uint64
+			if smp != nil {
+				if sm, ok := smp.Get(s.Label); ok {
+					cpu, mem = sm.Cpu, sm.Mem
+				}
+			}
+			out = append(out, snapshotToProc(s, cpu, mem))
+		}
+		return out
 	}
-	return out
 }
 
-// fleetSnapshot returns a SnapshotFunc over the manager's current instances.
-func fleetSnapshot(m *manager.Manager) fleet.SnapshotFunc {
-	return func() []*pb.ProcInfo { return procInfos(m.List()) }
+// metricsSince adapts a local metric store to the fleet client's MetricsFunc:
+// raw rows strictly newer than sinceTsMs, as wire samples.
+func metricsSince(mdb *metricstore.Store) fleet.MetricsFunc {
+	return func(sinceTsMs int64) []*pb.MetricSample {
+		if mdb == nil {
+			return nil
+		}
+		rows, err := mdb.SamplesSince(sinceTsMs)
+		if err != nil {
+			return nil
+		}
+		out := make([]*pb.MetricSample, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, &pb.MetricSample{
+				TsMs: r.TsMs, Label: r.Label, Cpu: r.Cpu, Mem: int64(r.Mem),
+			})
+		}
+		return out
+	}
 }

@@ -2,25 +2,36 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"log"
 	"net"
+	"os"
+	"sort"
+	"strings"
+	"time"
 
+	"marshal/internal/metricstore"
 	"marshal/internal/pb"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-// Server implements pb.FleetServer backed by an in-memory Registry.
+// Server implements pb.FleetServer backed by an in-memory Registry and, when
+// configured, per-agent metric storage.
 type Server struct {
 	pb.UnimplementedFleetServer
-	reg *Registry
+	reg    *Registry
+	stores *stores
 }
 
-// NewServer wires a Fleet server to a registry.
-func NewServer(reg *Registry) *Server { return &Server{reg: reg} }
+// NewServer wires a Fleet server to a registry and (optional) metric stores.
+func NewServer(reg *Registry, ss *stores) *Server { return &Server{reg: reg, stores: ss} }
 
-// Connect terminates one agent's upstream. M7 reads Hello + StateSnapshot and
-// acks Hello; the downstream direction is reserved for M9.
+// Connect terminates one agent's upstream: reads Hello (acking the stored metric
+// high-water-mark), StateSnapshot (live state), and MetricBatch (persisted).
 func (s *Server) Connect(stream pb.Fleet_ConnectServer) error {
 	var name string
 	for {
@@ -37,14 +48,105 @@ func (s *Server) Connect(stream pb.Fleet_ConnectServer) error {
 		switch m := msg.GetMsg().(type) {
 		case *pb.AgentMessage_Hello:
 			name = m.Hello.GetAgentName()
+			if name == "" {
+				return status.Error(codes.InvalidArgument, "agent_name must not be empty")
+			}
 			s.reg.Open(name)
-			_ = stream.Send(&pb.ServerMessage{Msg: &pb.ServerMessage_HelloAck{HelloAck: &pb.HelloAck{}}})
+			var watermark int64
+			if s.stores != nil {
+				if st, err := s.stores.get(name); err == nil {
+					watermark, _ = st.MaxTs()
+				}
+			}
+			_ = stream.Send(&pb.ServerMessage{Msg: &pb.ServerMessage_HelloAck{
+				HelloAck: &pb.HelloAck{LastMetricTsMs: watermark},
+			}})
 		case *pb.AgentMessage_Snapshot:
 			if name != "" {
 				s.reg.Update(name, m.Snapshot.GetProcs())
 			}
+		case *pb.AgentMessage_Metrics:
+			if name != "" && s.stores != nil {
+				s.storeBatch(name, m.Metrics.GetSamples())
+			}
 		}
 	}
+}
+
+// storeBatch groups a flattened batch by ts and appends each group oldest-first,
+// so the store's max(ts) always reflects a fully-committed prefix.
+func (s *Server) storeBatch(agent string, samples []*pb.MetricSample) {
+	st, err := s.stores.get(agent)
+	if err != nil {
+		log.Printf("fleet: open store for %s: %v", agent, err)
+		return
+	}
+	byTs := map[int64][]metricstore.Sample{}
+	var order []int64
+	for _, sm := range samples {
+		ts := sm.GetTsMs()
+		if _, ok := byTs[ts]; !ok {
+			order = append(order, ts)
+		}
+		byTs[ts] = append(byTs[ts], metricstore.Sample{
+			Label: sm.GetLabel(), Cpu: sm.GetCpu(), Mem: uint64(sm.GetMem()),
+		})
+	}
+	sort.Slice(order, func(i, j int) bool { return order[i] < order[j] })
+	for _, ts := range order {
+		if err := st.Append(ts, byTs[ts]); err != nil {
+			log.Printf("fleet: append for %s: %v", agent, err)
+			return
+		}
+	}
+}
+
+const defaultHistoryMs = int64(60 * 60 * 1000) // 1h
+
+// FleetMetricsHistory returns bucketed CPU/mem history for one agent's app/instance.
+func (s *Server) FleetMetricsHistory(_ context.Context, req *pb.FleetMetricsHistoryRequest) (*pb.MetricsHistoryResponse, error) {
+	if s.stores == nil || !s.stores.has(req.GetAgentName()) {
+		return nil, status.Errorf(codes.NotFound, "no metric history for agent %q", req.GetAgentName())
+	}
+	st, err := s.stores.get(req.GetAgentName())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "open store: %v", err)
+	}
+	labels, err := st.Labels()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "labels: %v", err)
+	}
+	sel := req.GetSelector()
+	var matched []string
+	for _, l := range labels {
+		if l == sel || strings.HasPrefix(l, sel+"#") {
+			matched = append(matched, l)
+		}
+	}
+
+	sinceMs := req.GetSinceMs()
+	if sinceMs <= 0 {
+		sinceMs = defaultHistoryMs
+	}
+	bucketMs := metricstore.AutoBucketMs(sinceMs, req.GetBucketMs())
+	lowerMs := time.Now().UnixMilli() - sinceMs
+
+	var series [][]metricstore.Bucket
+	for _, l := range matched {
+		bs, err := st.Query(metricstore.QueryReq{Label: l, SinceMs: lowerMs, BucketMs: bucketMs})
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "query: %v", err)
+		}
+		series = append(series, bs)
+	}
+
+	resp := &pb.MetricsHistoryResponse{}
+	for _, b := range metricstore.MergeBuckets(series) {
+		resp.Buckets = append(resp.Buckets, &pb.MetricBucket{
+			TsMs: b.TsMs, CpuAvg: b.CpuAvg, CpuMax: b.CpuMax, MemAvg: b.MemAvg, MemMax: b.MemMax,
+		})
+	}
+	return resp, nil
 }
 
 // ListFleet returns the current aggregated fleet state.
@@ -53,12 +155,39 @@ func (s *Server) ListFleet(_ context.Context, _ *pb.ListFleetRequest) (*pb.ListF
 }
 
 // Serve registers the Fleet service on lis and serves until ctx is canceled.
-func Serve(ctx context.Context, lis net.Listener, reg *Registry) error {
+// ss may be nil (no metric storage); when set it is closed on shutdown.
+func Serve(ctx context.Context, lis net.Listener, reg *Registry, ss *stores) error {
 	gs := grpc.NewServer()
-	pb.RegisterFleetServer(gs, NewServer(reg))
+	pb.RegisterFleetServer(gs, NewServer(reg, ss))
 	go func() {
 		<-ctx.Done()
 		gs.GracefulStop()
+		if ss != nil {
+			_ = ss.closeAll()
+		}
 	}()
 	return gs.Serve(lis)
+}
+
+// ServeDir builds a registry + per-agent metric stores rooted at dataDir, then
+// serves until ctx is canceled.
+func ServeDir(ctx context.Context, lis net.Listener, dataDir string, opts ...RegOption) error {
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		return fmt.Errorf("create data dir %s: %w", dataDir, err)
+	}
+	ss := newStores(dataDir)
+	go func() {
+		t := time.NewTicker(10 * time.Minute)
+		defer t.Stop()
+		const retentionMs = int64(7 * 24 * 60 * 60 * 1000)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				ss.pruneAll(time.Now().UnixMilli() - retentionMs)
+			}
+		}
+	}()
+	return Serve(ctx, lis, NewRegistry(opts...), ss)
 }

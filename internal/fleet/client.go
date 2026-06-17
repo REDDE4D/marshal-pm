@@ -5,6 +5,7 @@ package fleet
 
 import (
 	"context"
+	"errors"
 	"log"
 	"time"
 
@@ -17,12 +18,16 @@ import (
 // SnapshotFunc returns the agent's current process state.
 type SnapshotFunc func() []*pb.ProcInfo
 
+// MetricsFunc returns local metric rows strictly newer than sinceTsMs.
+type MetricsFunc func(sinceTsMs int64) []*pb.MetricSample
+
 // Client maintains one outbound stream to the central server.
 type Client struct {
 	addr     string
 	name     string
 	version  string
 	snapshot SnapshotFunc
+	metrics  MetricsFunc
 	interval time.Duration
 	minBO    time.Duration
 	maxBO    time.Duration
@@ -38,6 +43,9 @@ func WithInterval(d time.Duration) Option { return func(c *Client) { c.interval 
 func WithBackoff(min, max time.Duration) Option {
 	return func(c *Client) { c.minBO, c.maxBO = min, max }
 }
+
+// WithMetrics enables upstream metric shipping sourced from fn.
+func WithMetrics(fn MetricsFunc) Option { return func(c *Client) { c.metrics = fn } }
 
 // New builds a fleet client. snap must be non-nil.
 func New(addr, name, version string, snap SnapshotFunc, opts ...Option) *Client {
@@ -63,7 +71,7 @@ func (c *Client) Run(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if err != nil {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Printf("fleet: connection to %s ended: %v", c.addr, err)
 		}
 		if established {
@@ -80,8 +88,9 @@ func (c *Client) Run(ctx context.Context) {
 	}
 }
 
-// connectOnce dials, sends Hello, then pushes snapshots until the stream errors
-// or ctx is canceled. The bool reports whether the stream was established.
+// connectOnce dials, sends Hello, receives the HelloAck to seed the metric
+// watermark, then pushes snapshots and metrics until the stream errors or ctx
+// is canceled. The bool reports whether the stream was established.
 func (c *Client) connectOnce(ctx context.Context) (bool, error) {
 	conn, err := grpc.NewClient(c.addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -98,7 +107,18 @@ func (c *Client) connectOnce(ctx context.Context) (bool, error) {
 	}}); err != nil {
 		return false, err
 	}
-	if err := c.push(stream); err != nil { // immediate first snapshot
+	// Receive the HelloAck to seed the metric watermark.
+	var watermark int64
+	if ack, err := stream.Recv(); err != nil {
+		return true, err
+	} else if a := ack.GetHelloAck(); a != nil {
+		watermark = a.GetLastMetricTsMs()
+	}
+
+	if err := c.pushSnapshot(stream); err != nil { // immediate first snapshot
+		return true, err
+	}
+	if err := c.pushMetrics(stream, &watermark); err != nil { // immediate backfill
 		return true, err
 	}
 
@@ -109,15 +129,45 @@ func (c *Client) connectOnce(ctx context.Context) (bool, error) {
 		case <-ctx.Done():
 			return true, ctx.Err()
 		case <-t.C:
-			if err := c.push(stream); err != nil {
+			if err := c.pushSnapshot(stream); err != nil {
+				return true, err
+			}
+			if err := c.pushMetrics(stream, &watermark); err != nil {
 				return true, err
 			}
 		}
 	}
 }
 
-func (c *Client) push(stream pb.Fleet_ConnectClient) error {
+func (c *Client) pushSnapshot(stream pb.Fleet_ConnectClient) error {
 	return stream.Send(&pb.AgentMessage{Msg: &pb.AgentMessage_Snapshot{
 		Snapshot: &pb.StateSnapshot{Procs: c.snapshot()},
 	}})
+}
+
+// pushMetrics ships local rows newer than *watermark; on success advances it to
+// the max ts shipped. No-op when metrics shipping is disabled or nothing is new.
+func (c *Client) pushMetrics(stream pb.Fleet_ConnectClient, watermark *int64) error {
+	if c.metrics == nil {
+		return nil
+	}
+	samples := c.metrics(*watermark)
+	if len(samples) == 0 {
+		return nil
+	}
+	if err := stream.Send(&pb.AgentMessage{Msg: &pb.AgentMessage_Metrics{
+		Metrics: &pb.MetricBatch{Samples: samples},
+	}}); err != nil {
+		return err
+	}
+	var mx int64
+	for _, s := range samples {
+		if s.GetTsMs() > mx {
+			mx = s.GetTsMs()
+		}
+	}
+	if mx > *watermark {
+		*watermark = mx
+	}
+	return nil
 }

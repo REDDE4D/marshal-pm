@@ -19,7 +19,7 @@ func TestMergeBucketsSumsAndMaxes(t *testing.T) {
 		{TsMs: 1000, CpuAvg: 20, CpuMax: 12, MemAvg: 200, MemMax: 120},
 		{TsMs: 2000, CpuAvg: 5, CpuMax: 5, MemAvg: 50, MemMax: 50},
 	}
-	got := mergeBuckets([][]metricstore.Bucket{a, b})
+	got := metricstore.MergeBuckets([][]metricstore.Bucket{a, b})
 	if len(got) != 2 {
 		t.Fatalf("got %d buckets, want 2", len(got))
 	}
