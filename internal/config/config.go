@@ -19,6 +19,15 @@ const (
 	RestartNo        RestartMode = "no"
 )
 
+// LogRetention overrides per-app log rotation/retention. Nil fields fall back
+// to the daemon default; a non-nil pointer is honoured verbatim.
+type LogRetention struct {
+	MaxSizeMB  *int  `yaml:"max_size_mb" json:"max_size_mb,omitempty"`
+	MaxBackups *int  `yaml:"max_backups" json:"max_backups,omitempty"`
+	MaxAgeDays *int  `yaml:"max_age_days" json:"max_age_days,omitempty"`
+	Compress   *bool `yaml:"compress" json:"compress,omitempty"`
+}
+
 // Duration is a time.Duration that unmarshals from a string like "5s".
 type Duration struct{ time.Duration }
 
@@ -66,6 +75,7 @@ type App struct {
 	Restart     RestartMode       `yaml:"restart" json:"restart"`
 	MaxRestarts int               `yaml:"max_restarts" json:"max_restarts"`
 	KillTimeout Duration          `yaml:"kill_timeout" json:"kill_timeout"`
+	Logs        *LogRetention     `yaml:"logs" json:"logs,omitempty"`
 }
 
 // Config is the top-level marshal.yaml document.
