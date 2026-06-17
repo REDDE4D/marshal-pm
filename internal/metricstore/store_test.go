@@ -117,3 +117,42 @@ func TestQueryRejectsZeroBucket(t *testing.T) {
 		t.Fatal("expected error for zero bucket width")
 	}
 }
+
+func TestSamplesSinceMaxTsLabels(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "m.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	if mx, err := st.MaxTs(); err != nil || mx != 0 {
+		t.Fatalf("empty MaxTs = %d, %v; want 0, nil", mx, err)
+	}
+
+	_ = st.Append(1000, []Sample{{Label: "a#0", Cpu: 10, Mem: 100}})
+	_ = st.Append(2000, []Sample{{Label: "a#0", Cpu: 20, Mem: 200}, {Label: "b#0", Cpu: 5, Mem: 50}})
+
+	got, err := st.SamplesSince(1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("SamplesSince(1000) len = %d, want 2 (strictly newer than 1000)", len(got))
+	}
+	if got[0].TsMs != 2000 || (got[0].Label != "a#0" && got[0].Label != "b#0") {
+		t.Fatalf("unexpected first row: %+v", got[0])
+	}
+
+	mx, err := st.MaxTs()
+	if err != nil || mx != 2000 {
+		t.Fatalf("MaxTs = %d, %v; want 2000, nil", mx, err)
+	}
+
+	labels, err := st.Labels()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(labels) != 2 || labels[0] != "a#0" || labels[1] != "b#0" {
+		t.Fatalf("Labels = %v, want [a#0 b#0]", labels)
+	}
+}

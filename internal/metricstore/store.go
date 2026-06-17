@@ -16,6 +16,14 @@ type Sample struct {
 	Mem   uint64
 }
 
+// TimestampedSample is one stored row with its timestamp.
+type TimestampedSample struct {
+	TsMs  int64
+	Label string
+	Cpu   float64
+	Mem   uint64
+}
+
 // Bucket is one aggregated time bucket for a label, oldest first in query order.
 type Bucket struct {
 	TsMs   int64
@@ -115,6 +123,57 @@ func (s *Store) Query(req QueryReq) ([]Bucket, error) {
 		b.MemAvg = uint64(memAvg + 0.5) // round, not truncate
 		b.MemMax = uint64(memMax)
 		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// SamplesSince returns raw rows with ts strictly greater than tsMs, oldest first.
+func (s *Store) SamplesSince(tsMs int64) ([]TimestampedSample, error) {
+	rows, err := s.db.Query(`SELECT ts, label, cpu, mem FROM samples WHERE ts > ? ORDER BY ts`, tsMs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []TimestampedSample
+	for rows.Next() {
+		var ts int64
+		var label string
+		var cpu float64
+		var mem int64
+		if err := rows.Scan(&ts, &label, &cpu, &mem); err != nil {
+			return nil, err
+		}
+		out = append(out, TimestampedSample{TsMs: ts, Label: label, Cpu: cpu, Mem: uint64(mem)})
+	}
+	return out, rows.Err()
+}
+
+// MaxTs returns the largest stored ts, or 0 when the store is empty.
+func (s *Store) MaxTs() (int64, error) {
+	var mx sql.NullInt64
+	if err := s.db.QueryRow(`SELECT max(ts) FROM samples`).Scan(&mx); err != nil {
+		return 0, err
+	}
+	if !mx.Valid {
+		return 0, nil
+	}
+	return mx.Int64, nil
+}
+
+// Labels returns the distinct sample labels, ascending.
+func (s *Store) Labels() ([]string, error) {
+	rows, err := s.db.Query(`SELECT DISTINCT label FROM samples ORDER BY label`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var l string
+		if err := rows.Scan(&l); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
 	}
 	return out, rows.Err()
 }
