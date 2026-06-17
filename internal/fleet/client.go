@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"sync"
 	"time"
 
 	"marshal/internal/pb"
@@ -24,6 +25,9 @@ type MetricsFunc func(sinceTsMs int64) []*pb.MetricSample
 // LogsFunc returns captured log lines strictly newer than sinceTsMs.
 type LogsFunc func(sinceTsMs int64) []*pb.LogShipLine
 
+// CommandFunc executes a control command and returns its result.
+type CommandFunc func(*pb.Command) *pb.ControlResult
+
 // Client maintains one outbound stream to the central server.
 type Client struct {
 	addr     string
@@ -32,6 +36,7 @@ type Client struct {
 	snapshot SnapshotFunc
 	metrics  MetricsFunc
 	logs     LogsFunc
+	commands CommandFunc
 	interval time.Duration
 	minBO    time.Duration
 	maxBO    time.Duration
@@ -53,6 +58,9 @@ func WithMetrics(fn MetricsFunc) Option { return func(c *Client) { c.metrics = f
 
 // WithLogs enables upstream log shipping sourced from fn.
 func WithLogs(fn LogsFunc) Option { return func(c *Client) { c.logs = fn } }
+
+// WithCommands enables down-stream command handling sourced from fn.
+func WithCommands(fn CommandFunc) Option { return func(c *Client) { c.commands = fn } }
 
 // New builds a fleet client. snap must be non-nil.
 func New(addr, name, version string, snap SnapshotFunc, opts ...Option) *Client {
@@ -109,7 +117,15 @@ func (c *Client) connectOnce(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if err := stream.Send(&pb.AgentMessage{Msg: &pb.AgentMessage_Hello{
+
+	var sendMu sync.Mutex
+	send := func(m *pb.AgentMessage) error {
+		sendMu.Lock()
+		defer sendMu.Unlock()
+		return stream.Send(m)
+	}
+
+	if err := send(&pb.AgentMessage{Msg: &pb.AgentMessage_Hello{
 		Hello: &pb.Hello{AgentName: c.name, MarshalVersion: c.version},
 	}}); err != nil {
 		return false, err
@@ -123,13 +139,31 @@ func (c *Client) connectOnce(ctx context.Context) (bool, error) {
 		logWM = a.GetLastLogTsMs()
 	}
 
-	if err := c.pushSnapshot(stream); err != nil { // immediate first snapshot
+	// Receiver goroutine: handle commands until the stream errors.
+	recvErr := make(chan error, 1)
+	go func() {
+		for {
+			msg, err := stream.Recv()
+			if err != nil {
+				recvErr <- err
+				return
+			}
+			if cmd := msg.GetCommand(); cmd != nil && c.commands != nil {
+				res := c.commands(cmd)
+				_ = send(&pb.AgentMessage{Msg: &pb.AgentMessage_Result{
+					Result: &pb.CommandResult{RequestId: cmd.GetRequestId(), Result: res},
+				}})
+			}
+		}
+	}()
+
+	if err := c.pushSnapshot(send); err != nil {
 		return true, err
 	}
-	if err := c.pushMetrics(stream, &watermark); err != nil { // immediate backfill
+	if err := c.pushMetrics(send, &watermark); err != nil {
 		return true, err
 	}
-	if err := c.pushLogs(stream, &logWM); err != nil { // immediate backfill
+	if err := c.pushLogs(send, &logWM); err != nil {
 		return true, err
 	}
 
@@ -139,29 +173,31 @@ func (c *Client) connectOnce(ctx context.Context) (bool, error) {
 		select {
 		case <-ctx.Done():
 			return true, ctx.Err()
+		case err := <-recvErr:
+			return true, err
 		case <-t.C:
-			if err := c.pushSnapshot(stream); err != nil {
+			if err := c.pushSnapshot(send); err != nil {
 				return true, err
 			}
-			if err := c.pushMetrics(stream, &watermark); err != nil {
+			if err := c.pushMetrics(send, &watermark); err != nil {
 				return true, err
 			}
-			if err := c.pushLogs(stream, &logWM); err != nil {
+			if err := c.pushLogs(send, &logWM); err != nil {
 				return true, err
 			}
 		}
 	}
 }
 
-func (c *Client) pushSnapshot(stream pb.Fleet_ConnectClient) error {
-	return stream.Send(&pb.AgentMessage{Msg: &pb.AgentMessage_Snapshot{
+func (c *Client) pushSnapshot(send func(*pb.AgentMessage) error) error {
+	return send(&pb.AgentMessage{Msg: &pb.AgentMessage_Snapshot{
 		Snapshot: &pb.StateSnapshot{Procs: c.snapshot()},
 	}})
 }
 
 // pushMetrics ships local rows newer than *watermark; on success advances it to
 // the max ts shipped. No-op when metrics shipping is disabled or nothing is new.
-func (c *Client) pushMetrics(stream pb.Fleet_ConnectClient, watermark *int64) error {
+func (c *Client) pushMetrics(send func(*pb.AgentMessage) error, watermark *int64) error {
 	if c.metrics == nil {
 		return nil
 	}
@@ -169,7 +205,7 @@ func (c *Client) pushMetrics(stream pb.Fleet_ConnectClient, watermark *int64) er
 	if len(samples) == 0 {
 		return nil
 	}
-	if err := stream.Send(&pb.AgentMessage{Msg: &pb.AgentMessage_Metrics{
+	if err := send(&pb.AgentMessage{Msg: &pb.AgentMessage_Metrics{
 		Metrics: &pb.MetricBatch{Samples: samples},
 	}}); err != nil {
 		return err
@@ -188,7 +224,7 @@ func (c *Client) pushMetrics(stream pb.Fleet_ConnectClient, watermark *int64) er
 
 // pushLogs ships local lines newer than *watermark; on success advances it to
 // the max ts shipped. No-op when log shipping is disabled or nothing is new.
-func (c *Client) pushLogs(stream pb.Fleet_ConnectClient, watermark *int64) error {
+func (c *Client) pushLogs(send func(*pb.AgentMessage) error, watermark *int64) error {
 	if c.logs == nil {
 		return nil
 	}
@@ -196,7 +232,7 @@ func (c *Client) pushLogs(stream pb.Fleet_ConnectClient, watermark *int64) error
 	if len(lines) == 0 {
 		return nil
 	}
-	if err := stream.Send(&pb.AgentMessage{Msg: &pb.AgentMessage_Logs{
+	if err := send(&pb.AgentMessage{Msg: &pb.AgentMessage_Logs{
 		Logs: &pb.LogBatch{Lines: lines},
 	}}); err != nil {
 		return err
