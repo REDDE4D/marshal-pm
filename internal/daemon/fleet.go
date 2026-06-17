@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"marshal/internal/fleet"
+	"marshal/internal/logs"
 	"marshal/internal/manager"
 	"marshal/internal/metrics"
 	"marshal/internal/metricstore"
@@ -23,6 +24,24 @@ func fleetSnapshot(m *manager.Manager, smp *metrics.Sampler) fleet.SnapshotFunc 
 				}
 			}
 			out = append(out, snapshotToProc(s, cpu, mem))
+		}
+		return out
+	}
+}
+
+// logsSince adapts the log registry's ring to the fleet client's LogsFunc:
+// ring lines across all sinks strictly newer than sinceTsMs, as wire lines.
+func logsSince(reg *logs.Registry) fleet.LogsFunc {
+	return func(sinceTsMs int64) []*pb.LogShipLine {
+		if reg == nil {
+			return nil
+		}
+		lines := reg.RingSince(sinceTsMs)
+		out := make([]*pb.LogShipLine, 0, len(lines))
+		for _, ln := range lines {
+			out = append(out, &pb.LogShipLine{
+				TsMs: ln.Ts.UnixMilli(), Label: ln.Label, Stderr: ln.Stderr, Text: ln.Text,
+			})
 		}
 		return out
 	}
