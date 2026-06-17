@@ -179,6 +179,56 @@ func TestServerConnectListAndOffline(t *testing.T) {
 	}
 }
 
+func TestFleetLogsHistorySelectorMergeAndFilter(t *testing.T) {
+	dir := t.TempDir()
+	ls := newLogStores(dir)
+	defer ls.closeAll()
+	srv := NewServer(NewRegistry(WithOfflineAfter(time.Hour)), nil, ls)
+
+	srv.storeLogBatch("web-1", []*pb.LogShipLine{
+		{TsMs: 1, Label: "api#0", Stderr: false, Text: "o0"},
+		{TsMs: 2, Label: "api#1", Stderr: true, Text: "e1"},
+		{TsMs: 3, Label: "api#0", Stderr: false, Text: "o0b"},
+	})
+
+	// selector "api" resolves both api#0 and api#1, merged ascending by ts.
+	resp, err := srv.FleetLogsHistory(context.Background(), &pb.FleetLogsHistoryRequest{
+		AgentName: "web-1", Selector: "api", Lines: 10,
+	})
+	if err != nil {
+		t.Fatalf("FleetLogsHistory: %v", err)
+	}
+	if len(resp.GetLines()) != 3 {
+		t.Fatalf("got %d lines, want 3", len(resp.GetLines()))
+	}
+	if resp.GetLines()[0].GetLine() != "o0" || resp.GetLines()[1].GetLine() != "e1" {
+		t.Fatalf("merge order wrong: %+v", resp.GetLines())
+	}
+	if resp.GetLines()[1].GetName() != "api" || resp.GetLines()[1].GetInstanceId() != 1 {
+		t.Fatalf("label parse wrong: %+v", resp.GetLines()[1])
+	}
+
+	// stderr filter
+	respErr, _ := srv.FleetLogsHistory(context.Background(), &pb.FleetLogsHistoryRequest{
+		AgentName: "web-1", Selector: "api", Lines: 10, Stream: pb.LogStream_LOG_STREAM_STDERR,
+	})
+	if len(respErr.GetLines()) != 1 || respErr.GetLines()[0].GetLine() != "e1" {
+		t.Fatalf("stderr filter = %+v, want [e1]", respErr.GetLines())
+	}
+}
+
+func TestFleetLogsHistoryUnknownAgent(t *testing.T) {
+	ls := newLogStores(t.TempDir())
+	defer ls.closeAll()
+	srv := NewServer(NewRegistry(WithOfflineAfter(time.Hour)), nil, ls)
+	_, err := srv.FleetLogsHistory(context.Background(), &pb.FleetLogsHistoryRequest{
+		AgentName: "ghost", Selector: "api", Lines: 10,
+	})
+	if status.Code(err) != codes.NotFound {
+		t.Fatalf("err = %v, want NotFound", err)
+	}
+}
+
 func TestConnectStoresLogBatchAndAcksWatermark(t *testing.T) {
 	dir := t.TempDir()
 	ls := newLogStores(dir)

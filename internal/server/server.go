@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -180,6 +181,76 @@ func (s *Server) FleetMetricsHistory(_ context.Context, req *pb.FleetMetricsHist
 		})
 	}
 	return resp, nil
+}
+
+const defaultLogLines = 15
+
+// FleetLogsHistory returns the most recent stored log lines for one agent's
+// app/instance selector, merged across instances and filtered by stream.
+func (s *Server) FleetLogsHistory(_ context.Context, req *pb.FleetLogsHistoryRequest) (*pb.FleetLogsHistoryResponse, error) {
+	if s.logs == nil || !s.logs.has(req.GetAgentName()) {
+		return nil, status.Errorf(codes.NotFound, "no log history for agent %q", req.GetAgentName())
+	}
+	st, err := s.logs.get(req.GetAgentName())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "open log store: %v", err)
+	}
+	labels, err := st.Labels()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "labels: %v", err)
+	}
+	sel := req.GetSelector()
+	var matched []string
+	for _, l := range labels {
+		if l == sel || strings.HasPrefix(l, sel+"#") {
+			matched = append(matched, l)
+		}
+	}
+	limit := int(req.GetLines())
+	if limit <= 0 {
+		limit = defaultLogLines
+	}
+	filter := streamFilter(req.GetStream())
+
+	var series [][]logstore.StoredLine
+	for _, l := range matched {
+		lines, err := st.Tail(l, limit, filter)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "tail: %v", err)
+		}
+		series = append(series, lines)
+	}
+
+	resp := &pb.FleetLogsHistoryResponse{}
+	for _, ln := range logstore.MergeTail(series, limit) {
+		name, idx := splitLabel(ln.Label)
+		resp.Lines = append(resp.Lines, &pb.LogLine{
+			Name: name, InstanceId: idx, Stderr: ln.Stderr, Line: ln.Text,
+		})
+	}
+	return resp, nil
+}
+
+// streamFilter maps the wire enum to a logstore filter.
+func streamFilter(st pb.LogStream) logstore.StreamFilter {
+	switch st {
+	case pb.LogStream_LOG_STREAM_STDOUT:
+		return logstore.StreamStdout
+	case pb.LogStream_LOG_STREAM_STDERR:
+		return logstore.StreamStderr
+	default:
+		return logstore.StreamAny
+	}
+}
+
+// splitLabel parses "name#idx" into its parts (idx 0 when absent/unparseable).
+func splitLabel(label string) (string, int32) {
+	i := strings.LastIndexByte(label, '#')
+	if i < 0 {
+		return label, 0
+	}
+	n, _ := strconv.Atoi(label[i+1:])
+	return label[:i], int32(n)
 }
 
 // ListFleet returns the current aggregated fleet state.
