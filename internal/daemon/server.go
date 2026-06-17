@@ -13,6 +13,7 @@ import (
 	"marshal/internal/logs"
 	"marshal/internal/manager"
 	"marshal/internal/metrics"
+	"marshal/internal/metricstore"
 	"marshal/internal/pb"
 	"marshal/internal/store"
 	"marshal/internal/supervisor"
@@ -29,7 +30,8 @@ type Server struct {
 	store   *store.Store
 	logs    *logs.Registry
 	metrics *metrics.Sampler
-	kill    func() // triggers daemon shutdown (set by Run)
+	mdb     *metricstore.Store // metric history
+	kill    func()             // triggers daemon shutdown (set by Run)
 }
 
 // Start admits and launches one or more apps.
@@ -114,7 +116,10 @@ func (s *Server) Kill(_ context.Context, _ *pb.Empty) (*pb.Ack, error) {
 	return &pb.Ack{Ok: true, Message: "stopping"}, nil
 }
 
-type runOptions struct{ sampleInterval time.Duration }
+type runOptions struct {
+	sampleInterval time.Duration
+	retention      time.Duration
+}
 
 // Option configures Run.
 type Option func(*runOptions)
@@ -122,6 +127,11 @@ type Option func(*runOptions)
 // WithSampleInterval overrides the 5s metrics tick (used by tests).
 func WithSampleInterval(d time.Duration) Option {
 	return func(o *runOptions) { o.sampleInterval = d }
+}
+
+// WithRetention overrides the 7-day metric-history retention window (used by tests).
+func WithRetention(d time.Duration) Option {
+	return func(o *runOptions) { o.retention = d }
 }
 
 // metricsSnapshot adapts the manager's instance list to the sampler's view.
@@ -143,7 +153,7 @@ func metricsSnapshot(m *manager.Manager) func() []metrics.Instance {
 // Run starts the daemon: resolves the socket, auto-resurrects, serves until ctx
 // is canceled or Kill is called, then gracefully stops everything.
 func Run(ctx context.Context, st *store.Store, opts ...Option) error {
-	cfg := runOptions{sampleInterval: 5 * time.Second}
+	cfg := runOptions{sampleInterval: 5 * time.Second, retention: 168 * time.Hour}
 	for _, o := range opts {
 		o(&cfg)
 	}
@@ -156,6 +166,20 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 	reg := logs.NewRegistry(st.LogsDir())
 	mgr := manager.New(ctx, manager.WithLogs(reg))
 	sampler := metrics.NewSampler(cfg.sampleInterval)
+	mdb, err := metricstore.Open(st.MetricsDBPath())
+	if err != nil {
+		return fmt.Errorf("open metrics db: %w", err)
+	}
+	sampler.SetOnTick(func(m map[string]metrics.Sample) {
+		if len(m) == 0 {
+			return
+		}
+		samples := make([]metricstore.Sample, 0, len(m))
+		for label, sm := range m {
+			samples = append(samples, metricstore.Sample{Label: label, Cpu: sm.Cpu, Mem: sm.Mem})
+		}
+		_ = mdb.Append(time.Now().UnixMilli(), samples)
+	})
 	if apps, err := st.Load(); err == nil {
 		for _, app := range apps {
 			_, _ = mgr.Add(app)
@@ -174,7 +198,7 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 	}
 
 	gs := grpc.NewServer()
-	srv := &Server{mgr: mgr, store: st, logs: reg, metrics: sampler}
+	srv := &Server{mgr: mgr, store: st, logs: reg, metrics: sampler, mdb: mdb}
 	var once sync.Once
 	stopped := make(chan struct{})
 	srv.kill = func() { once.Do(func() { close(stopped) }) }
@@ -183,6 +207,18 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 	serveCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go sampler.Run(serveCtx, metricsSnapshot(mgr))
+	go func() {
+		t := time.NewTicker(10 * time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-serveCtx.Done():
+				return
+			case <-t.C:
+				_, _ = mdb.Prune(time.Now().UnixMilli() - cfg.retention.Milliseconds())
+			}
+		}
+	}()
 	go func() {
 		select {
 		case <-serveCtx.Done():
@@ -194,6 +230,7 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 	serveErr := gs.Serve(lis)
 	cancel() // unblock the watcher if Serve returned on its own
 	mgr.StopAll()
+	_ = mdb.Close()
 	_ = os.Remove(sock)
 	if serveErr != nil && !errors.Is(serveErr, grpc.ErrServerStopped) {
 		return serveErr
