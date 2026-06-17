@@ -6,6 +6,8 @@ import (
 	"log"
 	"net"
 	"sort"
+	"strings"
+	"time"
 
 	"marshal/internal/metricstore"
 	"marshal/internal/pb"
@@ -95,6 +97,54 @@ func (s *Server) storeBatch(agent string, samples []*pb.MetricSample) {
 			return
 		}
 	}
+}
+
+const defaultHistoryMs = int64(60 * 60 * 1000) // 1h
+
+// FleetMetricsHistory returns bucketed CPU/mem history for one agent's app/instance.
+func (s *Server) FleetMetricsHistory(_ context.Context, req *pb.FleetMetricsHistoryRequest) (*pb.MetricsHistoryResponse, error) {
+	if s.stores == nil || !s.stores.has(req.GetAgentName()) {
+		return nil, status.Errorf(codes.NotFound, "no metric history for agent %q", req.GetAgentName())
+	}
+	st, err := s.stores.get(req.GetAgentName())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "open store: %v", err)
+	}
+	labels, err := st.Labels()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "labels: %v", err)
+	}
+	sel := req.GetSelector()
+	var matched []string
+	for _, l := range labels {
+		if l == sel || strings.HasPrefix(l, sel+"#") {
+			matched = append(matched, l)
+		}
+	}
+
+	sinceMs := req.GetSinceMs()
+	if sinceMs <= 0 {
+		sinceMs = defaultHistoryMs
+	}
+	bucketMs := metricstore.AutoBucketMs(sinceMs, req.GetBucketMs())
+	lowerMs := time.Now().UnixMilli() - sinceMs
+
+	var series [][]metricstore.Bucket
+	for _, l := range matched {
+		bs, err := st.Query(metricstore.QueryReq{Label: l, SinceMs: lowerMs, BucketMs: bucketMs})
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "query: %v", err)
+		}
+		series = append(series, bs)
+	}
+
+	resp := &pb.MetricsHistoryResponse{}
+	for _, b := range metricstore.MergeBuckets(series) {
+		resp.Buckets = append(resp.Buckets, &pb.MetricBucket{
+			TsMs: b.TsMs, CpuAvg: b.CpuAvg, CpuMax: b.CpuMax, MemAvg: b.MemAvg, MemMax: b.MemMax,
+		})
+	}
+	return resp, nil
 }
 
 // ListFleet returns the current aggregated fleet state.

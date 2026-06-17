@@ -115,6 +115,30 @@ func waitFor(t *testing.T, cond func() bool) {
 	t.Fatal("condition not met within 2s")
 }
 
+func TestFleetMetricsHistory(t *testing.T) {
+	ss := newStores(t.TempDir())
+	srv := NewServer(NewRegistry(), ss)
+	st, _ := ss.get("web-1")
+	now := time.Now().UnixMilli()
+	_ = st.Append(now-2000, []metricstore.Sample{{Label: "api#0", Cpu: 10, Mem: 100}, {Label: "api#1", Cpu: 5, Mem: 50}})
+	_ = st.Append(now-1000, []metricstore.Sample{{Label: "api#0", Cpu: 30, Mem: 300}})
+
+	// Unknown agent → NotFound.
+	if _, err := srv.FleetMetricsHistory(context.Background(), &pb.FleetMetricsHistoryRequest{AgentName: "ghost", Selector: "api"}); status.Code(err) != codes.NotFound {
+		t.Fatalf("unknown agent err = %v, want NotFound", err)
+	}
+
+	resp, err := srv.FleetMetricsHistory(context.Background(), &pb.FleetMetricsHistoryRequest{
+		AgentName: "web-1", Selector: "api", SinceMs: (time.Hour).Milliseconds(), BucketMs: 1000,
+	})
+	if err != nil {
+		t.Fatalf("FleetMetricsHistory: %v", err)
+	}
+	if len(resp.GetBuckets()) == 0 {
+		t.Fatal("expected buckets for api across both instances")
+	}
+}
+
 func TestServerConnectListAndOffline(t *testing.T) {
 	reg := NewRegistry(WithOfflineAfter(time.Hour))
 	addr := startServer(t, reg)
