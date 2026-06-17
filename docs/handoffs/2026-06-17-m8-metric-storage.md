@@ -41,6 +41,7 @@ The daemon side:
 | `ecb044c` | CLI: `marshal fleet metrics` with sparkline |
 | `1539f41` | Tests: e2e metric ingest + reconnect backfill |
 | *(this commit)* | Server: `pruneAll` + 7-day retention goroutine in `ServeDir`; M8 handoff |
+| *(spec-gap fix)* | CLI: `fleet ps` now renders live CPU/MEM columns (`fix(cli): render live CPU/MEM columns in fleet ps`) |
 
 ### Key decisions
 
@@ -117,8 +118,8 @@ ID  NAME    INST  STATE   PID    CPU   MEM    UPTIME  RESTARTS
 
 **`./marshal fleet ps --server localhost:9000`:**
 ```
-AGENT  STATUS  ID  NAME    INST  STATE   PID    UPTIME  RESTARTS
-dev-1  online  1   ticker  0     online  92679  1m20s   0
+AGENT  STATUS  ID  NAME    INST  STATE   PID    CPU   MEM    UPTIME  RESTARTS
+dev-1  online  1   ticker  0     online  93226  0.1%  3.1MB  24s     0
 ```
 
 **`./marshal fleet metrics dev-1 ticker --server localhost:9000`:**

@@ -104,7 +104,7 @@ func resolveServer(flag string) string {
 // printFleet renders fleet state grouped by agent.
 func printFleet(cmd *cobra.Command, resp *pb.ListFleetResponse) {
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "AGENT\tSTATUS\tID\tNAME\tINST\tSTATE\tPID\tUPTIME\tRESTARTS")
+	fmt.Fprintln(w, "AGENT\tSTATUS\tID\tNAME\tINST\tSTATE\tPID\tCPU\tMEM\tUPTIME\tRESTARTS")
 	for _, a := range resp.GetAgents() {
 		status := "offline"
 		if a.GetConnected() {
@@ -113,17 +113,21 @@ func printFleet(cmd *cobra.Command, resp *pb.ListFleetResponse) {
 			status = fmt.Sprintf("offline %s", time.Since(time.Unix(a.GetLastSeenUnix(), 0)).Round(time.Second))
 		}
 		if len(a.GetProcs()) == 0 {
-			fmt.Fprintf(w, "%s\t%s\t-\t-\t-\t-\t-\t-\t-\n", a.GetAgentName(), status)
+			fmt.Fprintf(w, "%s\t%s\t-\t-\t-\t-\t-\t-\t-\t-\t-\n", a.GetAgentName(), status)
 			continue
 		}
 		for _, p := range a.GetProcs() {
-			uptime := "-"
+			uptime, cpu, mem := "-", "-", "-"
 			if p.GetUptimeMs() > 0 {
 				uptime = (time.Duration(p.GetUptimeMs()) * time.Millisecond).Round(time.Second).String()
 			}
-			fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%d\t%s\t%d\t%s\t%d\n",
+			if p.GetState() == "online" {
+				cpu = fmt.Sprintf("%.1f%%", p.GetCpu())
+				mem = humanizeBytes(p.GetMem())
+			}
+			fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%d\t%s\t%d\t%s\t%s\t%s\t%d\n",
 				a.GetAgentName(), status, p.GetId(), p.GetName(), p.GetInstanceId(),
-				p.GetState(), p.GetPid(), uptime, p.GetRestarts())
+				p.GetState(), p.GetPid(), cpu, mem, uptime, p.GetRestarts())
 		}
 	}
 	_ = w.Flush()

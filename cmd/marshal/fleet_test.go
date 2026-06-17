@@ -53,9 +53,46 @@ func TestPrintFleet(t *testing.T) {
 	cmd.SetOut(&buf)
 	printFleet(cmd, resp)
 	out := buf.String()
-	for _, want := range []string{"web-1", "online", "api", "web-2", "offline"} {
+	for _, want := range []string{"web-1", "online", "api", "web-2", "offline", "CPU", "MEM"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestPrintFleetCPUMem(t *testing.T) {
+	// 12.5 CPU, 3276800 bytes = 3.1MB
+	resp := &pb.ListFleetResponse{Agents: []*pb.AgentState{
+		{AgentName: "srv-1", Connected: true, Procs: []*pb.ProcInfo{
+			{Id: 2, Name: "worker", InstanceId: 0, State: "online", Pid: 42, UptimeMs: 10000, Cpu: 12.5, Mem: 3276800},
+		}},
+	}}
+	var buf bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&buf)
+	printFleet(cmd, resp)
+	out := buf.String()
+	for _, want := range []string{"12.5%", "3.1MB"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestPrintFleetOfflineCPUMem(t *testing.T) {
+	// offline proc should show "-" for cpu and mem
+	resp := &pb.ListFleetResponse{Agents: []*pb.AgentState{
+		{AgentName: "srv-2", Connected: true, Procs: []*pb.ProcInfo{
+			{Id: 3, Name: "cron", InstanceId: 0, State: "stopped", Pid: 0, Cpu: 5.0, Mem: 1048576},
+		}},
+	}}
+	var buf bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&buf)
+	printFleet(cmd, resp)
+	out := buf.String()
+	// Should not contain the actual cpu/mem values since state != "online"
+	if strings.Contains(out, "5.0%") || strings.Contains(out, "1.0MB") {
+		t.Fatalf("offline proc should not render cpu/mem values:\n%s", out)
 	}
 }
