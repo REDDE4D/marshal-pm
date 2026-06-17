@@ -2,9 +2,11 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"net"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -153,12 +155,25 @@ func (s *Server) ListFleet(_ context.Context, _ *pb.ListFleetRequest) (*pb.ListF
 }
 
 // Serve registers the Fleet service on lis and serves until ctx is canceled.
-func Serve(ctx context.Context, lis net.Listener, reg *Registry) error {
+// ss may be nil (no metric storage); when set it is closed on shutdown.
+func Serve(ctx context.Context, lis net.Listener, reg *Registry, ss *stores) error {
 	gs := grpc.NewServer()
-	pb.RegisterFleetServer(gs, NewServer(reg, nil))
+	pb.RegisterFleetServer(gs, NewServer(reg, ss))
 	go func() {
 		<-ctx.Done()
 		gs.GracefulStop()
+		if ss != nil {
+			_ = ss.closeAll()
+		}
 	}()
 	return gs.Serve(lis)
+}
+
+// ServeDir builds a registry + per-agent metric stores rooted at dataDir, then
+// serves until ctx is canceled.
+func ServeDir(ctx context.Context, lis net.Listener, dataDir string, opts ...RegOption) error {
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		return fmt.Errorf("create data dir %s: %w", dataDir, err)
+	}
+	return Serve(ctx, lis, NewRegistry(opts...), newStores(dataDir))
 }

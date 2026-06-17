@@ -47,7 +47,7 @@ func startServer(t *testing.T, reg *Registry) string {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	go func() { _ = Serve(ctx, lis, reg) }()
+	go func() { _ = Serve(ctx, lis, reg, nil) }()
 	return lis.Addr().String()
 }
 
