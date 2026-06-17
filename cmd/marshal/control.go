@@ -35,7 +35,7 @@ func withClient(fn func(context.Context, pb.DaemonClient) error) error {
 }
 
 func appToSpec(a config.App) *pb.AppSpec {
-	return &pb.AppSpec{
+	spec := &pb.AppSpec{
 		Name:        a.Name,
 		Cmd:         a.Cmd,
 		Args:        a.Args,
@@ -45,6 +45,40 @@ func appToSpec(a config.App) *pb.AppSpec {
 		Restart:     string(a.Restart),
 		MaxRestarts: int32(a.MaxRestarts),
 		KillTimeout: a.KillTimeout.Duration.String(),
+	}
+	if a.Logs != nil {
+		lr := &pb.LogRetention{}
+		if a.Logs.MaxSizeMB != nil {
+			v := int32(*a.Logs.MaxSizeMB)
+			lr.MaxSizeMb = &v
+		}
+		if a.Logs.MaxBackups != nil {
+			v := int32(*a.Logs.MaxBackups)
+			lr.MaxBackups = &v
+		}
+		if a.Logs.MaxAgeDays != nil {
+			v := int32(*a.Logs.MaxAgeDays)
+			lr.MaxAgeDays = &v
+		}
+		if a.Logs.Compress != nil {
+			v := *a.Logs.Compress
+			lr.Compress = &v
+		}
+		spec.Logs = lr
+	}
+	return spec
+}
+
+func streamFromFlags(stdoutOnly, stderrOnly bool) (pb.LogStream, error) {
+	switch {
+	case stdoutOnly && stderrOnly:
+		return pb.LogStream_LOG_STREAM_UNSPECIFIED, fmt.Errorf("--stdout and --stderr are mutually exclusive")
+	case stdoutOnly:
+		return pb.LogStream_LOG_STREAM_STDOUT, nil
+	case stderrOnly:
+		return pb.LogStream_LOG_STREAM_STDERR, nil
+	default:
+		return pb.LogStream_LOG_STREAM_UNSPECIFIED, nil
 	}
 }
 
@@ -237,11 +271,16 @@ func printProcs(cmd *cobra.Command, list *pb.ProcList) {
 func logsCmd() *cobra.Command {
 	var lines int
 	var follow bool
+	var stdoutOnly, stderrOnly bool
 	cmd := &cobra.Command{
 		Use:   "logs <name|id|all>",
 		Short: "Stream captured stdout/stderr for app(s)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			streamSel, errFlag := streamFromFlags(stdoutOnly, stderrOnly)
+			if errFlag != nil {
+				return errFlag
+			}
 			st, err := store.New()
 			if err != nil {
 				return err
@@ -261,7 +300,7 @@ func logsCmd() *cobra.Command {
 				defer c2()
 			}
 
-			stream, err := c.Logs(ctx, &pb.LogRequest{Target: args[0], Lines: int32(lines), Follow: follow})
+			stream, err := c.Logs(ctx, &pb.LogRequest{Target: args[0], Lines: int32(lines), Follow: follow, Stream: streamSel})
 			if err != nil {
 				return err
 			}
@@ -282,6 +321,8 @@ func logsCmd() *cobra.Command {
 	}
 	cmd.Flags().IntVarP(&lines, "lines", "n", 15, "number of backfilled lines to show")
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "stream new lines as they arrive")
+	cmd.Flags().BoolVar(&stdoutOnly, "stdout", false, "show only stdout")
+	cmd.Flags().BoolVar(&stderrOnly, "stderr", false, "show only stderr")
 	return cmd
 }
 
