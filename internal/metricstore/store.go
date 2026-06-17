@@ -46,13 +46,17 @@ CREATE INDEX IF NOT EXISTS idx_samples_label_ts ON samples(label, ts);`
 
 // Open opens (creating if needed) the database at path.
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)")
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("open metrics db: %w", err)
 	}
 	// Single daemon process touches this DB from two goroutines (sampler append +
 	// query handler); serialize to sidestep SQLite locking entirely. Volume is tiny.
 	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`PRAGMA busy_timeout=5000`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("set busy_timeout: %w", err)
+	}
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
@@ -108,7 +112,7 @@ func (s *Store) Query(req QueryReq) ([]Bucket, error) {
 		if err := rows.Scan(&b.TsMs, &b.CpuAvg, &b.CpuMax, &memAvg, &memMax); err != nil {
 			return nil, err
 		}
-		b.MemAvg = uint64(memAvg)
+		b.MemAvg = uint64(memAvg + 0.5) // round, not truncate
 		b.MemMax = uint64(memMax)
 		out = append(out, b)
 	}

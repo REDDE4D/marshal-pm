@@ -38,8 +38,12 @@ func TestAppendQueryRoundTrip(t *testing.T) {
 func TestBucketAggregation(t *testing.T) {
 	st := openTemp(t)
 	// Two samples in the same 1000ms bucket [2000,3000): cpu 10 & 30, mem 100 & 300.
-	_ = st.Append(2000, []Sample{{Label: "a#0", Cpu: 10, Mem: 100}})
-	_ = st.Append(2500, []Sample{{Label: "a#0", Cpu: 30, Mem: 300}})
+	if err := st.Append(2000, []Sample{{Label: "a#0", Cpu: 10, Mem: 100}}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if err := st.Append(2500, []Sample{{Label: "a#0", Cpu: 30, Mem: 300}}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
 	got, err := st.Query(QueryReq{Label: "a#0", SinceMs: 0, BucketMs: 1000})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
@@ -55,8 +59,12 @@ func TestBucketAggregation(t *testing.T) {
 
 func TestQueryRespectsSinceAndLabel(t *testing.T) {
 	st := openTemp(t)
-	_ = st.Append(1000, []Sample{{Label: "a#0", Cpu: 1, Mem: 1}, {Label: "b#0", Cpu: 9, Mem: 9}})
-	_ = st.Append(5000, []Sample{{Label: "a#0", Cpu: 2, Mem: 2}})
+	if err := st.Append(1000, []Sample{{Label: "a#0", Cpu: 1, Mem: 1}, {Label: "b#0", Cpu: 9, Mem: 9}}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if err := st.Append(5000, []Sample{{Label: "a#0", Cpu: 2, Mem: 2}}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
 	got, err := st.Query(QueryReq{Label: "a#0", SinceMs: 3000, BucketMs: 1000})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
