@@ -229,6 +229,18 @@ func TestFleetLogsHistoryUnknownAgent(t *testing.T) {
 	}
 }
 
+// FleetControl against an agent with no live session is Unavailable.
+func TestFleetControlNotConnected(t *testing.T) {
+	srv := NewServer(NewRegistry(), nil, nil)
+	_, err := srv.FleetControl(context.Background(), &pb.FleetControlRequest{
+		AgentName: "ghost",
+		Op:        &pb.ControlOp{Op: &pb.ControlOp_Restart{Restart: &pb.Selector{Target: "api"}}},
+	})
+	if status.Code(err) != codes.Unavailable {
+		t.Fatalf("FleetControl on absent agent err = %v, want Unavailable", err)
+	}
+}
+
 func TestConnectStoresLogBatchAndAcksWatermark(t *testing.T) {
 	dir := t.TempDir()
 	ls := newLogStores(dir)
