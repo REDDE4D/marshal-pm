@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"net"
 	"os"
 	"testing"
@@ -173,5 +174,103 @@ func TestDaemonKillStopsDaemon(t *testing.T) {
 		// daemon serve loop returned — success
 	case <-time.After(3 * time.Second):
 		t.Fatal("daemon did not exit within 3s after Kill")
+	}
+}
+
+// startDaemon runs an in-process daemon with a short metrics interval under a
+// short /tmp base (socket path limit) and returns a connected client.
+func startDaemon(t *testing.T) pb.DaemonClient {
+	t.Helper()
+	base, err := os.MkdirTemp("/tmp", "marshal-m3")
+	if err != nil {
+		t.Fatalf("mkdir temp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(base) })
+	t.Setenv("XDG_DATA_HOME", base)
+
+	st, err := store.New()
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = daemon.Run(ctx, st, daemon.WithSampleInterval(150*time.Millisecond))
+	}()
+	t.Cleanup(func() { cancel(); <-done })
+
+	c, conn := dialReady(t, st)
+	t.Cleanup(func() { _ = conn.Close() })
+	return c
+}
+
+func TestDaemonLogsE2E(t *testing.T) {
+	c := startDaemon(t)
+	rpc(t, "Start", func(ctx context.Context) (*pb.ProcList, error) {
+		return c.Start(ctx, &pb.StartRequest{Apps: []*pb.AppSpec{
+			{Name: "noisy", Cmd: "sh", Args: []string{"-c", "echo line-one; echo line-two; sleep 30"}, Instances: 1},
+		}})
+	})
+	waitState(t, c, "noisy", "online", 1)
+
+	// Poll Logs (no follow) until both backfilled lines are present.
+	deadline := time.Now().Add(3 * time.Second)
+	var texts []string
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		stream, err := c.Logs(ctx, &pb.LogRequest{Target: "noisy", Lines: 10, Follow: false})
+		if err != nil {
+			cancel()
+			t.Fatalf("Logs: %v", err)
+		}
+		texts = texts[:0]
+		for {
+			ln, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				break
+			}
+			texts = append(texts, ln.GetLine())
+		}
+		cancel()
+		if len(texts) >= 2 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if len(texts) < 2 || texts[0] != "line-one" || texts[1] != "line-two" {
+		t.Fatalf("logs = %v, want [line-one line-two]", texts)
+	}
+}
+
+func TestDaemonMetricsE2E(t *testing.T) {
+	c := startDaemon(t)
+	rpc(t, "Start", func(ctx context.Context) (*pb.ProcList, error) {
+		return c.Start(ctx, &pb.StartRequest{Apps: []*pb.AppSpec{
+			{Name: "svc", Cmd: "sh", Args: []string{"-c", "sleep 30"}, Instances: 1},
+		}})
+	})
+	waitState(t, c, "svc", "online", 1)
+
+	// Within a few sample intervals, MEM should be populated.
+	deadline := time.Now().Add(3 * time.Second)
+	var mem int64
+	for time.Now().Before(deadline) {
+		list := rpc(t, "List", func(ctx context.Context) (*pb.ProcList, error) {
+			return c.List(ctx, &pb.Empty{})
+		})
+		if len(list.GetProcs()) == 1 {
+			mem = list.GetProcs()[0].GetMem()
+			if mem > 0 {
+				break
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if mem == 0 {
+		t.Fatalf("metrics MEM never populated")
 	}
 }
