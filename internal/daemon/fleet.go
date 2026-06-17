@@ -8,15 +8,6 @@ import (
 	"marshal/internal/pb"
 )
 
-// procInfos adapts manager snapshots to wire ProcInfo with zero cpu/mem.
-func procInfos(snaps []manager.InstanceSnapshot) []*pb.ProcInfo {
-	out := make([]*pb.ProcInfo, 0, len(snaps))
-	for _, s := range snaps {
-		out = append(out, snapshotToProc(s, 0, 0))
-	}
-	return out
-}
-
 // fleetSnapshot returns a SnapshotFunc over the manager's current instances,
 // merging the sampler's latest cpu/mem (zero until the first sample tick).
 func fleetSnapshot(m *manager.Manager, smp *metrics.Sampler) fleet.SnapshotFunc {
