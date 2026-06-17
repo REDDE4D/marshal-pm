@@ -5,6 +5,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 	"time"
@@ -21,6 +22,20 @@ type InstanceSnapshot struct {
 	InstanceID int    // 0..instances-1
 	Label      string // "name#idx"
 	supervisor.Snapshot
+}
+
+// LogProvider supplies per-instance output writers and disposes of them.
+type LogProvider interface {
+	WriterPair(label string) (stdout, stderr io.Writer)
+	Remove(label string)
+}
+
+// Option configures a Manager.
+type Option func(*Manager)
+
+// WithLogs wires per-instance stdout/stderr capture.
+func WithLogs(lp LogProvider) Option {
+	return func(m *Manager) { m.logs = lp }
 }
 
 // managedInstance is one running (or stopped) instance and its lifecycle handles.
@@ -51,12 +66,17 @@ type Manager struct {
 	mu     sync.Mutex
 	apps   []*managedApp
 	nextID int
+	logs   LogProvider
 }
 
 // New builds an empty manager rooted at ctx. Instances spawned by Add run until
 // ctx is canceled, the manager is StopAll'd, or they are individually stopped.
-func New(ctx context.Context) *Manager {
-	return &Manager{ctx: ctx}
+func New(ctx context.Context, opts ...Option) *Manager {
+	m := &Manager{ctx: ctx}
+	for _, o := range opts {
+		o(m)
+	}
+	return m
 }
 
 func policyFor(app config.App) supervisor.Policy {
@@ -72,7 +92,11 @@ func policyFor(app config.App) supervisor.Policy {
 
 // startInstance launches one instance goroutine. Caller holds m.mu.
 func (m *Manager) startInstance(app config.App, idx int) *managedInstance {
+	label := fmt.Sprintf("%s#%d", app.Name, idx)
 	spec := proc.Spec{Cmd: app.Cmd, Args: app.Args, Cwd: app.Cwd, Env: app.Env, InstanceID: idx}
+	if m.logs != nil {
+		spec.Stdout, spec.Stderr = m.logs.WriterPair(label)
+	}
 	inst := supervisor.NewInstance(spec, policyFor(app))
 	ictx, cancel := context.WithCancel(m.ctx)
 	done := make(chan struct{})
@@ -82,7 +106,7 @@ func (m *Manager) startInstance(app config.App, idx int) *managedInstance {
 	}()
 	return &managedInstance{
 		instanceID: idx,
-		label:      fmt.Sprintf("%s#%d", app.Name, idx),
+		label:      label,
 		inst:       inst,
 		cancel:     cancel,
 		done:       done,
@@ -180,6 +204,11 @@ func (m *Manager) Delete(sel string) ([]InstanceSnapshot, error) {
 	m.mu.Unlock()
 
 	stopInstances(insts)
+	if m.logs != nil {
+		for _, s := range removed {
+			m.logs.Remove(s.Label)
+		}
+	}
 	return removed, nil
 }
 

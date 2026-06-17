@@ -1,7 +1,11 @@
 package manager
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -209,4 +213,85 @@ func TestSpecsReflectsAddedApps(t *testing.T) {
 		t.Fatalf("Specs = %+v", specs)
 	}
 	m.StopAll()
+}
+
+type fakeLogs struct {
+	mu      sync.Mutex
+	writers map[string]*safeBuf
+	removed []string
+}
+
+func newFakeLogs() *fakeLogs { return &fakeLogs{writers: map[string]*safeBuf{}} }
+
+func (f *fakeLogs) WriterPair(label string) (io.Writer, io.Writer) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	b := &safeBuf{}
+	f.writers[label] = b
+	return b, b
+}
+
+func (f *fakeLogs) Remove(label string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.removed = append(f.removed, label)
+}
+
+func (f *fakeLogs) bufFor(label string) *safeBuf {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.writers[label]
+}
+
+func (f *fakeLogs) removedLabels() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.removed...)
+}
+
+type safeBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *safeBuf) Write(p []byte) (int, error) { s.mu.Lock(); defer s.mu.Unlock(); return s.b.Write(p) }
+func (s *safeBuf) String() string              { s.mu.Lock(); defer s.mu.Unlock(); return s.b.String() }
+
+func echoApp(name string) config.App {
+	return config.App{
+		Name: name, Cmd: "sh", Args: []string{"-c", "echo captured; sleep 30"},
+		Instances: 1, Restart: config.RestartAlways, MaxRestarts: 3,
+		KillTimeout: config.Duration{Duration: time.Second},
+	}
+}
+
+func TestWithLogsCapturesOutputAndRemovesOnDelete(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fl := newFakeLogs()
+	m := New(ctx, WithLogs(fl))
+
+	if _, err := m.Add(echoApp("a")); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	waitOnline(m, 1)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if b := fl.bufFor("a#0"); b != nil && strings.Contains(b.String(), "captured") {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if b := fl.bufFor("a#0"); b == nil || !strings.Contains(b.String(), "captured") {
+		t.Fatalf("a#0 output not captured: %v", b)
+	}
+
+	if _, err := m.Delete("a"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	got := fl.removedLabels()
+	if len(got) != 1 || got[0] != "a#0" {
+		t.Fatalf("removed = %v, want [a#0]", got)
+	}
 }

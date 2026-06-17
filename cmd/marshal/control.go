@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -170,17 +174,95 @@ func killCmd() *cobra.Command {
 	}
 }
 
+func humanizeBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%dB", b)
+	}
+	suffixes := []string{"KB", "MB", "GB", "TB"}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit && exp < len(suffixes)-1; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f%s", float64(b)/float64(div), suffixes[exp])
+}
+
 // printProcs renders a ProcList as an aligned table.
 func printProcs(cmd *cobra.Command, list *pb.ProcList) {
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tNAME\tINST\tSTATE\tPID\tUPTIME\tRESTARTS")
+	fmt.Fprintln(w, "ID\tNAME\tINST\tSTATE\tPID\tCPU\tMEM\tUPTIME\tRESTARTS")
 	for _, p := range list.GetProcs() {
-		uptime := "-"
+		uptime, cpu, mem := "-", "-", "-"
 		if p.GetUptimeMs() > 0 {
 			uptime = (time.Duration(p.GetUptimeMs()) * time.Millisecond).Round(time.Second).String()
 		}
-		fmt.Fprintf(w, "%d\t%s\t%d\t%s\t%d\t%s\t%d\n",
-			p.GetId(), p.GetName(), p.GetInstanceId(), p.GetState(), p.GetPid(), uptime, p.GetRestarts())
+		if p.GetState() == "online" {
+			cpu = fmt.Sprintf("%.1f%%", p.GetCpu())
+			mem = humanizeBytes(p.GetMem())
+		}
+		fmt.Fprintf(w, "%d\t%s\t%d\t%s\t%d\t%s\t%s\t%s\t%d\n",
+			p.GetId(), p.GetName(), p.GetInstanceId(), p.GetState(), p.GetPid(), cpu, mem, uptime, p.GetRestarts())
 	}
 	_ = w.Flush()
+}
+
+func logsCmd() *cobra.Command {
+	var lines int
+	var follow bool
+	cmd := &cobra.Command{
+		Use:   "logs <name|id|all>",
+		Short: "Stream captured stdout/stderr for app(s)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			st, err := store.New()
+			if err != nil {
+				return err
+			}
+			c, conn, err := client.Connect(st)
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			// Follow streams until Ctrl-C; one-shot backfill gets a 30s cap.
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer cancel()
+			if !follow {
+				var c2 context.CancelFunc
+				ctx, c2 = context.WithTimeout(ctx, 30*time.Second)
+				defer c2()
+			}
+
+			stream, err := c.Logs(ctx, &pb.LogRequest{Target: args[0], Lines: int32(lines), Follow: follow})
+			if err != nil {
+				return err
+			}
+			for {
+				ln, err := stream.Recv()
+				if err == io.EOF {
+					return nil
+				}
+				if err != nil {
+					if ctx.Err() != nil {
+						return nil // expected on Ctrl-C
+					}
+					return err
+				}
+				printLogLine(cmd, ln)
+			}
+		},
+	}
+	cmd.Flags().IntVarP(&lines, "lines", "n", 15, "number of backfilled lines to show")
+	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "stream new lines as they arrive")
+	return cmd
+}
+
+// printLogLine writes a tagged log line: stdout lines to stdout, stderr to stderr.
+func printLogLine(cmd *cobra.Command, ln *pb.LogLine) {
+	w := cmd.OutOrStdout()
+	if ln.GetStderr() {
+		w = cmd.ErrOrStderr()
+	}
+	fmt.Fprintf(w, "%s#%d | %s\n", ln.GetName(), ln.GetInstanceId(), ln.GetLine())
 }

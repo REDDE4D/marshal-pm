@@ -8,10 +8,14 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 
+	"marshal/internal/logs"
 	"marshal/internal/manager"
+	"marshal/internal/metrics"
 	"marshal/internal/pb"
 	"marshal/internal/store"
+	"marshal/internal/supervisor"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -21,9 +25,11 @@ import (
 // Server implements pb.DaemonServer backed by a dynamic manager.
 type Server struct {
 	pb.UnimplementedDaemonServer
-	mgr   *manager.Manager
-	store *store.Store
-	kill  func() // triggers daemon shutdown (set by Run)
+	mgr     *manager.Manager
+	store   *store.Store
+	logs    *logs.Registry
+	metrics *metrics.Sampler
+	kill    func() // triggers daemon shutdown (set by Run)
 }
 
 // Start admits and launches one or more apps.
@@ -40,7 +46,7 @@ func (s *Server) Start(_ context.Context, req *pb.StartRequest) (*pb.ProcList, e
 		}
 		out = append(out, snaps...)
 	}
-	return toProcList(out), nil
+	return s.procList(out), nil
 }
 
 func (s *Server) Stop(_ context.Context, sel *pb.Selector) (*pb.ProcList, error) {
@@ -65,11 +71,11 @@ func (s *Server) mutate(op func(string) ([]manager.InstanceSnapshot, error), sel
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "%v", err)
 	}
-	return toProcList(snaps), nil
+	return s.procList(snaps), nil
 }
 
 func (s *Server) List(_ context.Context, _ *pb.Empty) (*pb.ProcList, error) {
-	return toProcList(s.mgr.List()), nil
+	return s.procList(s.mgr.List()), nil
 }
 
 func (s *Server) Save(_ context.Context, _ *pb.Empty) (*pb.Ack, error) {
@@ -98,7 +104,7 @@ func (s *Server) Resurrect(_ context.Context, _ *pb.Empty) (*pb.ProcList, error)
 		}
 		out = append(out, snaps...)
 	}
-	return toProcList(out), nil
+	return s.procList(out), nil
 }
 
 func (s *Server) Kill(_ context.Context, _ *pb.Empty) (*pb.Ack, error) {
@@ -108,13 +114,48 @@ func (s *Server) Kill(_ context.Context, _ *pb.Empty) (*pb.Ack, error) {
 	return &pb.Ack{Ok: true, Message: "stopping"}, nil
 }
 
+type runOptions struct{ sampleInterval time.Duration }
+
+// Option configures Run.
+type Option func(*runOptions)
+
+// WithSampleInterval overrides the 5s metrics tick (used by tests).
+func WithSampleInterval(d time.Duration) Option {
+	return func(o *runOptions) { o.sampleInterval = d }
+}
+
+// metricsSnapshot adapts the manager's instance list to the sampler's view.
+func metricsSnapshot(m *manager.Manager) func() []metrics.Instance {
+	return func() []metrics.Instance {
+		snaps := m.List()
+		out := make([]metrics.Instance, 0, len(snaps))
+		for _, s := range snaps {
+			out = append(out, metrics.Instance{
+				Label:  s.Label,
+				Pid:    s.Pid,
+				Online: s.State == supervisor.StateOnline,
+			})
+		}
+		return out
+	}
+}
+
 // Run starts the daemon: resolves the socket, auto-resurrects, serves until ctx
 // is canceled or Kill is called, then gracefully stops everything.
-func Run(ctx context.Context, st *store.Store) error {
+func Run(ctx context.Context, st *store.Store, opts ...Option) error {
+	cfg := runOptions{sampleInterval: 5 * time.Second}
+	for _, o := range opts {
+		o(&cfg)
+	}
 	if err := st.EnsureDir(); err != nil {
 		return err
 	}
-	mgr := manager.New(ctx)
+	if err := st.EnsureLogsDir(); err != nil {
+		return err
+	}
+	reg := logs.NewRegistry(st.LogsDir())
+	mgr := manager.New(ctx, manager.WithLogs(reg))
+	sampler := metrics.NewSampler(cfg.sampleInterval)
 	if apps, err := st.Load(); err == nil {
 		for _, app := range apps {
 			_, _ = mgr.Add(app)
@@ -133,7 +174,7 @@ func Run(ctx context.Context, st *store.Store) error {
 	}
 
 	gs := grpc.NewServer()
-	srv := &Server{mgr: mgr, store: st}
+	srv := &Server{mgr: mgr, store: st, logs: reg, metrics: sampler}
 	var once sync.Once
 	stopped := make(chan struct{})
 	srv.kill = func() { once.Do(func() { close(stopped) }) }
@@ -141,6 +182,7 @@ func Run(ctx context.Context, st *store.Store) error {
 
 	serveCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	go sampler.Run(serveCtx, metricsSnapshot(mgr))
 	go func() {
 		select {
 		case <-serveCtx.Done():

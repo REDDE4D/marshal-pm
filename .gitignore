@@ -2,6 +2,10 @@
 *.exe
 bin/
 dist/
+marshal
+# Locally-built protoc plugins (pinned via the go.mod tool directive instead)
+/protoc-gen-go
+/protoc-gen-go-grpc
 
 # Data dirs
 data/

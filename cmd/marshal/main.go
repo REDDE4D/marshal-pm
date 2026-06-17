@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/status"
 
 	"marshal/internal/config"
 	"marshal/internal/manager"
@@ -19,9 +20,18 @@ import (
 
 func main() {
 	if err := rootCmd().Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		fmt.Fprintln(os.Stderr, "error:", cliError(err))
 		os.Exit(1)
 	}
+}
+
+// cliError strips the gRPC status wrapper so users see just the message
+// (e.g. `no app matching "x"` rather than `rpc error: code = NotFound ...`).
+func cliError(err error) string {
+	if st, ok := status.FromError(err); ok {
+		return st.Message()
+	}
+	return err.Error()
 }
 
 func rootCmd() *cobra.Command {
@@ -48,6 +58,7 @@ func rootCmd() *cobra.Command {
 			}),
 		listCmd(),
 		describeCmd(),
+		logsCmd(),
 		saveCmd(),
 		resurrectCmd(),
 		killCmd(),

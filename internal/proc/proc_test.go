@@ -1,7 +1,10 @@
 package proc
 
 import (
+	"bytes"
 	"os"
+	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -73,3 +76,35 @@ func TestSignalStopsProcess(t *testing.T) {
 		t.Fatal("process did not exit after SIGTERM")
 	}
 }
+
+func TestStartWritesToProvidedWriters(t *testing.T) {
+	var out, errb safeBuf
+	p, err := Start(Spec{
+		Cmd:    "sh",
+		Args:   []string{"-c", "echo to-out; echo to-err 1>&2"},
+		Stdout: &out,
+		Stderr: &errb,
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if err := p.Wait(); err != nil {
+		t.Fatalf("Wait: %v", err)
+	}
+	if !strings.Contains(out.String(), "to-out") {
+		t.Errorf("stdout = %q, want to contain to-out", out.String())
+	}
+	if !strings.Contains(errb.String(), "to-err") {
+		t.Errorf("stderr = %q, want to contain to-err", errb.String())
+	}
+}
+
+// safeBuf is a mutex-guarded buffer: os/exec copies child output on a goroutine,
+// so the test must not race the copier (it reads only after Wait, but -race is strict).
+type safeBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *safeBuf) Write(p []byte) (int, error) { s.mu.Lock(); defer s.mu.Unlock(); return s.b.Write(p) }
+func (s *safeBuf) String() string              { s.mu.Lock(); defer s.mu.Unlock(); return s.b.String() }

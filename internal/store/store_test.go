@@ -65,3 +65,22 @@ func TestEnsureDirIsPrivate(t *testing.T) {
 		t.Fatalf("dir perm = %o, want 700", perm)
 	}
 }
+
+func TestLogsDirCreatedPrivate(t *testing.T) {
+	base := t.TempDir()
+	s := NewAt(base)
+	want := filepath.Join(base, "logs")
+	if s.LogsDir() != want {
+		t.Fatalf("LogsDir = %q, want %q", s.LogsDir(), want)
+	}
+	if err := s.EnsureLogsDir(); err != nil {
+		t.Fatalf("EnsureLogsDir: %v", err)
+	}
+	info, err := os.Stat(want)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("logs dir perm = %o, want 700", info.Mode().Perm())
+	}
+}

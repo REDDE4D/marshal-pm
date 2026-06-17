@@ -40,6 +40,12 @@ func (s *Store) SocketPath() string { return filepath.Join(s.base, "marshald.soc
 // LogPath is where an auto-spawned daemon writes stdout/stderr.
 func (s *Store) LogPath() string { return filepath.Join(s.base, "marshald.log") }
 
+// LogsDir is the directory holding per-instance rotated log files.
+func (s *Store) LogsDir() string { return filepath.Join(s.base, "logs") }
+
+// EnsureLogsDir creates the logs directory (0700) if it does not exist.
+func (s *Store) EnsureLogsDir() error { return os.MkdirAll(s.LogsDir(), 0o700) }
+
 func (s *Store) dumpPath() string { return filepath.Join(s.base, "dump.json") }
 
 // EnsureDir creates the state directory if it does not exist.
