@@ -61,6 +61,8 @@ func rootCmd() *cobra.Command {
 		logsCmd(),
 		saveCmd(),
 		resurrectCmd(),
+		startupCmd(),
+		unstartupCmd(),
 		killCmd(),
 	)
 	return root
