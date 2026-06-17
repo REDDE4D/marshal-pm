@@ -24,7 +24,7 @@ existing stream → agent executes → streams result and new state back up").
 | Command set | **stop / restart / delete / start** (start = deploy a brand-new app from an `AppSpec` shipped down) |
 | Result model | **Synchronous** — the CLI's unary RPC blocks until the agent reports the result, correlated by request id |
 | Transport | **Multiplex on the existing `Fleet.Connect` stream** (no second stream) |
-| Persistence | **Auto-save on the agent** after any mutation (start/stop/delete) so remote changes survive a daemon restart / reboot |
+| Persistence | **Auto-save on the agent** after start/delete (the ops that change the persisted spec set) so remote deploys survive a daemon restart / reboot; stop/restart leave the spec set unchanged |
 | Auth | **Deferred to M10** — server remains unauthenticated this milestone |
 
 ## 3. Approach
@@ -130,8 +130,9 @@ Execution **reuses the daemon's existing logic** rather than reimplementing it. 
 of the `Daemon` gRPC handlers are extracted into `doStart/doStop/doRestart/doDelete` on
 `daemon.Server`, and a new `handleFleetCommand(*pb.Command) *pb.ControlResult` dispatches
 to them. Per the persistence decision `handleFleetCommand` calls `store.Save` after a
-successful mutation. The daemon wires `fleet.WithCommands(srv.handleFleetCommand)` next to
-the existing `WithMetrics`/`WithLogs`.
+successful **start** or **delete** (the ops that change `mgr.Specs()`); stop/restart leave
+the spec set unchanged so they need no save. The daemon wires
+`fleet.WithCommands(srv.handleFleetCommand)` next to the existing `WithMetrics`/`WithLogs`.
 
 Selector (`name` / `id` / `all`) is resolved **on the agent** by the existing manager, so
 M8b's "no server-side id resolution" caveat does not apply to commands.
