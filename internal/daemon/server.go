@@ -63,10 +63,10 @@ func (s *Server) doStart(specs []*pb.AppSpec) ([]manager.InstanceSnapshot, error
 func (s *Server) Start(_ context.Context, req *pb.StartRequest) (*pb.ProcList, error) {
 	snaps, err := s.doStart(req.GetApps())
 	if err != nil {
-		// Preserve original gRPC status codes: config errors → InvalidArgument, duplicates → AlreadyExists.
-		// We check via string matching is impractical; use type to distinguish: appSpecToConfig returns
-		// plain errors (config validation), mgr.Add returns "already exists"-style errors.
-		// Use the existing approach: try to detect by wrapping context.
+		// doStart returns plain errors so the fleet command path gets clean
+		// error strings; map them back to the gRPC codes the Daemon.Start RPC
+		// has always returned: mgr.Add duplicates → AlreadyExists, config
+		// validation errors → InvalidArgument.
 		if isAlreadyExists(err) {
 			return nil, status.Errorf(codes.AlreadyExists, "%v", err)
 		}

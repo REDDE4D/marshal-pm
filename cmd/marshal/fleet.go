@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -211,7 +212,7 @@ func fleetControl(cmd *cobra.Command, serverAddr string, timeout time.Duration, 
 	}
 	res := resp.GetResult()
 	if !res.GetOk() {
-		return fmt.Errorf("%s", res.GetError())
+		return errors.New(res.GetError())
 	}
 	printProcs(cmd, &pb.ProcList{Procs: res.GetProcs()})
 	return nil
@@ -221,15 +222,16 @@ func fleetSelectorCmd(use, short string, build func(target string) *pb.ControlOp
 	var serverAddr string
 	var timeout time.Duration
 	cmd := &cobra.Command{
-		Use:   use + " <agent> <name|id|all>",
-		Short: short,
-		Args:  cobra.ExactArgs(2),
+		Use:          use + " <agent> <name|id|all>",
+		Short:        short,
+		Args:         cobra.ExactArgs(2),
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return fleetControl(cmd, serverAddr, timeout, args[0], build(args[1]))
 		},
 	}
 	cmd.Flags().StringVar(&serverAddr, "server", "", "central server address (default $MARSHAL_SERVER or localhost:9000)")
-	cmd.Flags().DurationVar(&timeout, "timeout", 10*time.Second, "command timeout")
+	cmd.Flags().DurationVar(&timeout, "timeout", 10*time.Second, "command timeout (a timeout does not guarantee the command did not run on the agent)")
 	return cmd
 }
 
@@ -237,9 +239,10 @@ func fleetStartCmd() *cobra.Command {
 	var serverAddr string
 	var timeout time.Duration
 	cmd := &cobra.Command{
-		Use:   "start <agent> <marshal.yaml>",
-		Short: "Deploy and start app(s) from a marshal.yaml on one agent",
-		Args:  cobra.ExactArgs(2),
+		Use:          "start <agent> <marshal.yaml>",
+		Short:        "Deploy and start app(s) from a marshal.yaml on one agent",
+		Args:         cobra.ExactArgs(2),
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load(args[1])
 			if err != nil {
@@ -254,6 +257,6 @@ func fleetStartCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&serverAddr, "server", "", "central server address (default $MARSHAL_SERVER or localhost:9000)")
-	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "command timeout")
+	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "command timeout (a timeout does not guarantee the command did not run on the agent)")
 	return cmd
 }
