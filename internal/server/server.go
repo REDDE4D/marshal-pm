@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"marshal/internal/logstore"
 	"marshal/internal/metricstore"
 	"marshal/internal/pb"
 
@@ -25,10 +26,13 @@ type Server struct {
 	pb.UnimplementedFleetServer
 	reg    *Registry
 	stores *stores
+	logs   *logStores
 }
 
-// NewServer wires a Fleet server to a registry and (optional) metric stores.
-func NewServer(reg *Registry, ss *stores) *Server { return &Server{reg: reg, stores: ss} }
+// NewServer wires a Fleet server to a registry and (optional) metric/log stores.
+func NewServer(reg *Registry, ss *stores, ls *logStores) *Server {
+	return &Server{reg: reg, stores: ss, logs: ls}
+}
 
 // Connect terminates one agent's upstream: reads Hello (acking the stored metric
 // high-water-mark), StateSnapshot (live state), and MetricBatch (persisted).
@@ -52,14 +56,19 @@ func (s *Server) Connect(stream pb.Fleet_ConnectServer) error {
 				return status.Error(codes.InvalidArgument, "agent_name must not be empty")
 			}
 			s.reg.Open(name)
-			var watermark int64
+			var watermark, logWM int64
 			if s.stores != nil {
 				if st, err := s.stores.get(name); err == nil {
 					watermark, _ = st.MaxTs()
 				}
 			}
+			if s.logs != nil {
+				if st, err := s.logs.get(name); err == nil {
+					logWM, _ = st.MaxTs()
+				}
+			}
 			_ = stream.Send(&pb.ServerMessage{Msg: &pb.ServerMessage_HelloAck{
-				HelloAck: &pb.HelloAck{LastMetricTsMs: watermark},
+				HelloAck: &pb.HelloAck{LastMetricTsMs: watermark, LastLogTsMs: logWM},
 			}})
 		case *pb.AgentMessage_Snapshot:
 			if name != "" {
@@ -68,6 +77,10 @@ func (s *Server) Connect(stream pb.Fleet_ConnectServer) error {
 		case *pb.AgentMessage_Metrics:
 			if name != "" && s.stores != nil {
 				s.storeBatch(name, m.Metrics.GetSamples())
+			}
+		case *pb.AgentMessage_Logs:
+			if name != "" && s.logs != nil {
+				s.storeLogBatch(name, m.Logs.GetLines())
 			}
 		}
 	}
@@ -98,6 +111,26 @@ func (s *Server) storeBatch(agent string, samples []*pb.MetricSample) {
 			log.Printf("fleet: append for %s: %v", agent, err)
 			return
 		}
+	}
+}
+
+// storeLogBatch appends a flattened log batch oldest-first, so the store's
+// max(ts) always reflects a fully-committed prefix.
+func (s *Server) storeLogBatch(agent string, lines []*pb.LogShipLine) {
+	st, err := s.logs.get(agent)
+	if err != nil {
+		log.Printf("fleet: open log store for %s: %v", agent, err)
+		return
+	}
+	rows := make([]logstore.Line, 0, len(lines))
+	for _, l := range lines {
+		rows = append(rows, logstore.Line{
+			TsMs: l.GetTsMs(), Label: l.GetLabel(), Stderr: l.GetStderr(), Text: l.GetText(),
+		})
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].TsMs < rows[j].TsMs })
+	if err := st.Append(rows); err != nil {
+		log.Printf("fleet: append logs for %s: %v", agent, err)
 	}
 }
 
@@ -155,15 +188,18 @@ func (s *Server) ListFleet(_ context.Context, _ *pb.ListFleetRequest) (*pb.ListF
 }
 
 // Serve registers the Fleet service on lis and serves until ctx is canceled.
-// ss may be nil (no metric storage); when set it is closed on shutdown.
-func Serve(ctx context.Context, lis net.Listener, reg *Registry, ss *stores) error {
+// ss/ls may be nil (no storage); when set they are closed on shutdown.
+func Serve(ctx context.Context, lis net.Listener, reg *Registry, ss *stores, ls *logStores) error {
 	gs := grpc.NewServer()
-	pb.RegisterFleetServer(gs, NewServer(reg, ss))
+	pb.RegisterFleetServer(gs, NewServer(reg, ss, ls))
 	go func() {
 		<-ctx.Done()
 		gs.GracefulStop()
 		if ss != nil {
 			_ = ss.closeAll()
+		}
+		if ls != nil {
+			_ = ls.closeAll()
 		}
 	}()
 	return gs.Serve(lis)
@@ -176,6 +212,7 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir string, opts ...Reg
 		return fmt.Errorf("create data dir %s: %w", dataDir, err)
 	}
 	ss := newStores(dataDir)
+	ls := newLogStores(dataDir)
 	go func() {
 		t := time.NewTicker(10 * time.Minute)
 		defer t.Stop()
@@ -185,9 +222,11 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir string, opts ...Reg
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				ss.pruneAll(time.Now().UnixMilli() - retentionMs)
+				cutoff := time.Now().UnixMilli() - retentionMs
+				ss.pruneAll(cutoff)
+				ls.pruneAll(cutoff)
 			}
 		}
 	}()
-	return Serve(ctx, lis, NewRegistry(opts...), ss)
+	return Serve(ctx, lis, NewRegistry(opts...), ss, ls)
 }

@@ -37,7 +37,7 @@ func TestClientHelloAndPeriodicPush(t *testing.T) {
 	}
 	sctx, scancel := context.WithCancel(context.Background())
 	defer scancel()
-	go func() { _ = server.Serve(sctx, lis, reg, nil) }()
+	go func() { _ = server.Serve(sctx, lis, reg, nil, nil) }()
 
 	c := fleet.New(lis.Addr().String(), "web-1", "test", snap,
 		fleet.WithInterval(20*time.Millisecond), fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond))
@@ -75,7 +75,7 @@ func TestClientReconnectsWhenServerStartsLate(t *testing.T) {
 	reg := server.NewRegistry(server.WithOfflineAfter(time.Hour))
 	sctx, scancel := context.WithCancel(context.Background())
 	defer scancel()
-	go func() { _ = server.Serve(sctx, lis, reg, nil) }()
+	go func() { _ = server.Serve(sctx, lis, reg, nil, nil) }()
 
 	waitFor(t, func() bool {
 		ag := reg.List()

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"marshal/internal/logstore"
 	"marshal/internal/metricstore"
 	"marshal/internal/pb"
 
@@ -47,12 +48,12 @@ func startServer(t *testing.T, reg *Registry) string {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	go func() { _ = Serve(ctx, lis, reg, nil) }()
+	go func() { _ = Serve(ctx, lis, reg, nil, nil) }()
 	return lis.Addr().String()
 }
 
 func TestConnectRejectsEmptyName(t *testing.T) {
-	srv := NewServer(NewRegistry(), newStores(t.TempDir()))
+	srv := NewServer(NewRegistry(), newStores(t.TempDir()), nil)
 	st := &fakeConnectStream{ctx: context.Background(), recv: []*pb.AgentMessage{
 		{Msg: &pb.AgentMessage_Hello{Hello: &pb.Hello{AgentName: ""}}},
 	}}
@@ -64,7 +65,7 @@ func TestConnectRejectsEmptyName(t *testing.T) {
 
 func TestConnectAcksWatermarkAndStoresBatch(t *testing.T) {
 	ss := newStores(t.TempDir())
-	srv := NewServer(NewRegistry(), ss)
+	srv := NewServer(NewRegistry(), ss, nil)
 
 	// Pre-seed one sample so the second connect sees a non-zero watermark.
 	pre, _ := ss.get("web-1")
@@ -117,7 +118,7 @@ func waitFor(t *testing.T, cond func() bool) {
 
 func TestFleetMetricsHistory(t *testing.T) {
 	ss := newStores(t.TempDir())
-	srv := NewServer(NewRegistry(), ss)
+	srv := NewServer(NewRegistry(), ss, nil)
 	st, _ := ss.get("web-1")
 	now := time.Now().UnixMilli()
 	_ = st.Append(now-2000, []metricstore.Sample{{Label: "api#0", Cpu: 10, Mem: 100}, {Label: "api#1", Cpu: 5, Mem: 50}})
@@ -175,5 +176,26 @@ func TestServerConnectListAndOffline(t *testing.T) {
 	}
 	if len(resp.GetAgents()) != 1 || resp.GetAgents()[0].GetConnected() {
 		t.Fatalf("agents = %+v", resp.GetAgents())
+	}
+}
+
+func TestConnectStoresLogBatchAndAcksWatermark(t *testing.T) {
+	dir := t.TempDir()
+	ls := newLogStores(dir)
+	defer ls.closeAll()
+	srv := NewServer(NewRegistry(WithOfflineAfter(time.Hour)), nil, ls)
+
+	srv.storeLogBatch("web-1", []*pb.LogShipLine{
+		{TsMs: 1000, Label: "api#0", Stderr: false, Text: "l1"},
+		{TsMs: 2000, Label: "api#0", Stderr: true, Text: "l2"},
+	})
+
+	st, _ := ls.get("web-1")
+	if mx, _ := st.MaxTs(); mx != 2000 {
+		t.Fatalf("MaxTs = %d, want 2000", mx)
+	}
+	got, _ := st.Tail("api#0", 10, logstore.StreamAny)
+	if len(got) != 2 || got[0].Text != "l1" || got[1].Text != "l2" {
+		t.Fatalf("stored = %+v, want l1,l2", got)
 	}
 }
