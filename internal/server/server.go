@@ -175,5 +175,19 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir string, opts ...Reg
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return fmt.Errorf("create data dir %s: %w", dataDir, err)
 	}
-	return Serve(ctx, lis, NewRegistry(opts...), newStores(dataDir))
+	ss := newStores(dataDir)
+	go func() {
+		t := time.NewTicker(10 * time.Minute)
+		defer t.Stop()
+		const retentionMs = int64(7 * 24 * 60 * 60 * 1000)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				ss.pruneAll(time.Now().UnixMilli() - retentionMs)
+			}
+		}
+	}()
+	return Serve(ctx, lis, NewRegistry(opts...), ss)
 }

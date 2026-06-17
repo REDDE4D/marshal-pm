@@ -64,6 +64,15 @@ func (s *stores) closeAll() error {
 	return first
 }
 
+// pruneAll deletes samples older than beforeMs from every open store.
+func (s *stores) pruneAll(beforeMs int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, st := range s.m {
+		_, _ = st.Prune(beforeMs)
+	}
+}
+
 // sanitizeAgent turns an agent name into a safe single path segment.
 // Replaces '/', '\', and '.' with '_'. Empty input returns "_".
 func sanitizeAgent(name string) string {

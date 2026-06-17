@@ -2,6 +2,8 @@ package server
 
 import (
 	"testing"
+
+	"marshal/internal/metricstore"
 )
 
 func TestStoresLazyOpenAndHas(t *testing.T) {
@@ -22,6 +24,22 @@ func TestStoresLazyOpenAndHas(t *testing.T) {
 	st2, _ := ss.get("web-1")
 	if st != st2 {
 		t.Fatal("get returned a different handle for the same agent")
+	}
+}
+
+func TestStoresPruneAll(t *testing.T) {
+	ss := newStores(t.TempDir())
+	defer ss.closeAll()
+	st, _ := ss.get("web-1")
+	_ = st.Append(1000, []metricstore.Sample{{Label: "a#0", Cpu: 1, Mem: 1}})
+	_ = st.Append(5000, []metricstore.Sample{{Label: "a#0", Cpu: 2, Mem: 2}})
+	ss.pruneAll(3000) // drop ts < 3000
+	if mx, _ := st.MaxTs(); mx != 5000 {
+		t.Fatalf("MaxTs after prune = %d, want 5000", mx)
+	}
+	rows, _ := st.SamplesSince(0)
+	if len(rows) != 1 {
+		t.Fatalf("rows after prune = %d, want 1", len(rows))
 	}
 }
 
