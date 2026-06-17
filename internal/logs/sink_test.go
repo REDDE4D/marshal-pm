@@ -2,6 +2,7 @@ package logs
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -153,6 +154,38 @@ func TestDefaultPolicyAppliedByNewSink(t *testing.T) {
 	defer s.Close()
 	if s.outFile.MaxAge != DefaultPolicy.MaxAgeDays || !s.outFile.Compress {
 		t.Fatalf("newSink did not apply DefaultPolicy: %+v", s.outFile)
+	}
+}
+
+func TestSubscribeWithRingNoGapNoDup(t *testing.T) {
+	s := newSink(t.TempDir(), "app#0", stepClock())
+	defer s.Close()
+	w := s.Writer(false)
+	// Pre-existing history in the ring.
+	for i := 0; i < 5; i++ {
+		_, _ = w.Write([]byte(fmt.Sprintf("pre-%d\n", i)))
+	}
+	backfill, live, cancel := s.SubscribeWithRing(100)
+	defer cancel()
+	// New lines after the atomic snapshot must arrive only on the live channel.
+	for i := 0; i < 5; i++ {
+		_, _ = w.Write([]byte(fmt.Sprintf("post-%d\n", i)))
+	}
+	seen := map[string]int{}
+	for _, ln := range backfill {
+		seen[ln.Text]++
+	}
+	for i := 0; i < 5; i++ {
+		ln := <-live
+		seen[ln.Text]++
+	}
+	for i := 0; i < 5; i++ {
+		if seen[fmt.Sprintf("pre-%d", i)] != 1 {
+			t.Fatalf("pre-%d seen %d times", i, seen[fmt.Sprintf("pre-%d", i)])
+		}
+		if seen[fmt.Sprintf("post-%d", i)] != 1 {
+			t.Fatalf("post-%d seen %d times", i, seen[fmt.Sprintf("post-%d", i)])
+		}
 	}
 }
 

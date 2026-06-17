@@ -182,6 +182,31 @@ func (s *Sink) Subscribe() (<-chan Line, func()) {
 	}
 }
 
+// SubscribeWithRing atomically snapshots the last n ring lines and registers a
+// live follower under one lock, so no line falls between backfill and live and
+// none is delivered twice. Call cancel to unsubscribe.
+func (s *Sink) SubscribeWithRing(n int) ([]Line, <-chan Line, func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	backfill := s.ring.last(n)
+	ch := make(chan Line, subBuffer)
+	if s.closed {
+		close(ch)
+		return backfill, ch, func() {}
+	}
+	id := s.nextID
+	s.nextID++
+	s.subs[id] = ch
+	return backfill, ch, func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if c, ok := s.subs[id]; ok {
+			delete(s.subs, id)
+			close(c)
+		}
+	}
+}
+
 // Close flushes the files and closes all subscribers.
 func (s *Sink) Close() error {
 	s.mu.Lock()
