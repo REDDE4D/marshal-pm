@@ -3,4 +3,4 @@
 // `go generate ./internal/pb`.
 package pb
 
-//go:generate protoc --go_out=../.. --go_opt=module=marshal --go-grpc_out=../.. --go-grpc_opt=module=marshal -I ../../proto ../../proto/marshal/v1/daemon.proto
+//go:generate protoc --go_out=../.. --go_opt=module=marshal --go-grpc_out=../.. --go-grpc_opt=module=marshal -I ../../proto ../../proto/marshal/v1/daemon.proto ../../proto/marshal/v1/fleet.proto

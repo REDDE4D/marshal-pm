@@ -174,3 +174,29 @@ func TestLoadLogRetention(t *testing.T) {
 		t.Fatalf("web has no logs block; want nil")
 	}
 }
+
+func TestParseServerBlock(t *testing.T) {
+	cfg, err := Parse([]byte("server:\n  address: srv:9000\n  name: web-1\napps:\n  - name: api\n    cmd: ./api\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Server == nil || cfg.Server.Address != "srv:9000" || cfg.Server.Name != "web-1" {
+		t.Fatalf("server = %+v", cfg.Server)
+	}
+}
+
+func TestParseNoServerBlock(t *testing.T) {
+	cfg, err := Parse([]byte("apps:\n  - name: api\n    cmd: ./api\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Server != nil {
+		t.Fatalf("expected nil server, got %+v", cfg.Server)
+	}
+}
+
+func TestServerBlockRequiresAddress(t *testing.T) {
+	if _, err := Parse([]byte("server:\n  name: web-1\napps:\n  - name: api\n    cmd: ./api\n")); err == nil {
+		t.Fatal("expected error for missing server.address")
+	}
+}

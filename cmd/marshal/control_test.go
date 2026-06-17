@@ -5,6 +5,7 @@ import (
 
 	"marshal/internal/config"
 	"marshal/internal/pb"
+	"marshal/internal/store"
 )
 
 func TestAppToSpecWritesLogs(t *testing.T) {
@@ -39,5 +40,27 @@ func TestStreamFromFlags(t *testing.T) {
 	}
 	if _, err := streamFromFlags(true, true); err == nil {
 		t.Fatal("both flags must be rejected")
+	}
+}
+
+func TestPersistServer(t *testing.T) {
+	st := store.NewAt(t.TempDir())
+	if err := persistServer(st, &config.Config{Server: &config.ServerConfig{Address: "srv:9000"}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.LoadServer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.Address != "srv:9000" {
+		t.Fatalf("got %+v", got)
+	}
+
+	st2 := store.NewAt(t.TempDir())
+	if err := persistServer(st2, &config.Config{}); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := st2.LoadServer(); g != nil {
+		t.Fatalf("expected no fleet.json for a config without a server block, got %+v", g)
 	}
 }

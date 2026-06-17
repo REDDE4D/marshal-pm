@@ -64,6 +64,12 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// ServerConfig points the agent at a central server. Presence enables fleet mode.
+type ServerConfig struct {
+	Address string `yaml:"address" json:"address"`
+	Name    string `yaml:"name" json:"name,omitempty"`
+}
+
 // App is one supervised application definition.
 type App struct {
 	Name        string            `yaml:"name" json:"name"`
@@ -80,7 +86,8 @@ type App struct {
 
 // Config is the top-level marshal.yaml document.
 type Config struct {
-	Apps []App `yaml:"apps"`
+	Server *ServerConfig `yaml:"server" json:"server,omitempty"`
+	Apps   []App         `yaml:"apps"`
 }
 
 // Load reads and parses a marshal.yaml file from disk.
@@ -129,6 +136,9 @@ func (c *Config) applyDefaults() {
 }
 
 func (c *Config) validate() error {
+	if c.Server != nil && c.Server.Address == "" {
+		return fmt.Errorf("server.address is required when a server block is present")
+	}
 	if len(c.Apps) == 0 {
 		return fmt.Errorf("config has no apps")
 	}

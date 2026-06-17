@@ -51,6 +51,8 @@ func (s *Store) EnsureLogsDir() error { return os.MkdirAll(s.LogsDir(), 0o700) }
 
 func (s *Store) dumpPath() string { return filepath.Join(s.base, "dump.json") }
 
+func (s *Store) serverPath() string { return filepath.Join(s.base, "fleet.json") }
+
 // EnsureDir creates the state directory if it does not exist.
 func (s *Store) EnsureDir() error { return os.MkdirAll(s.base, 0o700) }
 
@@ -88,4 +90,40 @@ func (s *Store) Load() ([]config.App, error) {
 		return nil, fmt.Errorf("decode dump: %w", err)
 	}
 	return apps, nil
+}
+
+// SaveServer writes the central-server config to fleet.json atomically.
+func (s *Store) SaveServer(sc *config.ServerConfig) error {
+	if err := s.EnsureDir(); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(sc, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode fleet config: %w", err)
+	}
+	tmp := s.serverPath() + ".tmp"
+	defer os.Remove(tmp)
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return fmt.Errorf("write fleet config: %w", err)
+	}
+	if err := os.Rename(tmp, s.serverPath()); err != nil {
+		return fmt.Errorf("rename fleet config: %w", err)
+	}
+	return nil
+}
+
+// LoadServer reads fleet.json. A missing file yields (nil, nil).
+func (s *Store) LoadServer() (*config.ServerConfig, error) {
+	data, err := os.ReadFile(s.serverPath())
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read fleet config: %w", err)
+	}
+	var sc config.ServerConfig
+	if err := json.Unmarshal(data, &sc); err != nil {
+		return nil, fmt.Errorf("decode fleet config: %w", err)
+	}
+	return &sc, nil
 }

@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package marshal.v1;
+
+option go_package = "marshal/internal/pb;pb";
+
+import "marshal/v1/daemon.proto"; // reuse ProcInfo
+
+// Fleet is the agent<->server control surface (M7: connection + live state).
+service Fleet {
+  // Agent-initiated, long-lived, bidirectional. M7 uses only the upstream direction.
+  rpc Connect(stream AgentMessage) returns (stream ServerMessage);
+  // Read path for the fleet CLI (and, later, the dashboard).
+  rpc ListFleet(ListFleetRequest) returns (ListFleetResponse);
+}
+
+message AgentMessage {
+  oneof msg {
+    Hello hello = 1;            // sent once on connect
+    StateSnapshot snapshot = 2; // full process-state snapshot (periodic)
+  }
+}
+
+message ServerMessage {
+  oneof msg {
+    HelloAck hello_ack = 1;
+    // reserved: command messages land here in M9
+  }
+}
+
+message Hello {
+  string agent_name = 1;
+  string marshal_version = 2;
+}
+
+message HelloAck {}
+
+message StateSnapshot { repeated ProcInfo procs = 1; } // ProcInfo from daemon.proto
+
+message ListFleetRequest {}
+
+message ListFleetResponse { repeated AgentState agents = 1; }
+
+message AgentState {
+  string agent_name = 1;
+  bool connected = 2;
+  int64 last_seen_unix = 3;
+  repeated ProcInfo procs = 4;
+}
