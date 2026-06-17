@@ -52,7 +52,8 @@ banner noting this; the plan documents it in full.
 | `90307a1` | Server: `FleetLogsHistory` handler (selector resolve, per-label `Tail`, `MergeTail`, stream filter) |
 | `7cbbcd4` | CLI: `marshal fleet logs <agent> <name|label>` |
 | `1d64c62` | Tests: e2e log ingest + reconnect backfill |
-| *(this commit)* | M8b handoff |
+| *(handoff commit)* | M8b handoff |
+| `75b404b` | Tests: assert exact backfill lines (no-resend proof); doc: same-ms edge is steady-state |
 
 (Plus earlier on the branch: `cf291a5` spec, `43af8aa` plan, `8d16d7d` spec refinement note.)
 
@@ -100,11 +101,7 @@ On disk: `/tmp/m8bsmoke/marshal-server/agents/dev-1/logs.db` (alongside `metrics
 4. **Selector is name / label-prefix only** server-side (no numeric-ID resolution).
 5. **High-volume shipping** copies each sink's whole ring per 2s tick (`RingSince`); fine
    for modest fleets, revisit if it becomes hot.
-6. **e2e test strength (Minor):** `TestE2ELogsIngestAndBackfill` asserts `>= 3` lines, so
-   it would also pass on a full-resend (forgotten watermark) path; tightening to `== 3`
-   plus exact text checks would prove backfill-only and catch resend duplicates. Mirrors
-   the same weakness in `TestE2EMetricsIngestAndBackfill`.
-7. **`splitLabel` duplicated** in package `server` and package `daemon` (independent
+6. **`splitLabel` duplicated** in package `server` and package `daemon` (independent
    packages); extracting a shared `internal/labelfmt` is reasonable future work.
 8. **Server binds all interfaces, unauthenticated** (TLS/auth planned for M10).
 
