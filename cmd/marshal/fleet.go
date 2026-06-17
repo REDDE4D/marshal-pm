@@ -21,6 +21,7 @@ func fleetCmd() *cobra.Command {
 	}
 	cmd.AddCommand(fleetPsCmd())
 	cmd.AddCommand(fleetMetricsCmd())
+	cmd.AddCommand(fleetLogsCmd())
 	return cmd
 }
 
@@ -86,6 +87,50 @@ func fleetMetricsCmd() *cobra.Command {
 	cmd.Flags().DurationVar(&bucket, "bucket", 0, "bucket width (0 = auto)")
 	cmd.Flags().BoolVar(&cpuOnly, "cpu", false, "show only CPU")
 	cmd.Flags().BoolVar(&memOnly, "mem", false, "show only memory")
+	return cmd
+}
+
+func fleetLogsCmd() *cobra.Command {
+	var serverAddr string
+	var lines int
+	var stdoutOnly, stderrOnly bool
+	cmd := &cobra.Command{
+		Use:   "logs <agent> <name|label>",
+		Short: "Show recent captured logs for an app/instance on one agent",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			streamSel, err := streamFromFlags(stdoutOnly, stderrOnly)
+			if err != nil {
+				return err
+			}
+			conn, err := grpc.NewClient(resolveServer(serverAddr),
+				grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			resp, err := pb.NewFleetClient(conn).FleetLogsHistory(ctx, &pb.FleetLogsHistoryRequest{
+				AgentName: args[0],
+				Selector:  args[1],
+				Lines:     int32(lines),
+				Stream:    streamSel,
+			})
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			for _, ln := range resp.GetLines() {
+				fmt.Fprintf(out, "%s#%d | %s\n", ln.GetName(), ln.GetInstanceId(), ln.GetLine())
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&serverAddr, "server", "", "central server address (default $MARSHAL_SERVER or localhost:9000)")
+	cmd.Flags().IntVarP(&lines, "lines", "n", 15, "number of lines to show")
+	cmd.Flags().BoolVar(&stdoutOnly, "stdout", false, "show only stdout")
+	cmd.Flags().BoolVar(&stderrOnly, "stderr", false, "show only stderr")
 	return cmd
 }
 
