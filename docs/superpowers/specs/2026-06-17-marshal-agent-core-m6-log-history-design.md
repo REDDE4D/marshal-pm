@@ -206,8 +206,9 @@ Changed:
 - `internal/logs/sink.go` — `Policy`, lumberjack `MaxAge`/`Compress`, partial-line cap,
   `SubscribeWithRing`, `FileBackfill`.
 - `internal/logs/registry.go` — default + per-app policy map; policy selection in `For`.
-- `internal/config/config.go` — `App.Logs *LogRetention` block.
-- `internal/daemon/server.go` — `WithLogRetention` Option; push per-app policy to the registry.
+- `internal/config/config.go` — `App.Logs *LogRetention` block (pointer fields for correct default fallback).
+- `internal/daemon/server.go` — `WithLogRetention` Option; push default + per-app policy to the registry.
 - `internal/daemon/logs.go` — stream filter + ring-vs-file backfill routing; atomic follow.
-- `proto/marshal/v1/daemon.proto` — `LogStream` enum + `LogRequest.stream`; regenerate `internal/pb`.
-- `cmd/marshal/control.go` — `--stdout`/`--stderr` flags.
+- `internal/daemon/convert.go` — read the retention block out of `AppSpec` into `config.App.Logs`.
+- `proto/marshal/v1/daemon.proto` — `LogStream` enum + `LogRequest.stream`; **`LogRetention` message + `AppSpec.logs`** so a per-app override survives the CLI→daemon `start` hop (otherwise `appToSpec`/`appSpecToConfig` silently drop it). Regenerate `internal/pb`.
+- `cmd/marshal/control.go` — write `a.Logs` into `AppSpec` in `appToSpec`; `--stdout`/`--stderr` flags.
