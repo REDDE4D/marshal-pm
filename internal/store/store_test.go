@@ -84,3 +84,27 @@ func TestLogsDirCreatedPrivate(t *testing.T) {
 		t.Fatalf("logs dir perm = %o, want 700", info.Mode().Perm())
 	}
 }
+
+func TestSaveLoadServer(t *testing.T) {
+	st := NewAt(t.TempDir())
+	if err := st.SaveServer(&config.ServerConfig{Address: "srv:9000", Name: "web-1"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.LoadServer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.Address != "srv:9000" || got.Name != "web-1" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestLoadServerMissing(t *testing.T) {
+	got, err := NewAt(t.TempDir()).LoadServer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Fatalf("expected nil, got %+v", got)
+	}
+}
