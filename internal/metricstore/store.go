@@ -5,6 +5,7 @@ package metricstore
 import (
 	"database/sql"
 	"fmt"
+	"sort"
 
 	_ "modernc.org/sqlite"
 )
@@ -189,3 +190,53 @@ func (s *Store) Prune(beforeMs int64) (int64, error) {
 
 // Close closes the database.
 func (s *Store) Close() error { return s.db.Close() }
+
+const (
+	targetBuckets = 60
+	minBucketMs   = 1000
+)
+
+// AutoBucketMs returns bucketMs when positive, else ~targetBuckets buckets over
+// the window, floored at minBucketMs.
+func AutoBucketMs(sinceMs, bucketMs int64) int64 {
+	if bucketMs > 0 {
+		return bucketMs
+	}
+	b := sinceMs / targetBuckets
+	if b < minBucketMs {
+		b = minBucketMs
+	}
+	return b
+}
+
+// MergeBuckets combines per-instance series sharing a bucket timestamp: averages
+// are summed (whole-app total), maxes take the max across instances. Oldest first.
+func MergeBuckets(series [][]Bucket) []Bucket {
+	byTs := map[int64]*Bucket{}
+	var order []int64
+	for _, bs := range series {
+		for _, b := range bs {
+			cur, ok := byTs[b.TsMs]
+			if !ok {
+				nb := b
+				byTs[b.TsMs] = &nb
+				order = append(order, b.TsMs)
+				continue
+			}
+			cur.CpuAvg += b.CpuAvg
+			cur.MemAvg += b.MemAvg
+			if b.CpuMax > cur.CpuMax {
+				cur.CpuMax = b.CpuMax
+			}
+			if b.MemMax > cur.MemMax {
+				cur.MemMax = b.MemMax
+			}
+		}
+	}
+	sort.Slice(order, func(i, j int) bool { return order[i] < order[j] })
+	out := make([]Bucket, 0, len(order))
+	for _, ts := range order {
+		out = append(out, *byTs[ts])
+	}
+	return out
+}

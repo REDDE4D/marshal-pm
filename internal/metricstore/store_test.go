@@ -118,6 +118,24 @@ func TestQueryRejectsZeroBucket(t *testing.T) {
 	}
 }
 
+func TestMergeBucketsAndAutoBucket(t *testing.T) {
+	a := []Bucket{{TsMs: 1000, CpuAvg: 10, CpuMax: 15, MemAvg: 100, MemMax: 150}}
+	b := []Bucket{{TsMs: 1000, CpuAvg: 5, CpuMax: 20, MemAvg: 50, MemMax: 60}}
+	got := MergeBuckets([][]Bucket{a, b})
+	if len(got) != 1 || got[0].CpuAvg != 15 || got[0].CpuMax != 20 || got[0].MemAvg != 150 || got[0].MemMax != 150 {
+		t.Fatalf("MergeBuckets = %+v, want summed avgs + max maxes", got)
+	}
+	if w := AutoBucketMs(0, 600000); w != 600000 {
+		t.Fatalf("AutoBucketMs explicit = %d, want 600000", w)
+	}
+	if w := AutoBucketMs(60000, 0); w != 1000 {
+		t.Fatalf("AutoBucketMs auto-floored = %d, want 1000", w)
+	}
+	if w := AutoBucketMs(600000, 0); w != 10000 {
+		t.Fatalf("AutoBucketMs auto = %d, want 10000 (600000/60)", w)
+	}
+}
+
 func TestSamplesSinceMaxTsLabels(t *testing.T) {
 	st, err := Open(filepath.Join(t.TempDir(), "m.db"))
 	if err != nil {
