@@ -231,7 +231,11 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 				name = h
 			}
 		}
-		fc := fleet.New(sc.Address, name, version.String(), fleetSnapshot(mgr))
+		if name == "" {
+			name = "unknown"
+		}
+		fc := fleet.New(sc.Address, name, version.String(),
+			fleetSnapshot(mgr, sampler), fleet.WithMetrics(metricsSince(mdb)))
 		go fc.Run(serveCtx)
 	}
 	go sampler.Run(serveCtx, metricsSnapshot(mgr))
