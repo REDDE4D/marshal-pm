@@ -43,6 +43,9 @@ func (s *Store) LogPath() string { return filepath.Join(s.base, "marshald.log") 
 // LogsDir is the directory holding per-instance rotated log files.
 func (s *Store) LogsDir() string { return filepath.Join(s.base, "logs") }
 
+// MetricsDBPath is the SQLite file holding metric history.
+func (s *Store) MetricsDBPath() string { return filepath.Join(s.base, "metrics.db") }
+
 // EnsureLogsDir creates the logs directory (0700) if it does not exist.
 func (s *Store) EnsureLogsDir() error { return os.MkdirAll(s.LogsDir(), 0o700) }
 

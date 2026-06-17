@@ -27,9 +27,10 @@ type Instance struct {
 type Sampler struct {
 	interval time.Duration
 
-	mu    sync.Mutex
-	last  map[string]Sample
-	procs map[int32]*process.Process // retained across ticks for CPU% deltas
+	mu     sync.Mutex
+	last   map[string]Sample
+	procs  map[int32]*process.Process // retained across ticks for CPU% deltas
+	onTick func(map[string]Sample)    // optional; fired each tick with fresh results
 }
 
 // NewSampler builds a sampler with the given tick interval (default 5s).
@@ -43,6 +44,10 @@ func NewSampler(interval time.Duration) *Sampler {
 		procs:    map[int32]*process.Process{},
 	}
 }
+
+// SetOnTick registers a callback fired once per sample tick with the fresh
+// per-label results. Call before Run; not safe to change concurrently with it.
+func (s *Sampler) SetOnTick(fn func(map[string]Sample)) { s.onTick = fn }
 
 // Get returns the latest sample for a label.
 func (s *Sampler) Get(label string) (Sample, bool) {
@@ -103,6 +108,9 @@ func (s *Sampler) sample(insts []Instance) {
 		}
 	}
 	s.mu.Unlock()
+	if s.onTick != nil {
+		s.onTick(result)
+	}
 }
 
 // handle returns a cached process handle (created on first use), so Percent(0)

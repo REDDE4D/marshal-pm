@@ -19,16 +19,17 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Daemon_Start_FullMethodName     = "/marshal.v1.Daemon/Start"
-	Daemon_Stop_FullMethodName      = "/marshal.v1.Daemon/Stop"
-	Daemon_Restart_FullMethodName   = "/marshal.v1.Daemon/Restart"
-	Daemon_Delete_FullMethodName    = "/marshal.v1.Daemon/Delete"
-	Daemon_List_FullMethodName      = "/marshal.v1.Daemon/List"
-	Daemon_Describe_FullMethodName  = "/marshal.v1.Daemon/Describe"
-	Daemon_Save_FullMethodName      = "/marshal.v1.Daemon/Save"
-	Daemon_Resurrect_FullMethodName = "/marshal.v1.Daemon/Resurrect"
-	Daemon_Kill_FullMethodName      = "/marshal.v1.Daemon/Kill"
-	Daemon_Logs_FullMethodName      = "/marshal.v1.Daemon/Logs"
+	Daemon_Start_FullMethodName          = "/marshal.v1.Daemon/Start"
+	Daemon_Stop_FullMethodName           = "/marshal.v1.Daemon/Stop"
+	Daemon_Restart_FullMethodName        = "/marshal.v1.Daemon/Restart"
+	Daemon_Delete_FullMethodName         = "/marshal.v1.Daemon/Delete"
+	Daemon_List_FullMethodName           = "/marshal.v1.Daemon/List"
+	Daemon_Describe_FullMethodName       = "/marshal.v1.Daemon/Describe"
+	Daemon_Save_FullMethodName           = "/marshal.v1.Daemon/Save"
+	Daemon_Resurrect_FullMethodName      = "/marshal.v1.Daemon/Resurrect"
+	Daemon_Kill_FullMethodName           = "/marshal.v1.Daemon/Kill"
+	Daemon_Logs_FullMethodName           = "/marshal.v1.Daemon/Logs"
+	Daemon_MetricsHistory_FullMethodName = "/marshal.v1.Daemon/MetricsHistory"
 )
 
 // DaemonClient is the client API for Daemon service.
@@ -48,6 +49,7 @@ type DaemonClient interface {
 	Resurrect(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ProcList, error)
 	Kill(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Ack, error)
 	Logs(ctx context.Context, in *LogRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LogLine], error)
+	MetricsHistory(ctx context.Context, in *MetricsHistoryRequest, opts ...grpc.CallOption) (*MetricsHistoryResponse, error)
 }
 
 type daemonClient struct {
@@ -167,6 +169,16 @@ func (c *daemonClient) Logs(ctx context.Context, in *LogRequest, opts ...grpc.Ca
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Daemon_LogsClient = grpc.ServerStreamingClient[LogLine]
 
+func (c *daemonClient) MetricsHistory(ctx context.Context, in *MetricsHistoryRequest, opts ...grpc.CallOption) (*MetricsHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MetricsHistoryResponse)
+	err := c.cc.Invoke(ctx, Daemon_MetricsHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServer is the server API for Daemon service.
 // All implementations must embed UnimplementedDaemonServer
 // for forward compatibility.
@@ -184,6 +196,7 @@ type DaemonServer interface {
 	Resurrect(context.Context, *Empty) (*ProcList, error)
 	Kill(context.Context, *Empty) (*Ack, error)
 	Logs(*LogRequest, grpc.ServerStreamingServer[LogLine]) error
+	MetricsHistory(context.Context, *MetricsHistoryRequest) (*MetricsHistoryResponse, error)
 	mustEmbedUnimplementedDaemonServer()
 }
 
@@ -223,6 +236,9 @@ func (UnimplementedDaemonServer) Kill(context.Context, *Empty) (*Ack, error) {
 }
 func (UnimplementedDaemonServer) Logs(*LogRequest, grpc.ServerStreamingServer[LogLine]) error {
 	return status.Error(codes.Unimplemented, "method Logs not implemented")
+}
+func (UnimplementedDaemonServer) MetricsHistory(context.Context, *MetricsHistoryRequest) (*MetricsHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MetricsHistory not implemented")
 }
 func (UnimplementedDaemonServer) mustEmbedUnimplementedDaemonServer() {}
 func (UnimplementedDaemonServer) testEmbeddedByValue()                {}
@@ -418,6 +434,24 @@ func _Daemon_Logs_Handler(srv interface{}, stream grpc.ServerStream) error {
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Daemon_LogsServer = grpc.ServerStreamingServer[LogLine]
 
+func _Daemon_MetricsHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MetricsHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).MetricsHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_MetricsHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).MetricsHistory(ctx, req.(*MetricsHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Daemon_ServiceDesc is the grpc.ServiceDesc for Daemon service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -460,6 +494,10 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Kill",
 			Handler:    _Daemon_Kill_Handler,
+		},
+		{
+			MethodName: "MetricsHistory",
+			Handler:    _Daemon_MetricsHistory_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

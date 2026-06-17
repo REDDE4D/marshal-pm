@@ -55,3 +55,16 @@ func TestSamplerSkipsOfflineInstances(t *testing.T) {
 		t.Fatal("offline instance should not be sampled")
 	}
 }
+
+func TestSetOnTickFiresWithLabeledSamples(t *testing.T) {
+	s := NewSampler(time.Hour)
+	var got map[string]Sample
+	s.SetOnTick(func(m map[string]Sample) { got = m })
+	s.sample([]Instance{{Label: "a#0", Pid: 99999999, Online: true}})
+	if got == nil {
+		t.Fatal("onTick was not invoked")
+	}
+	if _, ok := got["a#0"]; !ok {
+		t.Fatalf("onTick map = %+v, want an entry for a#0", got)
+	}
+}

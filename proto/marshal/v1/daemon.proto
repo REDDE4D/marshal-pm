@@ -17,6 +17,7 @@ service Daemon {
   rpc Resurrect(Empty) returns (ProcList);
   rpc Kill(Empty) returns (Ack);
   rpc Logs(LogRequest) returns (stream LogLine); // M3 — defined, not implemented
+  rpc MetricsHistory(MetricsHistoryRequest) returns (MetricsHistoryResponse); // M5
 }
 
 message Empty {}
@@ -72,3 +73,20 @@ message LogLine {
   bool stderr = 3;
   string line = 4;
 }
+
+// M5 — metric history.
+message MetricsHistoryRequest {
+  string selector  = 1;            // name or id, resolved like logs/describe
+  int64  since_ms  = 2;            // lookback window in ms; server queries ts >= now - since_ms
+  int64  bucket_ms = 3;            // bucket width in ms; 0 = server auto-picks (~60 buckets)
+}
+
+message MetricBucket {
+  int64  ts_ms   = 1;
+  double cpu_avg = 2;
+  double cpu_max = 3;
+  uint64 mem_avg = 4;
+  uint64 mem_max = 5;
+}
+
+message MetricsHistoryResponse { repeated MetricBucket buckets = 1; }
