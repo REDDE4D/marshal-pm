@@ -59,6 +59,7 @@ func rootCmd() *cobra.Command {
 		listCmd(),
 		describeCmd(),
 		logsCmd(),
+		metricsCmd(),
 		saveCmd(),
 		resurrectCmd(),
 		startupCmd(),
