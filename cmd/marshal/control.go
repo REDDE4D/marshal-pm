@@ -114,10 +114,37 @@ func listCmd() *cobra.Command {
 }
 
 func describeCmd() *cobra.Command {
-	return selectorCmd("describe <name|id>", "Show detail for an app/instance",
-		func(ctx context.Context, c pb.DaemonClient, sel *pb.Selector) (*pb.ProcList, error) {
-			return c.Describe(ctx, sel)
-		})
+	return &cobra.Command{
+		Use:   "describe <name|id>",
+		Short: "Show detail for an app/instance",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return withClient(func(ctx context.Context, c pb.DaemonClient) error {
+				list, err := c.Describe(ctx, &pb.Selector{Target: args[0]})
+				if err != nil {
+					return err
+				}
+				printProcs(cmd, list)
+				// Best-effort last-hour history; never fail describe on its absence.
+				resp, err := c.MetricsHistory(ctx, &pb.MetricsHistoryRequest{
+					Selector: args[0],
+					SinceMs:  time.Hour.Milliseconds(),
+				})
+				if err == nil && len(resp.GetBuckets()) > 0 {
+					cpu := make([]float64, len(resp.Buckets))
+					mem := make([]float64, len(resp.Buckets))
+					for i, b := range resp.Buckets {
+						cpu[i] = b.GetCpuAvg()
+						mem[i] = float64(b.GetMemAvg())
+					}
+					out := cmd.OutOrStdout()
+					fmt.Fprintf(out, "\nCPU (1h)  %s\n", sparkline(cpu))
+					fmt.Fprintf(out, "MEM (1h)  %s\n", sparkline(mem))
+				}
+				return nil
+			})
+		},
+	}
 }
 
 func saveCmd() *cobra.Command {
