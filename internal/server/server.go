@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -28,17 +29,25 @@ type Server struct {
 	reg    *Registry
 	stores *stores
 	logs   *logStores
+	broker *broker
 }
 
 // NewServer wires a Fleet server to a registry and (optional) metric/log stores.
 func NewServer(reg *Registry, ss *stores, ls *logStores) *Server {
-	return &Server{reg: reg, stores: ss, logs: ls}
+	return &Server{reg: reg, stores: ss, logs: ls, broker: newBroker()}
 }
 
 // Connect terminates one agent's upstream: reads Hello (acking the stored metric
 // high-water-mark), StateSnapshot (live state), and MetricBatch (persisted).
 func (s *Server) Connect(stream pb.Fleet_ConnectServer) error {
 	var name string
+	var sess *session
+	defer func() {
+		if sess != nil {
+			s.broker.unregister(name, sess)
+			sess.failAll()
+		}
+	}()
 	for {
 		msg, err := stream.Recv()
 		if err != nil {
@@ -57,6 +66,7 @@ func (s *Server) Connect(stream pb.Fleet_ConnectServer) error {
 				return status.Error(codes.InvalidArgument, "agent_name must not be empty")
 			}
 			s.reg.Open(name)
+			sess = s.broker.register(name, stream.Send)
 			var watermark, logWM int64
 			if s.stores != nil {
 				if st, err := s.stores.get(name); err == nil {
@@ -68,7 +78,7 @@ func (s *Server) Connect(stream pb.Fleet_ConnectServer) error {
 					logWM, _ = st.MaxTs()
 				}
 			}
-			_ = stream.Send(&pb.ServerMessage{Msg: &pb.ServerMessage_HelloAck{
+			_ = sess.sendMsg(&pb.ServerMessage{Msg: &pb.ServerMessage_HelloAck{
 				HelloAck: &pb.HelloAck{LastMetricTsMs: watermark, LastLogTsMs: logWM},
 			}})
 		case *pb.AgentMessage_Snapshot:
@@ -82,6 +92,10 @@ func (s *Server) Connect(stream pb.Fleet_ConnectServer) error {
 		case *pb.AgentMessage_Logs:
 			if name != "" && s.logs != nil {
 				s.storeLogBatch(name, m.Logs.GetLines())
+			}
+		case *pb.AgentMessage_Result:
+			if sess != nil {
+				sess.deliver(m.Result)
 			}
 		}
 	}
@@ -256,6 +270,23 @@ func splitLabel(label string) (string, int32) {
 // ListFleet returns the current aggregated fleet state.
 func (s *Server) ListFleet(_ context.Context, _ *pb.ListFleetRequest) (*pb.ListFleetResponse, error) {
 	return &pb.ListFleetResponse{Agents: s.reg.List()}, nil
+}
+
+// FleetControl routes a control command to one connected agent over its existing
+// stream and returns the agent's result. The RPC context bounds the wait.
+func (s *Server) FleetControl(ctx context.Context, req *pb.FleetControlRequest) (*pb.FleetControlResponse, error) {
+	sess, ok := s.broker.get(req.GetAgentName())
+	if !ok {
+		return nil, status.Errorf(codes.Unavailable, "agent %q not connected", req.GetAgentName())
+	}
+	res, err := sess.dispatch(ctx, req.GetOp())
+	if err != nil {
+		if errors.Is(err, errDisconnected) {
+			return nil, status.Errorf(codes.Unavailable, "agent %q disconnected", req.GetAgentName())
+		}
+		return nil, status.FromContextError(err).Err()
+	}
+	return &pb.FleetControlResponse{Result: res}, nil
 }
 
 // Serve registers the Fleet service on lis and serves until ctx is canceled.

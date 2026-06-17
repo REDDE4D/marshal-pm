@@ -201,6 +201,81 @@ func TestClientSeedsWatermarkFromAckAndBackfills(t *testing.T) {
 	cancel()
 }
 
+func TestClientExecutesCommandAndRepliesResult(t *testing.T) {
+	// Stub Fleet server: ack hello, push one restart command, capture the reply.
+	gotReply := make(chan *pb.CommandResult, 1)
+	srv := &cmdStubServer{gotReply: gotReply}
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gs := grpc.NewServer()
+	pb.RegisterFleetServer(gs, srv)
+	go func() { _ = gs.Serve(lis) }()
+	defer gs.Stop()
+
+	executed := make(chan string, 1)
+	c := fleet.New(lis.Addr().String(), "web-1", "test",
+		func() []*pb.ProcInfo { return nil },
+		fleet.WithInterval(20*time.Millisecond),
+		fleet.WithCommands(func(cmd *pb.Command) *pb.ControlResult {
+			executed <- cmd.GetOp().GetRestart().GetTarget()
+			return &pb.ControlResult{Ok: true, Procs: []*pb.ProcInfo{{Name: "api"}}}
+		}))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go c.Run(ctx)
+
+	select {
+	case target := <-executed:
+		if target != "api" {
+			t.Fatalf("executed target = %q, want api", target)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("command was never executed")
+	}
+	select {
+	case reply := <-gotReply:
+		if !reply.GetResult().GetOk() || reply.GetResult().GetProcs()[0].GetName() != "api" {
+			t.Fatalf("reply = %v, want ok with api proc", reply)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("result was never received by the server")
+	}
+}
+
+// cmdStubServer acks Hello, sends one restart Command, and captures the reply.
+type cmdStubServer struct {
+	pb.UnimplementedFleetServer
+	gotReply chan *pb.CommandResult
+}
+
+func (s *cmdStubServer) Connect(stream pb.Fleet_ConnectServer) error {
+	// First inbound message is Hello.
+	if _, err := stream.Recv(); err != nil {
+		return err
+	}
+	if err := stream.Send(&pb.ServerMessage{Msg: &pb.ServerMessage_HelloAck{HelloAck: &pb.HelloAck{}}}); err != nil {
+		return err
+	}
+	if err := stream.Send(&pb.ServerMessage{Msg: &pb.ServerMessage_Command{Command: &pb.Command{
+		RequestId: 1,
+		Op:        &pb.ControlOp{Op: &pb.ControlOp_Restart{Restart: &pb.Selector{Target: "api"}}},
+	}}}); err != nil {
+		return err
+	}
+	for {
+		msg, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		if r := msg.GetResult(); r != nil {
+			s.gotReply <- r
+			return nil
+		}
+	}
+}
+
 func TestClientShipsLogsAndSeedsLogWatermark(t *testing.T) {
 	fs := newFakeServer(t)
 	fs.ackLogWatermark = 5000

@@ -23,6 +23,7 @@ const (
 	Fleet_ListFleet_FullMethodName           = "/marshal.v1.Fleet/ListFleet"
 	Fleet_FleetMetricsHistory_FullMethodName = "/marshal.v1.Fleet/FleetMetricsHistory"
 	Fleet_FleetLogsHistory_FullMethodName    = "/marshal.v1.Fleet/FleetLogsHistory"
+	Fleet_FleetControl_FullMethodName        = "/marshal.v1.Fleet/FleetControl"
 )
 
 // FleetClient is the client API for Fleet service.
@@ -39,6 +40,8 @@ type FleetClient interface {
 	FleetMetricsHistory(ctx context.Context, in *FleetMetricsHistoryRequest, opts ...grpc.CallOption) (*MetricsHistoryResponse, error)
 	// Log history for one agent's app/instance (M8b); reuses daemon.proto's LogLine.
 	FleetLogsHistory(ctx context.Context, in *FleetLogsHistoryRequest, opts ...grpc.CallOption) (*FleetLogsHistoryResponse, error)
+	// Route a control command to one agent and return its result (M9).
+	FleetControl(ctx context.Context, in *FleetControlRequest, opts ...grpc.CallOption) (*FleetControlResponse, error)
 }
 
 type fleetClient struct {
@@ -92,6 +95,16 @@ func (c *fleetClient) FleetLogsHistory(ctx context.Context, in *FleetLogsHistory
 	return out, nil
 }
 
+func (c *fleetClient) FleetControl(ctx context.Context, in *FleetControlRequest, opts ...grpc.CallOption) (*FleetControlResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FleetControlResponse)
+	err := c.cc.Invoke(ctx, Fleet_FleetControl_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FleetServer is the server API for Fleet service.
 // All implementations must embed UnimplementedFleetServer
 // for forward compatibility.
@@ -106,6 +119,8 @@ type FleetServer interface {
 	FleetMetricsHistory(context.Context, *FleetMetricsHistoryRequest) (*MetricsHistoryResponse, error)
 	// Log history for one agent's app/instance (M8b); reuses daemon.proto's LogLine.
 	FleetLogsHistory(context.Context, *FleetLogsHistoryRequest) (*FleetLogsHistoryResponse, error)
+	// Route a control command to one agent and return its result (M9).
+	FleetControl(context.Context, *FleetControlRequest) (*FleetControlResponse, error)
 	mustEmbedUnimplementedFleetServer()
 }
 
@@ -127,6 +142,9 @@ func (UnimplementedFleetServer) FleetMetricsHistory(context.Context, *FleetMetri
 }
 func (UnimplementedFleetServer) FleetLogsHistory(context.Context, *FleetLogsHistoryRequest) (*FleetLogsHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method FleetLogsHistory not implemented")
+}
+func (UnimplementedFleetServer) FleetControl(context.Context, *FleetControlRequest) (*FleetControlResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method FleetControl not implemented")
 }
 func (UnimplementedFleetServer) mustEmbedUnimplementedFleetServer() {}
 func (UnimplementedFleetServer) testEmbeddedByValue()               {}
@@ -210,6 +228,24 @@ func _Fleet_FleetLogsHistory_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Fleet_FleetControl_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FleetControlRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FleetServer).FleetControl(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Fleet_FleetControl_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FleetServer).FleetControl(ctx, req.(*FleetControlRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Fleet_ServiceDesc is the grpc.ServiceDesc for Fleet service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -228,6 +264,10 @@ var Fleet_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "FleetLogsHistory",
 			Handler:    _Fleet_FleetLogsHistory_Handler,
+		},
+		{
+			MethodName: "FleetControl",
+			Handler:    _Fleet_FleetControl_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

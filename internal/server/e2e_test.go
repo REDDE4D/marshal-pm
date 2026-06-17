@@ -146,6 +146,50 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 	}
 }
 
+func TestE2EFleetControlRoundTrip(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg := NewRegistry()
+	srv := NewServer(reg, nil, nil)
+	gs := grpc.NewServer()
+	pb.RegisterFleetServer(gs, srv)
+	go func() { _ = gs.Serve(lis) }()
+	defer gs.Stop()
+
+	// Real agent client whose command handler echoes the selector back.
+	c := fleet.New(lis.Addr().String(), "web-1", "test",
+		func() []*pb.ProcInfo { return nil },
+		fleet.WithInterval(20*time.Millisecond),
+		fleet.WithCommands(func(cmd *pb.Command) *pb.ControlResult {
+			return &pb.ControlResult{Ok: true, Procs: []*pb.ProcInfo{
+				{Name: cmd.GetOp().GetRestart().GetTarget(), State: "online"},
+			}}
+		}))
+	cctx, ccancel := context.WithCancel(context.Background())
+	defer ccancel()
+	go c.Run(cctx)
+
+	// Wait until the agent is registered (its session exists).
+	waitFor(t, func() bool { _, ok := srv.broker.get("web-1"); return ok })
+
+	conn := e2eDialFleet(t, lis.Addr().String())
+	defer conn.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	resp, err := pb.NewFleetClient(conn).FleetControl(ctx, &pb.FleetControlRequest{
+		AgentName: "web-1",
+		Op:        &pb.ControlOp{Op: &pb.ControlOp_Restart{Restart: &pb.Selector{Target: "api"}}},
+	})
+	if err != nil {
+		t.Fatalf("FleetControl: %v", err)
+	}
+	if !resp.GetResult().GetOk() || resp.GetResult().GetProcs()[0].GetName() != "api" {
+		t.Fatalf("result = %v, want ok with api proc", resp.GetResult())
+	}
+}
+
 func TestE2EMetricsIngestAndBackfill(t *testing.T) {
 	dataDir := t.TempDir()
 
