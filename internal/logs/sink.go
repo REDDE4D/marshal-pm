@@ -40,14 +40,39 @@ type Sink struct {
 	closed  bool
 }
 
-func newSink(dir, label string, now func() time.Time) *Sink {
-	return newSinkWithLimits(dir, label, maxSizeMB, maxBackups, now)
+// Policy controls log-file rotation, retention, and compression for one sink.
+type Policy struct {
+	MaxSizeMB  int  // rotate threshold in MB (lumberjack MaxSize)
+	MaxBackups int  // rotated files kept (lumberjack MaxBackups)
+	MaxAgeDays int  // delete rotated files older than this many days (0 = no age limit)
+	Compress   bool // gzip rotated files
 }
 
+// DefaultPolicy is the daemon-wide default when an app declares no override.
+var DefaultPolicy = Policy{MaxSizeMB: maxSizeMB, MaxBackups: maxBackups, MaxAgeDays: 14, Compress: true}
+
+func newSink(dir, label string, now func() time.Time) *Sink {
+	return newSinkP(dir, label, DefaultPolicy, now)
+}
+
+// newSinkWithLimits is retained for existing tests; size/backups only, no age/compress.
 func newSinkWithLimits(dir, label string, sizeMB, backups int, now func() time.Time) *Sink {
+	return newSinkP(dir, label, Policy{MaxSizeMB: sizeMB, MaxBackups: backups}, now)
+}
+
+func newSinkP(dir, label string, p Policy, now func() time.Time) *Sink {
+	mk := func(suffix string) *lumberjack.Logger {
+		return &lumberjack.Logger{
+			Filename:   filepath.Join(dir, label+suffix),
+			MaxSize:    p.MaxSizeMB,
+			MaxBackups: p.MaxBackups,
+			MaxAge:     p.MaxAgeDays,
+			Compress:   p.Compress,
+		}
+	}
 	return &Sink{
-		outFile: &lumberjack.Logger{Filename: filepath.Join(dir, label+".out.log"), MaxSize: sizeMB, MaxBackups: backups},
-		errFile: &lumberjack.Logger{Filename: filepath.Join(dir, label+".err.log"), MaxSize: sizeMB, MaxBackups: backups},
+		outFile: mk(".out.log"),
+		errFile: mk(".err.log"),
 		now:     now,
 		ring:    newRing(ringCap),
 		subs:    map[int]chan Line{},

@@ -134,3 +134,23 @@ func TestSinkRotates(t *testing.T) {
 		t.Fatalf("expected at least one rotated backup file, found none")
 	}
 }
+
+func TestPolicyReachesLoggers(t *testing.T) {
+	p := Policy{MaxSizeMB: 7, MaxBackups: 3, MaxAgeDays: 9, Compress: true}
+	s := newSinkP(t.TempDir(), "app#0", p, stepClock())
+	defer s.Close()
+	if s.outFile.MaxSize != 7 || s.outFile.MaxBackups != 3 || s.outFile.MaxAge != 9 || !s.outFile.Compress {
+		t.Fatalf("out logger not configured from policy: %+v", s.outFile)
+	}
+	if s.errFile.MaxAge != 9 || !s.errFile.Compress {
+		t.Fatalf("err logger not configured from policy: %+v", s.errFile)
+	}
+}
+
+func TestDefaultPolicyAppliedByNewSink(t *testing.T) {
+	s := newSink(t.TempDir(), "app#0", stepClock())
+	defer s.Close()
+	if s.outFile.MaxAge != DefaultPolicy.MaxAgeDays || !s.outFile.Compress {
+		t.Fatalf("newSink did not apply DefaultPolicy: %+v", s.outFile)
+	}
+}
