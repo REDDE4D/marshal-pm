@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -71,6 +73,58 @@ func TestLogsUnknownTargetNotFound(t *testing.T) {
 	err := srv.Logs(&pb.LogRequest{Target: "ghost"}, newFakeLogStream(ctx))
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("got %v, want NotFound", err)
+	}
+}
+
+func TestStreamMatch(t *testing.T) {
+	cases := []struct {
+		f      pb.LogStream
+		stderr bool
+		want   bool
+	}{
+		{pb.LogStream_LOG_STREAM_UNSPECIFIED, false, true},
+		{pb.LogStream_LOG_STREAM_UNSPECIFIED, true, true},
+		{pb.LogStream_LOG_STREAM_STDOUT, false, true},
+		{pb.LogStream_LOG_STREAM_STDOUT, true, false},
+		{pb.LogStream_LOG_STREAM_STDERR, true, true},
+		{pb.LogStream_LOG_STREAM_STDERR, false, false},
+	}
+	for _, c := range cases {
+		if got := streamMatch(c.f, c.stderr); got != c.want {
+			t.Fatalf("streamMatch(%v,%v)=%v want %v", c.f, c.stderr, got, c.want)
+		}
+	}
+}
+
+func TestBackfillRoutingPerStreamReadsFiles(t *testing.T) {
+	reg := logs.NewRegistry(t.TempDir())
+	out, errw := reg.WriterPair("app#0")
+	_, _ = out.Write([]byte("o1\no2\n"))
+	_, _ = errw.Write([]byte("e1\n"))
+	labeled := reg.ResolveLabeled([]string{"app#0"})
+
+	got := backfillLines(labeled, 10, pb.LogStream_LOG_STREAM_STDERR)
+	if len(got) != 1 || got[0].line.Text != "e1" || !got[0].line.Stderr {
+		t.Fatalf("stderr-only backfill wrong: %+v", got)
+	}
+}
+
+func TestMergedBackfillReadsFilesWhenRingCold(t *testing.T) {
+	dir := t.TempDir()
+	// Pre-existing on-disk history, as if written before a daemon restart.
+	if err := os.WriteFile(filepath.Join(dir, "app#0.out.log"), []byte("o1\no2\no3\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "app#0.err.log"), []byte("e1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reg := logs.NewRegistry(dir)
+	reg.WriterPair("app#0") // create the sink with a cold (empty) ring; files untouched
+	labeled := reg.ResolveLabeled([]string{"app#0"})
+
+	got := backfillLines(labeled, 10, pb.LogStream_LOG_STREAM_UNSPECIFIED)
+	if len(got) != 4 {
+		t.Fatalf("cold-ring merged backfill must read the 4 on-disk lines, got %d", len(got))
 	}
 }
 

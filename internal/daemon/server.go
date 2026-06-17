@@ -26,12 +26,13 @@ import (
 // Server implements pb.DaemonServer backed by a dynamic manager.
 type Server struct {
 	pb.UnimplementedDaemonServer
-	mgr     *manager.Manager
-	store   *store.Store
-	logs    *logs.Registry
-	metrics *metrics.Sampler
-	mdb     *metricstore.Store // metric history
-	kill    func()             // triggers daemon shutdown (set by Run)
+	mgr              *manager.Manager
+	store            *store.Store
+	logs             *logs.Registry
+	metrics          *metrics.Sampler
+	mdb              *metricstore.Store // metric history
+	kill             func()             // triggers daemon shutdown (set by Run)
+	logPolicyDefault logs.Policy        // effective default log policy (from WithLogRetention)
 }
 
 // Start admits and launches one or more apps.
@@ -41,6 +42,9 @@ func (s *Server) Start(_ context.Context, req *pb.StartRequest) (*pb.ProcList, e
 		app, err := appSpecToConfig(spec)
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+		}
+		if s.logs != nil {
+			s.logs.SetPolicy(app.Name, logPolicy(app, s.logPolicyDefault))
 		}
 		snaps, err := s.mgr.Add(app)
 		if err != nil {
@@ -119,6 +123,7 @@ func (s *Server) Kill(_ context.Context, _ *pb.Empty) (*pb.Ack, error) {
 type runOptions struct {
 	sampleInterval time.Duration
 	retention      time.Duration
+	logRetention   logs.Policy
 }
 
 // Option configures Run.
@@ -132,6 +137,11 @@ func WithSampleInterval(d time.Duration) Option {
 // WithRetention overrides the 7-day metric-history retention window (used by tests).
 func WithRetention(d time.Duration) Option {
 	return func(o *runOptions) { o.retention = d }
+}
+
+// WithLogRetention overrides the default log retention/compression policy.
+func WithLogRetention(p logs.Policy) Option {
+	return func(o *runOptions) { o.logRetention = p }
 }
 
 // metricsSnapshot adapts the manager's instance list to the sampler's view.
@@ -153,7 +163,7 @@ func metricsSnapshot(m *manager.Manager) func() []metrics.Instance {
 // Run starts the daemon: resolves the socket, auto-resurrects, serves until ctx
 // is canceled or Kill is called, then gracefully stops everything.
 func Run(ctx context.Context, st *store.Store, opts ...Option) error {
-	cfg := runOptions{sampleInterval: 5 * time.Second, retention: 168 * time.Hour}
+	cfg := runOptions{sampleInterval: 5 * time.Second, retention: 168 * time.Hour, logRetention: logs.DefaultPolicy}
 	for _, o := range opts {
 		o(&cfg)
 	}
@@ -164,6 +174,12 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 		return err
 	}
 	reg := logs.NewRegistry(st.LogsDir())
+	reg.SetDefaultPolicy(cfg.logRetention)
+	if apps, err := st.Load(); err == nil {
+		for _, app := range apps {
+			reg.SetPolicy(app.Name, logPolicy(app, cfg.logRetention))
+		}
+	}
 	mgr := manager.New(ctx, manager.WithLogs(reg))
 	sampler := metrics.NewSampler(cfg.sampleInterval)
 	mdb, err := metricstore.Open(st.MetricsDBPath())
@@ -198,7 +214,7 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 	}
 
 	gs := grpc.NewServer()
-	srv := &Server{mgr: mgr, store: st, logs: reg, metrics: sampler, mdb: mdb}
+	srv := &Server{mgr: mgr, store: st, logs: reg, metrics: sampler, mdb: mdb, logPolicyDefault: cfg.logRetention}
 	var once sync.Once
 	stopped := make(chan struct{})
 	srv.kill = func() { once.Do(func() { close(stopped) }) }

@@ -2,6 +2,8 @@ package config
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -133,5 +135,42 @@ func TestPrepareAppliesDefaultsAndValidates(t *testing.T) {
 	bad := &Config{Apps: []App{{Name: "x"}}} // no cmd
 	if err := bad.Prepare(); err == nil {
 		t.Fatal("Prepare: want error for missing cmd")
+	}
+}
+
+func TestLoadLogRetention(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "marshal.yaml")
+	yaml := "apps:\n" +
+		"  - name: api\n" +
+		"    cmd: ./api\n" +
+		"    logs:\n" +
+		"      max_size_mb: 50\n" +
+		"      max_age_days: 0\n" +
+		"      compress: false\n" +
+		"  - name: web\n" +
+		"    cmd: ./web\n"
+	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	api := cfg.Apps[0]
+	if api.Logs == nil || api.Logs.MaxSizeMB == nil || *api.Logs.MaxSizeMB != 50 {
+		t.Fatalf("api max_size_mb not parsed: %+v", api.Logs)
+	}
+	if api.Logs.MaxAgeDays == nil || *api.Logs.MaxAgeDays != 0 {
+		t.Fatalf("explicit max_age_days:0 must be preserved, not nil")
+	}
+	if api.Logs.Compress == nil || *api.Logs.Compress != false {
+		t.Fatalf("compress:false must be preserved")
+	}
+	if api.Logs.MaxBackups != nil {
+		t.Fatalf("omitted max_backups must stay nil for default fallback")
+	}
+	if cfg.Apps[1].Logs != nil {
+		t.Fatalf("web has no logs block; want nil")
 	}
 }

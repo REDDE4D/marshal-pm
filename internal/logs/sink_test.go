@@ -1,6 +1,8 @@
 package logs
 
 import (
+	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,5 +134,76 @@ func TestSinkRotates(t *testing.T) {
 	entries, _ := filepath.Glob(filepath.Join(dir, "app#0.out-*.log"))
 	if len(entries) == 0 {
 		t.Fatalf("expected at least one rotated backup file, found none")
+	}
+}
+
+func TestPolicyReachesLoggers(t *testing.T) {
+	p := Policy{MaxSizeMB: 7, MaxBackups: 3, MaxAgeDays: 9, Compress: true}
+	s := newSinkP(t.TempDir(), "app#0", p, stepClock())
+	defer s.Close()
+	if s.outFile.MaxSize != 7 || s.outFile.MaxBackups != 3 || s.outFile.MaxAge != 9 || !s.outFile.Compress {
+		t.Fatalf("out logger not configured from policy: %+v", s.outFile)
+	}
+	if s.errFile.MaxAge != 9 || !s.errFile.Compress {
+		t.Fatalf("err logger not configured from policy: %+v", s.errFile)
+	}
+}
+
+func TestDefaultPolicyAppliedByNewSink(t *testing.T) {
+	s := newSink(t.TempDir(), "app#0", stepClock())
+	defer s.Close()
+	if s.outFile.MaxAge != DefaultPolicy.MaxAgeDays || !s.outFile.Compress {
+		t.Fatalf("newSink did not apply DefaultPolicy: %+v", s.outFile)
+	}
+}
+
+func TestSubscribeWithRingNoGapNoDup(t *testing.T) {
+	s := newSink(t.TempDir(), "app#0", stepClock())
+	defer s.Close()
+	w := s.Writer(false)
+	// Pre-existing history in the ring.
+	for i := 0; i < 5; i++ {
+		_, _ = w.Write([]byte(fmt.Sprintf("pre-%d\n", i)))
+	}
+	backfill, live, cancel := s.SubscribeWithRing(100)
+	defer cancel()
+	// New lines after the atomic snapshot must arrive only on the live channel.
+	for i := 0; i < 5; i++ {
+		_, _ = w.Write([]byte(fmt.Sprintf("post-%d\n", i)))
+	}
+	seen := map[string]int{}
+	for _, ln := range backfill {
+		seen[ln.Text]++
+	}
+	for i := 0; i < 5; i++ {
+		ln := <-live
+		seen[ln.Text]++
+	}
+	for i := 0; i < 5; i++ {
+		if seen[fmt.Sprintf("pre-%d", i)] != 1 {
+			t.Fatalf("pre-%d seen %d times", i, seen[fmt.Sprintf("pre-%d", i)])
+		}
+		if seen[fmt.Sprintf("post-%d", i)] != 1 {
+			t.Fatalf("post-%d seen %d times", i, seen[fmt.Sprintf("post-%d", i)])
+		}
+	}
+}
+
+func TestPartialLineCapForcesFlush(t *testing.T) {
+	s := newSink(t.TempDir(), "app#0", stepClock())
+	defer s.Close()
+	w := s.Writer(false)
+	// 200 KiB with no newline must not stay buffered; it flushes in <=64 KiB chunks.
+	if _, err := w.Write(bytes.Repeat([]byte("x"), 200*1024)); err != nil {
+		t.Fatal(err)
+	}
+	got := s.Backfill(0)
+	if len(got) < 3 {
+		t.Fatalf("expected >=3 forced-flush lines, got %d", len(got))
+	}
+	for _, ln := range got {
+		if len(ln.Text) > maxLineBytes {
+			t.Fatalf("line exceeds cap: %d bytes", len(ln.Text))
+		}
 	}
 }

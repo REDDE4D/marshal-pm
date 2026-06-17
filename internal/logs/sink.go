@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"io"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,10 +14,11 @@ import (
 )
 
 const (
-	maxSizeMB  = 10   // rotate at 10MB
-	maxBackups = 5    // keep 5 rotated files
-	ringCap    = 1000 // ~1000 lines/instance in memory
-	subBuffer  = 256  // per-subscriber channel buffer
+	maxSizeMB    = 10        // rotate at 10MB
+	maxBackups   = 5         // keep 5 rotated files
+	ringCap      = 1000      // ~1000 lines/instance in memory
+	subBuffer    = 256       // per-subscriber channel buffer
+	maxLineBytes = 64 * 1024 // force-flush a newline-less line at this size
 )
 
 // Line is one captured output line with its origin.
@@ -40,14 +42,39 @@ type Sink struct {
 	closed  bool
 }
 
-func newSink(dir, label string, now func() time.Time) *Sink {
-	return newSinkWithLimits(dir, label, maxSizeMB, maxBackups, now)
+// Policy controls log-file rotation, retention, and compression for one sink.
+type Policy struct {
+	MaxSizeMB  int  // rotate threshold in MB (lumberjack MaxSize)
+	MaxBackups int  // rotated files kept (lumberjack MaxBackups)
+	MaxAgeDays int  // delete rotated files older than this many days (0 = no age limit)
+	Compress   bool // gzip rotated files
 }
 
+// DefaultPolicy is the daemon-wide default when an app declares no override.
+var DefaultPolicy = Policy{MaxSizeMB: maxSizeMB, MaxBackups: maxBackups, MaxAgeDays: 14, Compress: true}
+
+func newSink(dir, label string, now func() time.Time) *Sink {
+	return newSinkP(dir, label, DefaultPolicy, now)
+}
+
+// newSinkWithLimits is retained for existing tests; size/backups only, no age/compress.
 func newSinkWithLimits(dir, label string, sizeMB, backups int, now func() time.Time) *Sink {
+	return newSinkP(dir, label, Policy{MaxSizeMB: sizeMB, MaxBackups: backups}, now)
+}
+
+func newSinkP(dir, label string, p Policy, now func() time.Time) *Sink {
+	mk := func(suffix string) *lumberjack.Logger {
+		return &lumberjack.Logger{
+			Filename:   filepath.Join(dir, label+suffix),
+			MaxSize:    p.MaxSizeMB,
+			MaxBackups: p.MaxBackups,
+			MaxAge:     p.MaxAgeDays,
+			Compress:   p.Compress,
+		}
+	}
 	return &Sink{
-		outFile: &lumberjack.Logger{Filename: filepath.Join(dir, label+".out.log"), MaxSize: sizeMB, MaxBackups: backups},
-		errFile: &lumberjack.Logger{Filename: filepath.Join(dir, label+".err.log"), MaxSize: sizeMB, MaxBackups: backups},
+		outFile: mk(".out.log"),
+		errFile: mk(".err.log"),
 		now:     now,
 		ring:    newRing(ringCap),
 		subs:    map[int]chan Line{},
@@ -86,6 +113,10 @@ func (s *Sink) write(stderr bool, p []byte) (int, error) {
 		*part = (*part)[i+1:]
 		s.emit(Line{Ts: s.now(), Stderr: stderr, Text: text})
 	}
+	for len(*part) >= maxLineBytes {
+		s.emit(Line{Ts: s.now(), Stderr: stderr, Text: string((*part)[:maxLineBytes])})
+		*part = (*part)[maxLineBytes:]
+	}
 	return len(p), nil
 }
 
@@ -98,6 +129,20 @@ func (s *Sink) emit(ln Line) {
 		default: // drop: a slow follower must never stall the process
 		}
 	}
+}
+
+// FileBackfill returns up to n lines for one stream read from the rotated
+// files on disk (deep history that outlives the in-memory ring).
+func (s *Sink) FileBackfill(stderr bool, n int) ([]Line, error) {
+	f := s.outFile.Filename
+	if stderr {
+		f = s.errFile.Filename
+	}
+	dir := filepath.Dir(f)
+	// base file name is "<label>.out.log"; strip ".out.log"/".err.log" to recover the label.
+	name := filepath.Base(f)
+	label := strings.TrimSuffix(strings.TrimSuffix(name, ".err.log"), ".out.log")
+	return fileBackfill(dir, label, stderr, n)
 }
 
 // Backfill returns the last n captured lines (merged across streams, in order).
@@ -120,6 +165,31 @@ func (s *Sink) Subscribe() (<-chan Line, func()) {
 	s.nextID++
 	s.subs[id] = ch
 	return ch, func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if c, ok := s.subs[id]; ok {
+			delete(s.subs, id)
+			close(c)
+		}
+	}
+}
+
+// SubscribeWithRing atomically snapshots the last n ring lines and registers a
+// live follower under one lock, so no line falls between backfill and live and
+// none is delivered twice. Call cancel to unsubscribe.
+func (s *Sink) SubscribeWithRing(n int) ([]Line, <-chan Line, func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	backfill := s.ring.last(n)
+	ch := make(chan Line, subBuffer)
+	if s.closed {
+		close(ch)
+		return backfill, ch, func() {}
+	}
+	id := s.nextID
+	s.nextID++
+	s.subs[id] = ch
+	return backfill, ch, func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if c, ok := s.subs[id]; ok {
