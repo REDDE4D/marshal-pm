@@ -21,6 +21,9 @@ type SnapshotFunc func() []*pb.ProcInfo
 // MetricsFunc returns local metric rows strictly newer than sinceTsMs.
 type MetricsFunc func(sinceTsMs int64) []*pb.MetricSample
 
+// LogsFunc returns captured log lines strictly newer than sinceTsMs.
+type LogsFunc func(sinceTsMs int64) []*pb.LogShipLine
+
 // Client maintains one outbound stream to the central server.
 type Client struct {
 	addr     string
@@ -28,6 +31,7 @@ type Client struct {
 	version  string
 	snapshot SnapshotFunc
 	metrics  MetricsFunc
+	logs     LogsFunc
 	interval time.Duration
 	minBO    time.Duration
 	maxBO    time.Duration
@@ -46,6 +50,9 @@ func WithBackoff(min, max time.Duration) Option {
 
 // WithMetrics enables upstream metric shipping sourced from fn.
 func WithMetrics(fn MetricsFunc) Option { return func(c *Client) { c.metrics = fn } }
+
+// WithLogs enables upstream log shipping sourced from fn.
+func WithLogs(fn LogsFunc) Option { return func(c *Client) { c.logs = fn } }
 
 // New builds a fleet client. snap must be non-nil.
 func New(addr, name, version string, snap SnapshotFunc, opts ...Option) *Client {
@@ -107,18 +114,22 @@ func (c *Client) connectOnce(ctx context.Context) (bool, error) {
 	}}); err != nil {
 		return false, err
 	}
-	// Receive the HelloAck to seed the metric watermark.
-	var watermark int64
+	// Receive the HelloAck to seed the metric and log watermarks.
+	var watermark, logWM int64
 	if ack, err := stream.Recv(); err != nil {
 		return true, err
 	} else if a := ack.GetHelloAck(); a != nil {
 		watermark = a.GetLastMetricTsMs()
+		logWM = a.GetLastLogTsMs()
 	}
 
 	if err := c.pushSnapshot(stream); err != nil { // immediate first snapshot
 		return true, err
 	}
 	if err := c.pushMetrics(stream, &watermark); err != nil { // immediate backfill
+		return true, err
+	}
+	if err := c.pushLogs(stream, &logWM); err != nil { // immediate backfill
 		return true, err
 	}
 
@@ -133,6 +144,9 @@ func (c *Client) connectOnce(ctx context.Context) (bool, error) {
 				return true, err
 			}
 			if err := c.pushMetrics(stream, &watermark); err != nil {
+				return true, err
+			}
+			if err := c.pushLogs(stream, &logWM); err != nil {
 				return true, err
 			}
 		}
@@ -164,6 +178,33 @@ func (c *Client) pushMetrics(stream pb.Fleet_ConnectClient, watermark *int64) er
 	for _, s := range samples {
 		if s.GetTsMs() > mx {
 			mx = s.GetTsMs()
+		}
+	}
+	if mx > *watermark {
+		*watermark = mx
+	}
+	return nil
+}
+
+// pushLogs ships local lines newer than *watermark; on success advances it to
+// the max ts shipped. No-op when log shipping is disabled or nothing is new.
+func (c *Client) pushLogs(stream pb.Fleet_ConnectClient, watermark *int64) error {
+	if c.logs == nil {
+		return nil
+	}
+	lines := c.logs(*watermark)
+	if len(lines) == 0 {
+		return nil
+	}
+	if err := stream.Send(&pb.AgentMessage{Msg: &pb.AgentMessage_Logs{
+		Logs: &pb.LogBatch{Lines: lines},
+	}}); err != nil {
+		return err
+	}
+	var mx int64
+	for _, l := range lines {
+		if l.GetTsMs() > mx {
+			mx = l.GetTsMs()
 		}
 	}
 	if mx > *watermark {
