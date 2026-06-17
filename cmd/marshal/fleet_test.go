@@ -2,11 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"io"
+	"net"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
 
 	"marshal/internal/pb"
 )
@@ -95,4 +99,43 @@ func TestPrintFleetOfflineCPUMem(t *testing.T) {
 	if strings.Contains(out, "5.0%") || strings.Contains(out, "1.0MB") {
 		t.Fatalf("offline proc should not render cpu/mem values:\n%s", out)
 	}
+}
+
+func TestFleetRestartSendsControlOp(t *testing.T) {
+	captured := make(chan *pb.FleetControlRequest, 1)
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gs := grpc.NewServer()
+	pb.RegisterFleetServer(gs, &controlStub{captured: captured})
+	go func() { _ = gs.Serve(lis) }()
+	defer gs.Stop()
+
+	cmd := fleetCmd()
+	cmd.SetArgs([]string{"restart", "web-1", "api", "--server", lis.Addr().String()})
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	select {
+	case req := <-captured:
+		if req.GetAgentName() != "web-1" || req.GetOp().GetRestart().GetTarget() != "api" {
+			t.Fatalf("captured = %v, want web-1 restart api", req)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("FleetControl was never called")
+	}
+}
+
+type controlStub struct {
+	pb.UnimplementedFleetServer
+	captured chan *pb.FleetControlRequest
+}
+
+func (s *controlStub) FleetControl(_ context.Context, req *pb.FleetControlRequest) (*pb.FleetControlResponse, error) {
+	s.captured <- req
+	return &pb.FleetControlResponse{Result: &pb.ControlResult{Ok: true}}, nil
 }

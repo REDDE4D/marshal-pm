@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"marshal/internal/config"
 	"marshal/internal/pb"
 )
 
@@ -22,6 +23,19 @@ func fleetCmd() *cobra.Command {
 	cmd.AddCommand(fleetPsCmd())
 	cmd.AddCommand(fleetMetricsCmd())
 	cmd.AddCommand(fleetLogsCmd())
+	cmd.AddCommand(fleetStartCmd())
+	cmd.AddCommand(fleetSelectorCmd("stop", "Stop an app/instance on one agent",
+		func(t string) *pb.ControlOp {
+			return &pb.ControlOp{Op: &pb.ControlOp_Stop{Stop: &pb.Selector{Target: t}}}
+		}))
+	cmd.AddCommand(fleetSelectorCmd("restart", "Restart an app/instance on one agent",
+		func(t string) *pb.ControlOp {
+			return &pb.ControlOp{Op: &pb.ControlOp_Restart{Restart: &pb.Selector{Target: t}}}
+		}))
+	cmd.AddCommand(fleetSelectorCmd("delete", "Delete an app/instance on one agent",
+		func(t string) *pb.ControlOp {
+			return &pb.ControlOp{Op: &pb.ControlOp_Delete{Delete: &pb.Selector{Target: t}}}
+		}))
 	return cmd
 }
 
@@ -176,4 +190,70 @@ func printFleet(cmd *cobra.Command, resp *pb.ListFleetResponse) {
 		}
 	}
 	_ = w.Flush()
+}
+
+// fleetControl dials the server, sends one control op to an agent, and prints
+// the resulting process table (or the agent's error).
+func fleetControl(cmd *cobra.Command, serverAddr string, timeout time.Duration, agent string, op *pb.ControlOp) error {
+	conn, err := grpc.NewClient(resolveServer(serverAddr),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	resp, err := pb.NewFleetClient(conn).FleetControl(ctx, &pb.FleetControlRequest{
+		AgentName: agent, Op: op,
+	})
+	if err != nil {
+		return err
+	}
+	res := resp.GetResult()
+	if !res.GetOk() {
+		return fmt.Errorf("%s", res.GetError())
+	}
+	printProcs(cmd, &pb.ProcList{Procs: res.GetProcs()})
+	return nil
+}
+
+func fleetSelectorCmd(use, short string, build func(target string) *pb.ControlOp) *cobra.Command {
+	var serverAddr string
+	var timeout time.Duration
+	cmd := &cobra.Command{
+		Use:   use + " <agent> <name|id|all>",
+		Short: short,
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return fleetControl(cmd, serverAddr, timeout, args[0], build(args[1]))
+		},
+	}
+	cmd.Flags().StringVar(&serverAddr, "server", "", "central server address (default $MARSHAL_SERVER or localhost:9000)")
+	cmd.Flags().DurationVar(&timeout, "timeout", 10*time.Second, "command timeout")
+	return cmd
+}
+
+func fleetStartCmd() *cobra.Command {
+	var serverAddr string
+	var timeout time.Duration
+	cmd := &cobra.Command{
+		Use:   "start <agent> <marshal.yaml>",
+		Short: "Deploy and start app(s) from a marshal.yaml on one agent",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load(args[1])
+			if err != nil {
+				return err
+			}
+			specs := make([]*pb.AppSpec, 0, len(cfg.Apps))
+			for _, a := range cfg.Apps {
+				specs = append(specs, appToSpec(a))
+			}
+			op := &pb.ControlOp{Op: &pb.ControlOp_Start{Start: &pb.StartRequest{Apps: specs}}}
+			return fleetControl(cmd, serverAddr, timeout, args[0], op)
+		},
+	}
+	cmd.Flags().StringVar(&serverAddr, "server", "", "central server address (default $MARSHAL_SERVER or localhost:9000)")
+	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "command timeout")
+	return cmd
 }
