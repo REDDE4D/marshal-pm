@@ -11,6 +11,22 @@ import (
 	"marshal/internal/pb"
 )
 
+func TestFleetMetricsCmdShape(t *testing.T) {
+	cmd := fleetCmd()
+	var metrics bool
+	for _, c := range cmd.Commands() {
+		if c.Name() == "metrics" {
+			metrics = true
+			if c.Flags().Lookup("since") == nil || c.Flags().Lookup("server") == nil {
+				t.Fatal("fleet metrics missing --since/--server flags")
+			}
+		}
+	}
+	if !metrics {
+		t.Fatal("fleet has no metrics subcommand")
+	}
+}
+
 func TestResolveServer(t *testing.T) {
 	if got := resolveServer("explicit:1"); got != "explicit:1" {
 		t.Fatalf("flag should win, got %q", got)

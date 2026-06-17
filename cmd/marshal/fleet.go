@@ -20,6 +20,7 @@ func fleetCmd() *cobra.Command {
 		Short: "Operate on the central server / fleet",
 	}
 	cmd.AddCommand(fleetPsCmd())
+	cmd.AddCommand(fleetMetricsCmd())
 	return cmd
 }
 
@@ -47,6 +48,44 @@ func fleetPsCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&serverAddr, "server", "", "central server address (default $MARSHAL_SERVER or localhost:9000)")
+	return cmd
+}
+
+func fleetMetricsCmd() *cobra.Command {
+	var serverAddr string
+	var since, bucket time.Duration
+	var cpuOnly, memOnly bool
+	cmd := &cobra.Command{
+		Use:   "metrics <agent> <name|id>",
+		Short: "Show CPU/memory history for an app/instance on one agent",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			conn, err := grpc.NewClient(resolveServer(serverAddr),
+				grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			resp, err := pb.NewFleetClient(conn).FleetMetricsHistory(ctx, &pb.FleetMetricsHistoryRequest{
+				AgentName: args[0],
+				Selector:  args[1],
+				SinceMs:   since.Milliseconds(),
+				BucketMs:  bucket.Milliseconds(),
+			})
+			if err != nil {
+				return err
+			}
+			printMetrics(cmd.OutOrStdout(), resp, args[0]+"/"+args[1], since, cpuOnly, memOnly)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&serverAddr, "server", "", "central server address (default $MARSHAL_SERVER or localhost:9000)")
+	cmd.Flags().DurationVar(&since, "since", time.Hour, "history window (e.g. 30m, 6h)")
+	cmd.Flags().DurationVar(&bucket, "bucket", 0, "bucket width (0 = auto)")
+	cmd.Flags().BoolVar(&cpuOnly, "cpu", false, "show only CPU")
+	cmd.Flags().BoolVar(&memOnly, "mem", false, "show only memory")
 	return cmd
 }
 
