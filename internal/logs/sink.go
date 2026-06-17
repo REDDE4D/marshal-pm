@@ -145,14 +145,6 @@ func (s *Sink) FileBackfill(stderr bool, n int) ([]Line, error) {
 	return fileBackfill(dir, label, stderr, n)
 }
 
-// RingSaturated reports whether the in-memory ring has wrapped — i.e. older
-// history exists on disk beyond what the ring can serve.
-func (s *Sink) RingSaturated() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.ring.full
-}
-
 // Backfill returns the last n captured lines (merged across streams, in order).
 func (s *Sink) Backfill(n int) []Line {
 	s.mu.Lock()

@@ -45,10 +45,15 @@ func backfillLines(labeled []logs.Labeled, n int, st pb.LogStream) []fanLine {
 		return trimTail(all, n)
 	}
 
-	// Merged: prefer the exact ring window unless a ring has wrapped and we
-	// still want more than it can serve.
+	// Merged: the ring gives an exact, timestamp-ordered view of the most
+	// recent lines — use it when it already satisfies the request. Otherwise
+	// the on-disk files may hold deeper history (large n, or a cold ring after
+	// a restart), so consult them; fall back to the ring only when the files
+	// have nothing beyond it, preserving exact ordering for small outputs.
+	// Cross-stream/cross-instance order in the file path is best-effort
+	// (disk lines carry no timestamp) — the documented Approach-A limitation.
 	ring := mergeBackfill(labeled, n)
-	if n == 0 || len(ring) >= n || !anyRingSaturated(labeled) {
+	if n > 0 && len(ring) >= n {
 		return ring
 	}
 	var all []fanLine
@@ -60,16 +65,10 @@ func backfillLines(labeled []logs.Labeled, n int, st pb.LogStream) []fanLine {
 			}
 		}
 	}
-	return trimTail(all, n)
-}
-
-func anyRingSaturated(labeled []logs.Labeled) bool {
-	for _, ls := range labeled {
-		if ls.Sink.RingSaturated() {
-			return true
-		}
+	if len(all) <= len(ring) {
+		return ring
 	}
-	return false
+	return trimTail(all, n)
 }
 
 func trimTail(all []fanLine, n int) []fanLine {
