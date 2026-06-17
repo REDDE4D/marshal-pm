@@ -3,8 +3,29 @@ package daemon
 import (
 	"testing"
 
+	"marshal/internal/logs"
 	"marshal/internal/metricstore"
 )
+
+func TestLogsSinceShipsNewRingLines(t *testing.T) {
+	reg := logs.NewRegistry(t.TempDir())
+	s := reg.For("api#0")
+	_, _ = s.Writer(false).Write([]byte("hello\nworld\n"))
+
+	fn := logsSince(reg)
+	got := fn(0)
+	if len(got) != 2 || got[0].GetText() != "hello" || got[1].GetText() != "world" {
+		t.Fatalf("logsSince(0) = %+v, want hello,world", got)
+	}
+	if got[0].GetLabel() != "api#0" {
+		t.Fatalf("label = %q, want api#0", got[0].GetLabel())
+	}
+	// strictly-newer filter: everything already shipped -> nothing new
+	wm := got[1].GetTsMs()
+	if rest := fn(wm); len(rest) != 0 {
+		t.Fatalf("logsSince(maxTs) = %+v, want none", rest)
+	}
+}
 
 func TestMetricsSinceConverts(t *testing.T) {
 	st, err := metricstore.Open(t.TempDir() + "/m.db")

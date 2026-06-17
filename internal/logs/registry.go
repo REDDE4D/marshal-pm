@@ -2,6 +2,7 @@ package logs
 
 import (
 	"io"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -96,5 +97,40 @@ func (r *Registry) ResolveLabeled(labels []string) []Labeled {
 			out = append(out, Labeled{Label: l, Sink: s})
 		}
 	}
+	return out
+}
+
+// LabeledLine is one ring line tagged with its instance label.
+type LabeledLine struct {
+	Label  string
+	Ts     time.Time
+	Stderr bool
+	Text   string
+}
+
+// RingSince returns every current sink's in-memory ring lines with a timestamp
+// strictly newer than sinceMs, merged ascending by timestamp. New sinks created
+// after a prior call are naturally included (the sink map is read fresh).
+func (r *Registry) RingSince(sinceMs int64) []LabeledLine {
+	r.mu.Lock()
+	type entry struct {
+		label string
+		sink  *Sink
+	}
+	snap := make([]entry, 0, len(r.sinks))
+	for l, s := range r.sinks {
+		snap = append(snap, entry{l, s})
+	}
+	r.mu.Unlock()
+
+	var out []LabeledLine
+	for _, e := range snap {
+		for _, ln := range e.sink.Backfill(0) { // whole ring
+			if ln.Ts.UnixMilli() > sinceMs {
+				out = append(out, LabeledLine{Label: e.label, Ts: ln.Ts, Stderr: ln.Stderr, Text: ln.Text})
+			}
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Ts.Before(out[j].Ts) })
 	return out
 }

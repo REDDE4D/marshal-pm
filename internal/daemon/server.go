@@ -235,7 +235,9 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 			name = "unknown"
 		}
 		fc := fleet.New(sc.Address, name, version.String(),
-			fleetSnapshot(mgr, sampler), fleet.WithMetrics(metricsSince(mdb)))
+			fleetSnapshot(mgr, sampler),
+			fleet.WithMetrics(metricsSince(mdb)),
+			fleet.WithLogs(logsSince(reg)))
 		go fc.Run(serveCtx)
 	}
 	go sampler.Run(serveCtx, metricsSnapshot(mgr))
