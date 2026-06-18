@@ -95,16 +95,26 @@ client-side.
 ### Process detail page (`#/a/<agent>/p/<proc>`)
 
 - **Back link** (`← fleet`) + breadcrumb (`agent / process`).
-- **Header:** process name, agent, status, uptime, pid, restarts; the same start/restart/stop
-  controls (room for labels now).
-- **Charts:** the existing cpu/mem time-series (`MetricChart`) over the existing window
-  selector, recolored to the Signal palette (cpu `--cyan`, mem `--mem`).
-- **Logs:** the existing log panel — stream segmented control (all/stdout/stderr), limit
-  control, and the M18 server-side search box — restyled. This is the current inline-expand
-  content, moved to the page with more height.
+- **Header card:**
+  - Top row: status dot + process name (large) + state pill on the left; the start/restart/stop
+    controls (state-aware, with labels) on the right.
+  - **Stat-tile row** (four small tiles): `cpu` (current %), `memory` (current), `uptime`, and
+    `errors · 5m` (the recent-stderr count, prominent here in `--danger` when non-zero). This is
+    the recent-error count's primary home; the overview card badge mirrors it.
+  - **Meta line:** `pid · N restarts · started <time>`. (`started` is derived client-side from
+    `now − uptime_ms` — no backend field needed. The launch **command** is intentionally *not*
+    shown: `ProcInfo` does not carry it, and adding it would require a proto + agent change,
+    which is out of scope for M19.)
+- **Metrics card:** a window selector (the existing window options, e.g. 15m / 1h / 6h) above
+  **side-by-side** cpu and memory time-series charts (`MetricChart`), recolored to the Signal
+  palette (cpu `--cyan`, mem `--mem`), each with its current-value label.
+- **Logs card:** the existing log panel — stream segmented control (all/stdout/stderr), limit
+  control, and the M18 server-side search box — restyled and given more height. This is the
+  current inline-expand content, moved to the page.
 
 Both pages poll on the existing intervals; navigating away cancels their timers (the current
-effect-cleanup pattern).
+effect-cleanup pattern). The detail page fetches `/api/metrics` and `/api/logs` for its one
+process (as the inline view does today) plus `/api/logstats` for the `errors · 5m` tile.
 
 ## Error counter
 
