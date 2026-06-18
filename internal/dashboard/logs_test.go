@@ -20,6 +20,8 @@ func (f *fakeLogs) Since(agent, selector string, afterRowID int64, limit int, fi
 	}, 8, nil
 }
 
+func (f *fakeLogs) ErrorCounts(string, int64) (map[string]int64, error) { return nil, nil }
+
 func TestLogsRequiresSession(t *testing.T) {
 	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
 	defer srv.Close()
@@ -99,6 +101,8 @@ func (r *recordingLogs) Since(agent, selector string, afterRowID int64, limit in
 	return []logstore.StoredLine{{RowID: 1, TsMs: 1, Label: "web#0", Stderr: false, Text: "x"}}, 1, nil
 }
 
+func (r *recordingLogs) ErrorCounts(string, int64) (map[string]int64, error) { return nil, nil }
+
 func TestLogsThreadsQueryFilter(t *testing.T) {
 	rl := &recordingLogs{}
 	h := newHandler(fakeLister{}, &fakeMetrics{}, rl, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", "")
@@ -110,5 +114,32 @@ func TestLogsThreadsQueryFilter(t *testing.T) {
 	}
 	if rl.gotText != "boom" {
 		t.Fatalf("Since received text %q; want %q", rl.gotText, "boom")
+	}
+}
+
+type statLogs struct{ counts map[string]int64 }
+
+func (s statLogs) Since(string, string, int64, int, logstore.StreamFilter, string) ([]logstore.StoredLine, int64, error) {
+	return nil, 0, nil
+}
+func (s statLogs) ErrorCounts(string, int64) (map[string]int64, error) { return s.counts, nil }
+
+func TestLogStatsEndpoint(t *testing.T) {
+	sl := statLogs{counts: map[string]int64{"web#0": 4, "api#0": 1}}
+	h := newHandler(fakeLister{}, &fakeMetrics{}, sl, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", "")
+	req := httptest.NewRequest("GET", "/api/logstats?agent=dev-1", nil)
+	rec := httptest.NewRecorder()
+	h.logstats(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status = %d; want 200", rec.Code)
+	}
+	var body struct {
+		Counts map[string]int64 `json:"counts"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Counts["web#0"] != 4 || body.Counts["api#0"] != 1 {
+		t.Fatalf("counts = %v; want web#0:4 api#0:1", body.Counts)
 	}
 }

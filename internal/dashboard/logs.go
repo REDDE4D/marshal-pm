@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"marshal/internal/logstore"
 )
@@ -11,6 +12,7 @@ import (
 // LogsHistory is the read side of stored log lines. *server.logStores satisfies it.
 type LogsHistory interface {
 	Since(agent, selector string, afterRowID int64, limit int, filter logstore.StreamFilter, text string) ([]logstore.StoredLine, int64, error)
+	ErrorCounts(agent string, sinceMs int64) (map[string]int64, error)
 }
 
 type logLineView struct {
@@ -102,3 +104,27 @@ func splitLogLabel(label string) (string, int) {
 	n, _ := strconv.Atoi(label[i+1:])
 	return label[:i], n
 }
+
+const errorWindowMs = 5 * 60 * 1000
+
+// logstats serves GET /api/logstats?agent=<a>: per-label recent stderr counts
+// (last 5 min). Best-effort; an empty/unknown agent returns {"counts":{}}.
+func (h *handler) logstats(w http.ResponseWriter, r *http.Request) {
+	agent := r.URL.Query().Get("agent")
+	if agent == "" {
+		http.Error(w, "agent required", http.StatusBadRequest)
+		return
+	}
+	since := nowMs() - errorWindowMs
+	counts, err := h.logsHist.ErrorCounts(agent, since)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if counts == nil {
+		counts = map[string]int64{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"counts": counts})
+}
+
+func nowMs() int64 { return time.Now().UnixMilli() }
