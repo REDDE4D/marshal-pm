@@ -103,3 +103,27 @@ export async function getLogs(
   if (r.status === 401) throw new Error("unauthorized");
   return (await r.json()) as LogsResponse;
 }
+
+export type ControlResult = { ok: boolean; error?: string };
+
+// control posts a Restart/Stop and surfaces server errors as values — it never
+// throws, so a failed control call cannot trigger a logout (only the fleet poll
+// owns auth). 200 -> the agent's result; 400/502 -> {ok:false,error}.
+export async function control(
+  agent: string,
+  selector: string,
+  action: "restart" | "stop",
+): Promise<ControlResult> {
+  const r = await fetch("/api/control", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent, selector, action }),
+  });
+  if (r.status === 200) return (await r.json()) as ControlResult;
+  try {
+    const j = await r.json();
+    return { ok: false, error: (j.error as string) ?? `error ${r.status}` };
+  } catch {
+    return { ok: false, error: `error ${r.status}` };
+  }
+}
