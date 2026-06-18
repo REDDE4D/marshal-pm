@@ -132,15 +132,20 @@ func (a *AuthStore) save() error {
 // successful load, swapping in the new data under the lock. A read or parse
 // error leaves the current in-memory data intact and is returned to the caller.
 // Atomic-rename writes guarantee we never observe a half-written file.
+//
+// The file read and JSON parse happen outside a.mu so the gRPC verify hot path
+// is not blocked while reading from disk; the lock is taken only to snapshot the
+// current mtime and, after a successful parse, to swap the new data in.
 func (a *AuthStore) Reload() error {
 	fi, err := os.Stat(a.path)
 	if err != nil {
 		return err
 	}
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	if fi.ModTime().Equal(a.mtime) {
-		return nil // unchanged — cheap no-op
+	unchanged := fi.ModTime().Equal(a.mtime)
+	a.mu.Unlock()
+	if unchanged {
+		return nil // unchanged — cheap no-op, no disk read
 	}
 	b, err := os.ReadFile(a.path)
 	if err != nil {
@@ -156,8 +161,15 @@ func (a *AuthStore) Reload() error {
 	if fresh.Users == nil {
 		fresh.Users = map[string]dashboardUser{}
 	}
-	a.data = fresh
-	a.mtime = fi.ModTime()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	// Re-check under the lock: a concurrent save() may have written newer data
+	// (and a newer mtime) while we read. Only swap if the file we parsed is still
+	// strictly newer than what's in memory, so we never clobber a fresher write.
+	if fi.ModTime().After(a.mtime) {
+		a.data = fresh
+		a.mtime = fi.ModTime()
+	}
 	return nil
 }
 

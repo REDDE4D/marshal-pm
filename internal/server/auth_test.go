@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestRotateInvalidatesOldToken(t *testing.T) {
@@ -254,8 +255,15 @@ func TestReloadCorruptKeepsOldData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Overwrite auth.json with garbage (changes mtime).
-	if err := os.WriteFile(filepath.Join(dir, "auth.json"), []byte("{ not json"), 0o600); err != nil {
+	// Overwrite auth.json with garbage. os.WriteFile is not an atomic rename, so
+	// on a coarse-granularity filesystem the mtime could land in the same tick as
+	// the original write; bump it forward explicitly so Reload always sees a change.
+	authPath := filepath.Join(dir, "auth.json")
+	if err := os.WriteFile(authPath, []byte("{ not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bump := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(authPath, bump, bump); err != nil {
 		t.Fatal(err)
 	}
 	if err := a.Reload(); err == nil {
