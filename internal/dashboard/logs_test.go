@@ -12,7 +12,7 @@ import (
 
 type fakeLogs struct{ afters []int64 }
 
-func (f *fakeLogs) Since(agent, selector string, afterRowID int64, limit int, filter logstore.StreamFilter) ([]logstore.StoredLine, int64, error) {
+func (f *fakeLogs) Since(agent, selector string, afterRowID int64, limit int, filter logstore.StreamFilter, text string) ([]logstore.StoredLine, int64, error) {
 	f.afters = append(f.afters, afterRowID)
 	return []logstore.StoredLine{
 		{RowID: 7, TsMs: 1000, Label: "web#0", Stderr: false, Text: "hello"},

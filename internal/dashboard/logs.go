@@ -10,7 +10,7 @@ import (
 
 // LogsHistory is the read side of stored log lines. *server.logStores satisfies it.
 type LogsHistory interface {
-	Since(agent, selector string, afterRowID int64, limit int, filter logstore.StreamFilter) ([]logstore.StoredLine, int64, error)
+	Since(agent, selector string, afterRowID int64, limit int, filter logstore.StreamFilter, text string) ([]logstore.StoredLine, int64, error)
 }
 
 type logLineView struct {
@@ -42,7 +42,7 @@ func (h *handler) logs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "agent and selector required", http.StatusBadRequest)
 		return
 	}
-	lines, cursor, err := h.logsHist.Since(agent, selector, parseAfter(q.Get("after")), parseLimit(q.Get("limit")), streamFilterFor(q.Get("stream")))
+	lines, cursor, err := h.logsHist.Since(agent, selector, parseAfter(q.Get("after")), parseLimit(q.Get("limit")), streamFilterFor(q.Get("stream")), "")
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return

@@ -365,7 +365,7 @@ func TestConnectStoresLogBatchAndAcksWatermark(t *testing.T) {
 	if mx, _ := st.MaxTs(); mx != 2000 {
 		t.Fatalf("MaxTs = %d, want 2000", mx)
 	}
-	got, _ := st.Tail("api#0", 10, logstore.StreamAny)
+	got, _ := st.Tail("api#0", 10, logstore.StreamAny, "")
 	if len(got) != 2 || got[0].Text != "l1" || got[1].Text != "l2" {
 		t.Fatalf("stored = %+v, want l1,l2", got)
 	}
