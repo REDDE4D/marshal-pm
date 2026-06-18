@@ -21,29 +21,32 @@ type ctxKey string
 const userKey ctxKey = "user"
 
 type handler struct {
-	lister   FleetLister
-	auth     Authenticator
-	sessions *sessionStore
-	files    fs.FS
-	static   http.Handler
-	mux      http.Handler
+	lister      FleetLister
+	metricsHist MetricsHistory
+	auth        Authenticator
+	sessions    *sessionStore
+	files       fs.FS
+	static      http.Handler
+	mux         http.Handler
 }
 
 // newHandler builds a *handler (with its mux) for the given session lifetime.
-func newHandler(lister FleetLister, auth Authenticator, ttl time.Duration) *handler {
+func newHandler(lister FleetLister, metrics MetricsHistory, auth Authenticator, ttl time.Duration) *handler {
 	files := staticFS()
 	h := &handler{
-		lister:   lister,
-		auth:     auth,
-		sessions: newSessionStore(ttl, nil),
-		files:    files,
-		static:   http.FileServer(http.FS(files)),
+		lister:      lister,
+		metricsHist: metrics,
+		auth:        auth,
+		sessions:    newSessionStore(ttl, nil),
+		files:       files,
+		static:      http.FileServer(http.FS(files)),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/login", h.login)
 	mux.HandleFunc("POST /api/logout", h.logout)
 	mux.HandleFunc("GET /api/session", h.requireSession(h.session))
 	mux.HandleFunc("GET /api/fleet", h.requireSession(h.fleet))
+	mux.HandleFunc("GET /api/metrics", h.requireSession(h.metrics))
 	mux.HandleFunc("/", h.spa)
 	h.mux = mux
 	return h
@@ -51,8 +54,8 @@ func newHandler(lister FleetLister, auth Authenticator, ttl time.Duration) *hand
 
 // NewHandler builds the dashboard HTTP handler with the given session lifetime.
 // The returned http.Handler is safe to use with httptest servers in unit tests.
-func NewHandler(lister FleetLister, auth Authenticator, ttl time.Duration) http.Handler {
-	return newHandler(lister, auth, ttl).mux
+func NewHandler(lister FleetLister, metrics MetricsHistory, auth Authenticator, ttl time.Duration) http.Handler {
+	return newHandler(lister, metrics, auth, ttl).mux
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

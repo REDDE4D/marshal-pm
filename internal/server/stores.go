@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"marshal/internal/metricstore"
 )
@@ -71,6 +72,41 @@ func (s *stores) pruneAll(beforeMs int64) {
 	for _, st := range s.m {
 		_, _ = st.Prune(beforeMs)
 	}
+}
+
+// History returns merged CPU/mem buckets for an agent's selector (an app name or
+// "app#instance"), matching the selector exactly or as a "selector#" prefix and
+// merging across instances, oldest first. sinceMs is the window width in ms.
+// A missing agent returns (nil, nil).
+func (s *stores) History(agent, selector string, sinceMs, bucketMs int64) ([]metricstore.Bucket, error) {
+	if !s.has(agent) {
+		return nil, nil
+	}
+	st, err := s.get(agent)
+	if err != nil {
+		return nil, err
+	}
+	labels, err := st.Labels()
+	if err != nil {
+		return nil, err
+	}
+	var matched []string
+	for _, l := range labels {
+		if l == selector || strings.HasPrefix(l, selector+"#") {
+			matched = append(matched, l)
+		}
+	}
+	bucketMs = metricstore.AutoBucketMs(sinceMs, bucketMs)
+	lowerMs := time.Now().UnixMilli() - sinceMs
+	var series [][]metricstore.Bucket
+	for _, l := range matched {
+		bs, err := st.Query(metricstore.QueryReq{Label: l, SinceMs: lowerMs, BucketMs: bucketMs})
+		if err != nil {
+			return nil, err
+		}
+		series = append(series, bs)
+	}
+	return metricstore.MergeBuckets(series), nil
 }
 
 // sanitizeAgent turns an agent name into a safe single path segment.

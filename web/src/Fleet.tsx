@@ -1,5 +1,15 @@
-import { useEffect, useState } from "react";
-import { Agent, getFleet, logout } from "./api";
+import { Fragment, useEffect, useState } from "react";
+import {
+  Agent,
+  AgentMetrics,
+  Bucket,
+  getFleet,
+  getMetrics,
+  getMetricsForProc,
+  logout,
+} from "./api";
+import { Sparkline } from "./Sparkline";
+import { MetricChart } from "./MetricChart";
 
 function uptime(ms: number): string {
   if (ms <= 0) return "—";
@@ -11,9 +21,25 @@ function uptime(ms: number): string {
   return `${s}s`;
 }
 
+function mib(bytes: number): string {
+  if (bytes <= 0) return "—";
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const WINDOWS: { label: string; ms: number }[] = [
+  { label: "5m", ms: 5 * 60 * 1000 },
+  { label: "1h", ms: 60 * 60 * 1000 },
+  { label: "6h", ms: 6 * 60 * 60 * 1000 },
+  { label: "24h", ms: 24 * 60 * 60 * 1000 },
+];
+
 export function Fleet({ onLogout }: { onLogout: () => void }) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [err, setErr] = useState("");
+  const [metrics, setMetrics] = useState<Record<string, Record<string, { cpu: number[]; mem: number[] }>>>({});
+  const [expanded, setExpanded] = useState<{ agent: string; proc: string } | null>(null);
+  const [windowMs, setWindowMs] = useState(WINDOWS[1].ms); // default 1h
+  const [detail, setDetail] = useState<Bucket[]>([]);
 
   useEffect(() => {
     let stop = false;
@@ -35,6 +61,57 @@ export function Fleet({ onLogout }: { onLogout: () => void }) {
       clearInterval(id);
     };
   }, [onLogout]);
+
+  useEffect(() => {
+    let stop = false;
+    async function tick() {
+      try {
+        const data: AgentMetrics[] = await getMetrics(5 * 60 * 1000);
+        if (stop) return;
+        const next: Record<string, Record<string, { cpu: number[]; mem: number[] }>> = {};
+        for (const a of data) {
+          next[a.agent] = {};
+          for (const p of a.procs) {
+            next[a.agent][p.name] = {
+              cpu: p.buckets.map((b) => b.cpu_avg),
+              mem: p.buckets.map((b) => b.mem_avg),
+            };
+          }
+        }
+        setMetrics(next);
+      } catch {
+        // metrics are best-effort; the fleet poll owns auth/logout.
+      }
+    }
+    tick();
+    const id = setInterval(tick, 10000);
+    return () => {
+      stop = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!expanded) {
+      setDetail([]);
+      return;
+    }
+    let stop = false;
+    async function tick() {
+      try {
+        const data = await getMetricsForProc(expanded!.agent, expanded!.proc, windowMs, 0);
+        if (!stop) setDetail(data[0]?.procs[0]?.buckets ?? []);
+      } catch {
+        // best-effort; fleet poll owns auth.
+      }
+    }
+    tick();
+    const id = setInterval(tick, 10000);
+    return () => {
+      stop = true;
+      clearInterval(id);
+    };
+  }, [expanded, windowMs]);
 
   async function doLogout() {
     await logout();
@@ -65,21 +142,69 @@ export function Fleet({ onLogout }: { onLogout: () => void }) {
                 <th>PID</th>
                 <th>Uptime</th>
                 <th>Restarts</th>
+                <th>CPU</th>
+                <th>Mem</th>
               </tr>
             </thead>
             <tbody>
-              {a.procs.map((p) => (
-                <tr key={`${p.name}-${p.pid}`}>
-                  <td>{p.name}</td>
-                  <td>{p.state}</td>
-                  <td>{p.pid || "—"}</td>
-                  <td>{uptime(p.uptime_ms)}</td>
-                  <td>{p.restarts}</td>
-                </tr>
-              ))}
+              {a.procs.map((p) => {
+                const isOpen = expanded?.agent === a.name && expanded?.proc === p.name;
+                return (
+                  <Fragment key={`${p.name}-${p.pid}`}>
+                    <tr
+                      className={isOpen ? "proc open" : "proc"}
+                      onClick={() => setExpanded(isOpen ? null : { agent: a.name, proc: p.name })}
+                    >
+                      <td>{p.name}</td>
+                      <td>{p.state}</td>
+                      <td>{p.pid || "—"}</td>
+                      <td>{uptime(p.uptime_ms)}</td>
+                      <td>{p.restarts}</td>
+                      <td>
+                        {(p.cpu * 100).toFixed(1)}%
+                        <Sparkline points={metrics[a.name]?.[p.name]?.cpu ?? []} color="#4ade80" />
+                      </td>
+                      <td>
+                        {mib(p.mem)}
+                        <Sparkline points={metrics[a.name]?.[p.name]?.mem ?? []} color="#60a5fa" />
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr className="detail">
+                        <td colSpan={7}>
+                          <div className="windows">
+                            {WINDOWS.map((wnd) => (
+                              <button
+                                key={wnd.label}
+                                className={windowMs === wnd.ms ? "active" : ""}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setWindowMs(wnd.ms);
+                                }}
+                              >
+                                {wnd.label}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="charts">
+                            <div>
+                              <h4>CPU</h4>
+                              <MetricChart buckets={detail} metric="cpu" />
+                            </div>
+                            <div>
+                              <h4>Memory</h4>
+                              <MetricChart buckets={detail} metric="mem" />
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
               {a.procs.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="empty">
+                  <td colSpan={7} className="empty">
                     No processes.
                   </td>
                 </tr>

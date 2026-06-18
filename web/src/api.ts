@@ -42,3 +42,37 @@ export async function getFleet(): Promise<Agent[]> {
   if (r.status === 401) throw new Error("unauthorized");
   return (await r.json()) as Agent[];
 }
+
+export type Bucket = {
+  ts: number;
+  cpu_avg: number;
+  cpu_max: number;
+  mem_avg: number;
+  mem_max: number;
+};
+
+export type ProcMetrics = { name: string; buckets: Bucket[] };
+export type AgentMetrics = { agent: string; procs: ProcMetrics[] };
+
+export async function getMetrics(sinceMs: number): Promise<AgentMetrics[]> {
+  const r = await fetch(`/api/metrics?since=${sinceMs}`);
+  if (r.status === 401) throw new Error("unauthorized");
+  return (await r.json()) as AgentMetrics[];
+}
+
+export async function getMetricsForProc(
+  agent: string,
+  selector: string,
+  sinceMs: number,
+  bucketMs: number,
+): Promise<AgentMetrics[]> {
+  const q = new URLSearchParams({
+    agent,
+    selector,
+    since: String(sinceMs),
+    bucket: String(bucketMs),
+  });
+  const r = await fetch(`/api/metrics?${q.toString()}`);
+  if (r.status === 401) throw new Error("unauthorized");
+  return (await r.json()) as AgentMetrics[];
+}

@@ -54,3 +54,14 @@ button:hover { background: #245bc0; }
 table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
 th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid #eee; font-size: 0.9rem; }
 th { color: #666; font-weight: 600; }
+.sparkline { display: block; margin-top: 2px; }
+tr.proc { cursor: pointer; }
+tr.proc.open { background: rgba(45, 108, 223, 0.08); }
+tr.detail td { background: rgba(0, 0, 0, 0.04); }
+.windows { display: flex; gap: 4px; margin: 6px 0; }
+.windows button { padding: 2px 8px; cursor: pointer; }
+.windows button.active { font-weight: 700; }
+.charts { display: flex; gap: 24px; flex-wrap: wrap; }
+.metric-chart .grid { stroke: rgba(0, 0, 0, 0.15); }
+.metric-chart .axis { fill: rgba(0, 0, 0, 0.5); font-size: 10px; }
+.chart-empty { color: rgba(0, 0, 0, 0.4); font-style: italic; }
