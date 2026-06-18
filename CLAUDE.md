@@ -17,6 +17,21 @@ session resume with zero prior context. Include:
 
 **To resume a fresh session: read the most recent file in `docs/handoffs/` first.**
 
+## Live demo convention (IMPORTANT)
+
+**After finishing a task/milestone and writing its handoff, spin up a live demo to test
+it for real** — don't stop at green unit tests. Build the binary, run the actual app with
+a few representative demo processes, exercise the new feature end-to-end (CLI and/or the
+dashboard at `https://localhost:<http-port>`), and confirm it behaves. Report what you
+observed. Tear the demo down afterward (stop processes + daemon + server, remove the
+scratch dir) and confirm no orphan processes remain (`pgrep -fl marshal`).
+
+Use a scratch data dir (`XDG_DATA_HOME=/tmp/marshal-demo/...`) so real state is never
+touched. Dashboard auth setup must happen while the server is **down** (the running
+server's in-memory `AuthStore` does not pick up on-disk `passwd`/`token --rotate` changes
+until restart): set the password, rotate a fresh enroll token, capture the fingerprint,
+*then* start the server with `--http-listen`, then enroll the agent.
+
 ## Where things live
 
 - `docs/superpowers/specs/` — design specs (fleet architecture; agent-core design).
