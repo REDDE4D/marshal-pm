@@ -141,16 +141,19 @@ func TestResolveServerAuth(t *testing.T) {
 		t.Fatalf("got addr=%q fp=%q tok=%q, want myhost:1234 abc123 mytoken", addr, fp, tok)
 	}
 	// Env fallback for fingerprint and token.
+	t.Setenv("MARSHAL_SERVER", "")
 	t.Setenv("MARSHAL_FINGERPRINT", "envfp")
 	t.Setenv("MARSHAL_TOKEN", "envtok")
 	addr2, fp2, tok2 := resolveServerAuth("", "", "")
+	if addr2 != "localhost:9000" {
+		t.Fatalf("default addr = %q, want localhost:9000", addr2)
+	}
 	if fp2 != "envfp" {
 		t.Fatalf("fp from env = %q, want envfp", fp2)
 	}
 	if tok2 != "envtok" {
 		t.Fatalf("token from env = %q, want envtok", tok2)
 	}
-	_ = addr2
 	t.Setenv("MARSHAL_FINGERPRINT", "")
 	t.Setenv("MARSHAL_TOKEN", "")
 }
