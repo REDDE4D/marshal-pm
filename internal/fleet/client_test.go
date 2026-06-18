@@ -2,6 +2,7 @@ package fleet_test
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"net"
 	"sync"
@@ -9,10 +10,13 @@ import (
 	"time"
 
 	"marshal/internal/fleet"
+	"marshal/internal/fleetauth"
 	"marshal/internal/pb"
 	"marshal/internal/server"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 )
 
 func waitFor(t *testing.T, cond func() bool) {
@@ -31,16 +35,31 @@ func snap() []*pb.ProcInfo { return []*pb.ProcInfo{{Name: "api", State: "online"
 
 func TestClientHelloAndPeriodicPush(t *testing.T) {
 	reg := server.NewRegistry(server.WithOfflineAfter(time.Hour))
+	dir := t.TempDir()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, fp, err := server.LoadOrCreateCert(dir, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth, secrets, err := server.LoadOrInitAuth(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	sctx, scancel := context.WithCancel(context.Background())
 	defer scancel()
-	go func() { _ = server.Serve(sctx, lis, reg, nil, nil) }()
+	go func() { _ = server.Serve(sctx, lis, reg, nil, nil, cert, auth) }()
 
+	tlsCfg, err := fleetauth.ClientTLS(fp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	c := fleet.New(lis.Addr().String(), "web-1", "test", snap,
-		fleet.WithInterval(20*time.Millisecond), fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond))
+		fleet.WithTLS(tlsCfg),
+		fleet.WithInterval(20*time.Millisecond), fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond),
+		fleet.WithAuth("", secrets.EnrollToken, func(string) error { return nil }))
 	cctx, ccancel := context.WithCancel(context.Background())
 	defer ccancel()
 	go c.Run(cctx)
@@ -60,8 +79,25 @@ func TestClientReconnectsWhenServerStartsLate(t *testing.T) {
 	addr := lis0.Addr().String()
 	_ = lis0.Close()
 
+	// Generate a cert and auth before binding so we know the fingerprint and tokens.
+	dir := t.TempDir()
+	cert, fp, err := server.LoadOrCreateCert(dir, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth, secrets, err := server.LoadOrInitAuth(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsCfg, err := fleetauth.ClientTLS(fp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	c := fleet.New(addr, "web-1", "test", snap,
-		fleet.WithInterval(20*time.Millisecond), fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond))
+		fleet.WithTLS(tlsCfg),
+		fleet.WithInterval(20*time.Millisecond), fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond),
+		fleet.WithAuth("", secrets.EnrollToken, func(string) error { return nil }))
 	cctx, ccancel := context.WithCancel(context.Background())
 	defer ccancel()
 	go c.Run(cctx) // retries against a dead address
@@ -75,7 +111,7 @@ func TestClientReconnectsWhenServerStartsLate(t *testing.T) {
 	reg := server.NewRegistry(server.WithOfflineAfter(time.Hour))
 	sctx, scancel := context.WithCancel(context.Background())
 	defer scancel()
-	go func() { _ = server.Serve(sctx, lis, reg, nil, nil) }()
+	go func() { _ = server.Serve(sctx, lis, reg, nil, nil, cert, auth) }()
 
 	waitFor(t, func() bool {
 		ag := reg.List()
@@ -145,25 +181,38 @@ func (f *fakeFleetServer) sawLine(text string) bool {
 	return false
 }
 
-// newFakeServer starts a gRPC server backed by fakeFleetServer and returns it
-// with its listening address populated.
+// fakeServerHandle wraps a fakeFleetServer with its TLS listening address and
+// client TLS config so tests can dial securely.
 type fakeServerHandle struct {
 	*fakeFleetServer
-	addr string
+	addr   string
+	tlsCfg *tls.Config
 }
 
 func newFakeServer(t *testing.T) *fakeServerHandle {
 	t.Helper()
+	cert, fp, err := server.LoadOrCreateCert(t.TempDir(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsCfg, err := fleetauth.ClientTLS(fp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	fs := &fakeFleetServer{}
-	gs := grpc.NewServer()
+	serverCreds := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	})
+	gs := grpc.NewServer(grpc.Creds(serverCreds))
 	pb.RegisterFleetServer(gs, fs)
 	t.Cleanup(func() { gs.GracefulStop() })
 	go func() { _ = gs.Serve(lis) }()
-	return &fakeServerHandle{fakeFleetServer: fs, addr: lis.Addr().String()}
+	return &fakeServerHandle{fakeFleetServer: fs, addr: lis.Addr().String(), tlsCfg: tlsCfg}
 }
 
 func TestClientSeedsWatermarkFromAckAndBackfills(t *testing.T) {
@@ -188,6 +237,7 @@ func TestClientSeedsWatermarkFromAckAndBackfills(t *testing.T) {
 	}
 
 	c := fleet.New(fs.addr, "web-1", "test", func() []*pb.ProcInfo { return nil },
+		fleet.WithTLS(fs.tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithMetrics(metrics))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -209,7 +259,19 @@ func TestClientExecutesCommandAndRepliesResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gs := grpc.NewServer()
+	cert, fp, err := server.LoadOrCreateCert(t.TempDir(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsCfg, err := fleetauth.ClientTLS(fp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverCreds := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	})
+	gs := grpc.NewServer(grpc.Creds(serverCreds))
 	pb.RegisterFleetServer(gs, srv)
 	go func() { _ = gs.Serve(lis) }()
 	defer gs.Stop()
@@ -217,6 +279,7 @@ func TestClientExecutesCommandAndRepliesResult(t *testing.T) {
 	executed := make(chan string, 1)
 	c := fleet.New(lis.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
+		fleet.WithTLS(tlsCfg),
 		fleet.WithInterval(20*time.Millisecond),
 		fleet.WithCommands(func(cmd *pb.Command) *pb.ControlResult {
 			executed <- cmd.GetOp().GetRestart().GetTarget()
@@ -276,6 +339,141 @@ func (s *cmdStubServer) Connect(stream pb.Fleet_ConnectServer) error {
 	}
 }
 
+// TestClientEnrollmentAndPersistence verifies the full enrollment round-trip:
+// the client sends marshal-enroll when token=="", persists the minted token from
+// HelloAck.AgentToken, then switches to marshal-token on the next connect.
+func TestClientEnrollmentAndPersistence(t *testing.T) {
+	// enrollServer simulates a fleet server that:
+	//   - accepts an enroll token via marshal-enroll metadata
+	//   - returns a minted per-agent token in HelloAck.AgentToken
+	//   - accepts subsequent connections using marshal-token
+	const mintedToken = "minted-per-agent-token-abc123"
+	const enrollToken = "the-enroll-token"
+
+	enrollSrv := &enrollStubServer{
+		enrollToken: enrollToken,
+		mintedToken: mintedToken,
+	}
+	dir := t.TempDir()
+	cert, fp, err := server.LoadOrCreateCert(dir, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsClientCfg, err := fleetauth.ClientTLS(fp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverCreds := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	})
+	gs := grpc.NewServer(grpc.Creds(serverCreds))
+	pb.RegisterFleetServer(gs, enrollSrv)
+	t.Cleanup(func() { gs.GracefulStop() })
+	go func() { _ = gs.Serve(lis) }()
+
+	// Phase 1: enroll — persist must be called with the minted token.
+	var persistMu sync.Mutex
+	var persistedToken string
+	persist := func(tok string) error {
+		persistMu.Lock()
+		persistedToken = tok
+		persistMu.Unlock()
+		return nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	c := fleet.New(lis.Addr().String(), "web-1", "test", snap,
+		fleet.WithTLS(tlsClientCfg),
+		fleet.WithInterval(20*time.Millisecond),
+		fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond),
+		fleet.WithAuth("", enrollToken, persist))
+	go c.Run(ctx)
+
+	// Wait until the server recorded an enrollment and the persist callback ran.
+	waitFor(t, func() bool {
+		enrollSrv.mu.Lock()
+		enrollSeen := enrollSrv.enrollSeen
+		enrollSrv.mu.Unlock()
+		persistMu.Lock()
+		got := persistedToken
+		persistMu.Unlock()
+		return enrollSeen && got != ""
+	})
+	persistMu.Lock()
+	got := persistedToken
+	persistMu.Unlock()
+	if got != mintedToken {
+		t.Fatalf("persisted token = %q, want %q", got, mintedToken)
+	}
+	cancel()
+
+	// Phase 2: reconnect using the minted token — server must accept it.
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	c2 := fleet.New(lis.Addr().String(), "web-1", "test", snap,
+		fleet.WithTLS(tlsClientCfg),
+		fleet.WithInterval(20*time.Millisecond),
+		fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond),
+		fleet.WithAuth(mintedToken, "", func(string) error { return nil }))
+	go c2.Run(ctx2)
+
+	waitFor(t, func() bool {
+		enrollSrv.mu.Lock()
+		defer enrollSrv.mu.Unlock()
+		return enrollSrv.agentTokenSeen
+	})
+}
+
+// enrollStubServer is a fake fleet server that handles enrollment and per-agent
+// token auth for TestClientEnrollmentAndPersistence.
+type enrollStubServer struct {
+	pb.UnimplementedFleetServer
+	enrollToken string
+	mintedToken string
+
+	mu             sync.Mutex
+	enrollSeen     bool
+	agentTokenSeen bool
+}
+
+func (s *enrollStubServer) Connect(stream pb.Fleet_ConnectServer) error {
+	// Check incoming metadata for enroll or per-agent token.
+	md, _ := metadata.FromIncomingContext(stream.Context())
+	enrollVals := md.Get("marshal-enroll")
+	agentVals := md.Get("marshal-token")
+
+	var sendAgentToken string
+	s.mu.Lock()
+	if len(enrollVals) > 0 && enrollVals[0] == s.enrollToken {
+		s.enrollSeen = true
+		sendAgentToken = s.mintedToken
+	} else if len(agentVals) > 0 && agentVals[0] == s.mintedToken {
+		s.agentTokenSeen = true
+	}
+	s.mu.Unlock()
+
+	// Drain until Hello then send HelloAck (with optional AgentToken).
+	for {
+		msg, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		if msg.GetHello() != nil {
+			return stream.Send(&pb.ServerMessage{Msg: &pb.ServerMessage_HelloAck{
+				HelloAck: &pb.HelloAck{AgentToken: sendAgentToken},
+			}})
+		}
+	}
+}
+
 func TestClientShipsLogsAndSeedsLogWatermark(t *testing.T) {
 	fs := newFakeServer(t)
 	fs.ackLogWatermark = 5000
@@ -295,6 +493,7 @@ func TestClientShipsLogsAndSeedsLogWatermark(t *testing.T) {
 	}
 
 	c := fleet.New(fs.addr, "web-1", "test", func() []*pb.ProcInfo { return nil },
+		fleet.WithTLS(fs.tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithLogs(logs))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

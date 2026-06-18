@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 )
 
@@ -30,11 +32,13 @@ type Server struct {
 	stores *stores
 	logs   *logStores
 	broker *broker
+	auth   *AuthStore
 }
 
 // NewServer wires a Fleet server to a registry and (optional) metric/log stores.
-func NewServer(reg *Registry, ss *stores, ls *logStores) *Server {
-	return &Server{reg: reg, stores: ss, logs: ls, broker: newBroker()}
+// auth may be nil (no auth enforcement, for unit tests that call methods directly).
+func NewServer(reg *Registry, ss *stores, ls *logStores, auth *AuthStore) *Server {
+	return &Server{reg: reg, stores: ss, logs: ls, broker: newBroker(), auth: auth}
 }
 
 // Connect terminates one agent's upstream: reads Hello (acking the stored metric
@@ -61,26 +65,47 @@ func (s *Server) Connect(stream pb.Fleet_ConnectServer) error {
 		}
 		switch m := msg.GetMsg().(type) {
 		case *pb.AgentMessage_Hello:
-			name = m.Hello.GetAgentName()
-			if name == "" {
-				return status.Error(codes.InvalidArgument, "agent_name must not be empty")
+			ctx := stream.Context()
+			ack := &pb.HelloAck{}
+			// s.auth == nil only occurs in unit tests that call NewServer directly and
+			// drive Connect without the interceptor. Serve rejects a nil AuthStore, so
+			// this branch is unreachable when the server is run for real.
+			if s.auth == nil {
+				// No auth configured (direct unit-test calls that bypass the
+				// interceptor): trust the self-asserted name as before.
+				name = m.Hello.GetAgentName()
+				if name == "" {
+					return status.Error(codes.InvalidArgument, "agent_name must not be empty")
+				}
+			} else if isEnrolling(ctx) {
+				requested := m.Hello.GetAgentName()
+				if requested == "" {
+					return status.Error(codes.InvalidArgument, "agent_name must not be empty")
+				}
+				tok, err := s.auth.enrollAgent(requested)
+				if err != nil {
+					return status.Errorf(codes.AlreadyExists, "enroll %q: %v", requested, err)
+				}
+				name = requested
+				ack.AgentToken = tok
+			} else if authed, ok := authedAgentName(ctx); ok {
+				name = authed
+			} else {
+				return status.Error(codes.Unauthenticated, "unauthenticated connect")
 			}
 			s.reg.Open(name)
 			sess = s.broker.register(name, stream.Send)
-			var watermark, logWM int64
 			if s.stores != nil {
 				if st, err := s.stores.get(name); err == nil {
-					watermark, _ = st.MaxTs()
+					ack.LastMetricTsMs, _ = st.MaxTs()
 				}
 			}
 			if s.logs != nil {
 				if st, err := s.logs.get(name); err == nil {
-					logWM, _ = st.MaxTs()
+					ack.LastLogTsMs, _ = st.MaxTs()
 				}
 			}
-			_ = sess.sendMsg(&pb.ServerMessage{Msg: &pb.ServerMessage_HelloAck{
-				HelloAck: &pb.HelloAck{LastMetricTsMs: watermark, LastLogTsMs: logWM},
-			}})
+			_ = sess.sendMsg(&pb.ServerMessage{Msg: &pb.ServerMessage_HelloAck{HelloAck: ack}})
 		case *pb.AgentMessage_Snapshot:
 			if name != "" {
 				s.reg.Update(name, m.Snapshot.GetProcs())
@@ -289,11 +314,20 @@ func (s *Server) FleetControl(ctx context.Context, req *pb.FleetControlRequest) 
 	return &pb.FleetControlResponse{Result: res}, nil
 }
 
-// Serve registers the Fleet service on lis and serves until ctx is canceled.
+// Serve registers the Fleet service on lis (TLS) and serves until ctx is canceled.
 // ss/ls may be nil (no storage); when set they are closed on shutdown.
-func Serve(ctx context.Context, lis net.Listener, reg *Registry, ss *stores, ls *logStores) error {
-	gs := grpc.NewServer()
-	pb.RegisterFleetServer(gs, NewServer(reg, ss, ls))
+// auth must not be nil: unary and stream interceptors enforce admin/enroll tokens.
+func Serve(ctx context.Context, lis net.Listener, reg *Registry, ss *stores, ls *logStores, cert tls.Certificate, auth *AuthStore) error {
+	if auth == nil {
+		return errors.New("server: Serve requires a non-nil AuthStore")
+	}
+	creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
+	gs := grpc.NewServer(
+		grpc.Creds(creds),
+		grpc.UnaryInterceptor(auth.unaryAuth),
+		grpc.StreamInterceptor(auth.streamAuth),
+	)
+	pb.RegisterFleetServer(gs, NewServer(reg, ss, ls, auth))
 	go func() {
 		<-ctx.Done()
 		gs.GracefulStop()
@@ -308,10 +342,21 @@ func Serve(ctx context.Context, lis net.Listener, reg *Registry, ss *stores, ls 
 }
 
 // ServeDir builds a registry + per-agent metric stores rooted at dataDir, then
-// serves until ctx is canceled.
-func ServeDir(ctx context.Context, lis net.Listener, dataDir string, opts ...RegOption) error {
+// serves over TLS until ctx is canceled. certPath and keyPath may be empty
+// strings, in which case they default to dataDir/cert.pem and dataDir/key.pem
+// (and are generated on first run).
+func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath string, opts ...RegOption) error {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return fmt.Errorf("create data dir %s: %w", dataDir, err)
+	}
+	cert, fp, err := LoadOrCreateCert(dataDir, certPath, keyPath)
+	if err != nil {
+		return err
+	}
+	log.Printf("fleet: server cert fingerprint %s", fp)
+	auth, _, err := loadOrInitAuth(dataDir)
+	if err != nil {
+		return fmt.Errorf("init auth: %w", err)
 	}
 	ss := newStores(dataDir)
 	ls := newLogStores(dataDir)
@@ -330,5 +375,5 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir string, opts ...Reg
 			}
 		}
 	}()
-	return Serve(ctx, lis, NewRegistry(opts...), ss, ls)
+	return Serve(ctx, lis, NewRegistry(opts...), ss, ls, cert, auth)
 }

@@ -176,7 +176,7 @@ func TestLoadLogRetention(t *testing.T) {
 }
 
 func TestParseServerBlock(t *testing.T) {
-	cfg, err := Parse([]byte("server:\n  address: srv:9000\n  name: web-1\napps:\n  - name: api\n    cmd: ./api\n"))
+	cfg, err := Parse([]byte("server:\n  address: srv:9000\n  name: web-1\n  fingerprint: deadbeef\napps:\n  - name: api\n    cmd: ./api\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,5 +198,29 @@ func TestParseNoServerBlock(t *testing.T) {
 func TestServerBlockRequiresAddress(t *testing.T) {
 	if _, err := Parse([]byte("server:\n  name: web-1\napps:\n  - name: api\n    cmd: ./api\n")); err == nil {
 		t.Fatal("expected error for missing server.address")
+	}
+}
+
+func TestServerRequiresTrustSource(t *testing.T) {
+	_, err := Parse([]byte("server:\n  address: h:9000\napps:\n  - name: a\n    cmd: echo\n"))
+	if err == nil {
+		t.Fatal("expected error: server block needs fingerprint or ca")
+	}
+}
+
+func TestServerRejectsBothTrustSources(t *testing.T) {
+	_, err := Parse([]byte("server:\n  address: h:9000\n  fingerprint: abc\n  ca: /x.pem\napps:\n  - name: a\n    cmd: echo\n"))
+	if err == nil {
+		t.Fatal("expected error: fingerprint and ca are mutually exclusive")
+	}
+}
+
+func TestServerWithFingerprintParses(t *testing.T) {
+	cfg, err := Parse([]byte("server:\n  address: h:9000\n  fingerprint: abc\napps:\n  - name: a\n    cmd: echo\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Server.Fingerprint != "abc" {
+		t.Fatalf("fingerprint = %q", cfg.Server.Fingerprint)
 	}
 }

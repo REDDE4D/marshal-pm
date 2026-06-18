@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"marshal/internal/config"
 )
@@ -126,4 +127,24 @@ func (s *Store) LoadServer() (*config.ServerConfig, error) {
 		return nil, fmt.Errorf("decode fleet config: %w", err)
 	}
 	return &sc, nil
+}
+
+// FleetTokenPath is the file holding the minted per-agent fleet token.
+func (s *Store) FleetTokenPath() string { return filepath.Join(s.base, "fleet-token") }
+
+// LoadFleetToken reads the minted per-agent token. A missing file yields ("", nil).
+func (s *Store) LoadFleetToken() (string, error) {
+	b, err := os.ReadFile(s.FleetTokenPath())
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(b)), nil
+}
+
+// SaveFleetToken writes the minted per-agent token (0600).
+func (s *Store) SaveFleetToken(token string) error {
+	return os.WriteFile(s.FleetTokenPath(), []byte(token), 0o600)
 }

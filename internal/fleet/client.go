@@ -5,6 +5,7 @@ package fleet
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"log"
 	"sync"
@@ -13,7 +14,8 @@ import (
 	"marshal/internal/pb"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 )
 
 // SnapshotFunc returns the agent's current process state.
@@ -30,16 +32,20 @@ type CommandFunc func(*pb.Command) *pb.ControlResult
 
 // Client maintains one outbound stream to the central server.
 type Client struct {
-	addr     string
-	name     string
-	version  string
-	snapshot SnapshotFunc
-	metrics  MetricsFunc
-	logs     LogsFunc
-	commands CommandFunc
-	interval time.Duration
-	minBO    time.Duration
-	maxBO    time.Duration
+	addr       string
+	name       string
+	version    string
+	snapshot   SnapshotFunc
+	metrics    MetricsFunc
+	logs       LogsFunc
+	commands   CommandFunc
+	interval   time.Duration
+	minBO      time.Duration
+	maxBO      time.Duration
+	tls        *tls.Config
+	token      string             // per-agent token (empty until enrolled)
+	enrollTok  string             // enroll token, used only when token == ""
+	persistTok func(string) error // called with the minted token on enrollment
 }
 
 // Option configures a Client.
@@ -61,6 +67,17 @@ func WithLogs(fn LogsFunc) Option { return func(c *Client) { c.logs = fn } }
 
 // WithCommands enables down-stream command handling sourced from fn.
 func WithCommands(fn CommandFunc) Option { return func(c *Client) { c.commands = fn } }
+
+// WithTLS sets the client TLS config (pinned fingerprint or CA). Required in
+// fleet mode; there is no insecure fallback.
+func WithTLS(cfg *tls.Config) Option { return func(c *Client) { c.tls = cfg } }
+
+// WithAuth configures fleet authentication. token is the per-agent token (empty
+// to enroll); enrollToken is used only when token is empty; persist stores the
+// minted token after a successful enrollment.
+func WithAuth(token, enrollToken string, persist func(string) error) Option {
+	return func(c *Client) { c.token, c.enrollTok, c.persistTok = token, enrollToken, persist }
+}
 
 // New builds a fleet client. snap must be non-nil.
 func New(addr, name, version string, snap SnapshotFunc, opts ...Option) *Client {
@@ -107,11 +124,25 @@ func (c *Client) Run(ctx context.Context) {
 // watermark, then pushes snapshots and metrics until the stream errors or ctx
 // is canceled. The bool reports whether the stream was established.
 func (c *Client) connectOnce(ctx context.Context) (bool, error) {
-	conn, err := grpc.NewClient(c.addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if c.tls == nil {
+		return false, errors.New("fleet: TLS config required")
+	}
+	conn, err := grpc.NewClient(c.addr, grpc.WithTransportCredentials(credentials.NewTLS(c.tls)))
 	if err != nil {
 		return false, err
 	}
 	defer conn.Close()
+
+	// Attach auth metadata: prefer per-agent token; fall back to enroll token.
+	// If neither is set and WithAuth was not called, proceed without metadata
+	// (backward-compatible with tests that inject metadata externally).
+	if c.token != "" {
+		ctx = metadata.AppendToOutgoingContext(ctx, "marshal-token", c.token)
+	} else if c.enrollTok != "" {
+		ctx = metadata.AppendToOutgoingContext(ctx, "marshal-enroll", c.enrollTok)
+	} else if c.persistTok != nil {
+		return false, errors.New("fleet: no token or enrollment token")
+	}
 
 	stream, err := pb.NewFleetClient(conn).Connect(ctx)
 	if err != nil {
@@ -137,6 +168,12 @@ func (c *Client) connectOnce(ctx context.Context) (bool, error) {
 	} else if a := ack.GetHelloAck(); a != nil {
 		watermark = a.GetLastMetricTsMs()
 		logWM = a.GetLastLogTsMs()
+		if mt := a.GetAgentToken(); mt != "" && c.persistTok != nil {
+			if err := c.persistTok(mt); err != nil {
+				return true, err
+			}
+			c.token, c.enrollTok = mt, "" // authenticate with the minted token from now on
+		}
 	}
 
 	// Receiver goroutine: handle commands until the stream errors.

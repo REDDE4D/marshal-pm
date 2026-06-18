@@ -3,16 +3,23 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"io"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 
+	"marshal/internal/fleetauth"
 	"marshal/internal/pb"
+	"marshal/internal/server"
 )
 
 func TestFleetMetricsCmdShape(t *testing.T) {
@@ -101,19 +108,99 @@ func TestPrintFleetOfflineCPUMem(t *testing.T) {
 	}
 }
 
-func TestFleetRestartSendsControlOp(t *testing.T) {
-	captured := make(chan *pb.FleetControlRequest, 1)
+// newTLSControlStub starts a TLS gRPC server backed by the given Fleet
+// implementation. It returns the listening address and the pinned fingerprint.
+func newTLSControlStub(t *testing.T, impl pb.FleetServer) (addr, fingerprint string) {
+	t.Helper()
+	cert, fp, err := server.LoadOrCreateCert(t.TempDir(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	gs := grpc.NewServer()
-	pb.RegisterFleetServer(gs, &controlStub{captured: captured})
+	serverCreds := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	})
+	gs := grpc.NewServer(grpc.Creds(serverCreds))
+	pb.RegisterFleetServer(gs, impl)
+	t.Cleanup(func() { gs.GracefulStop() })
 	go func() { _ = gs.Serve(lis) }()
-	defer gs.Stop()
+	return lis.Addr().String(), fp
+}
 
+func TestResolveServerAuth(t *testing.T) {
+	// Isolate from any real cli.yaml the developer may have on disk.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	// Flag wins.
+	addr, fp, tok := resolveServerAuth("myhost:1234", "abc123", "mytoken")
+	if addr != "myhost:1234" || fp != "abc123" || tok != "mytoken" {
+		t.Fatalf("got addr=%q fp=%q tok=%q, want myhost:1234 abc123 mytoken", addr, fp, tok)
+	}
+	// Env fallback for fingerprint and token.
+	t.Setenv("MARSHAL_SERVER", "")
+	t.Setenv("MARSHAL_FINGERPRINT", "envfp")
+	t.Setenv("MARSHAL_TOKEN", "envtok")
+	addr2, fp2, tok2 := resolveServerAuth("", "", "")
+	if addr2 != "localhost:9000" {
+		t.Fatalf("default addr = %q, want localhost:9000", addr2)
+	}
+	if fp2 != "envfp" {
+		t.Fatalf("fp from env = %q, want envfp", fp2)
+	}
+	if tok2 != "envtok" {
+		t.Fatalf("token from env = %q, want envtok", tok2)
+	}
+	t.Setenv("MARSHAL_FINGERPRINT", "")
+	t.Setenv("MARSHAL_TOKEN", "")
+}
+
+func TestResolveServerAuthFromConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "marshal"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := "server: h:1234\ntoken: tok-cfg\nfingerprint: fp-cfg\n"
+	if err := os.WriteFile(filepath.Join(dir, "marshal", "cli.yaml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MARSHAL_SERVER", "")
+	t.Setenv("MARSHAL_TOKEN", "")
+	t.Setenv("MARSHAL_FINGERPRINT", "")
+	addr, fp, tok := resolveServerAuth("", "", "")
+	if addr != "h:1234" || fp != "fp-cfg" || tok != "tok-cfg" {
+		t.Fatalf("got addr=%q fp=%q tok=%q", addr, fp, tok)
+	}
+}
+
+func TestFleetRestartSendsControlOp(t *testing.T) {
+	captured := make(chan *pb.FleetControlRequest, 1)
+	capturedToken := make(chan string, 1)
+	stub := &controlStub{captured: captured, capturedToken: capturedToken}
+	addr, fp := newTLSControlStub(t, stub)
+
+	// Verify dialFleet works with the pinned fingerprint.
+	cfg, err := fleetauth.ClientTLS(fp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(credentials.NewTLS(cfg)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn.Close()
+
+	const testToken = "test-admin-token"
 	cmd := fleetCmd()
-	cmd.SetArgs([]string{"restart", "web-1", "api", "--server", lis.Addr().String()})
+	cmd.SetArgs([]string{"restart", "web-1", "api",
+		"--server", addr,
+		"--fingerprint", fp,
+		"--token", testToken,
+	})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	if err := cmd.Execute(); err != nil {
@@ -128,14 +215,31 @@ func TestFleetRestartSendsControlOp(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("FleetControl was never called")
 	}
+
+	select {
+	case tok := <-capturedToken:
+		if tok != testToken {
+			t.Fatalf("marshal-token = %q, want %q", tok, testToken)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("token was never captured")
+	}
 }
 
 type controlStub struct {
 	pb.UnimplementedFleetServer
-	captured chan *pb.FleetControlRequest
+	captured      chan *pb.FleetControlRequest
+	capturedToken chan string
 }
 
-func (s *controlStub) FleetControl(_ context.Context, req *pb.FleetControlRequest) (*pb.FleetControlResponse, error) {
+func (s *controlStub) FleetControl(ctx context.Context, req *pb.FleetControlRequest) (*pb.FleetControlResponse, error) {
 	s.captured <- req
+	tok := ""
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if vals := md.Get("marshal-token"); len(vals) > 0 {
+			tok = vals[0]
+		}
+	}
+	s.capturedToken <- tok
 	return &pb.FleetControlResponse{Result: &pb.ControlResult{Ok: true}}, nil
 }
