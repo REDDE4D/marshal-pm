@@ -1,7 +1,13 @@
 package server
 
 import (
+	"crypto/pbkdf2"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -19,10 +25,17 @@ type authAgentEntry struct {
 	EnrolledAt int64  `json:"enrolled_at"`
 }
 
+type dashboardUser struct {
+	PBKDF2 string `json:"pbkdf2"` // base64 std of the derived key
+	Salt   string `json:"salt"`   // base64 std of the random salt
+	Iter   int    `json:"iter"`
+}
+
 type authData struct {
 	EnrollTokenHash string                    `json:"enroll_token_hash"`
 	AdminTokenHash  string                    `json:"admin_token_hash"`
 	Agents          map[string]authAgentEntry `json:"agents"`
+	Users           map[string]dashboardUser  `json:"users,omitempty"`
 }
 
 // AuthStore holds the persisted auth tokens for a Marshal server instance.
@@ -54,7 +67,7 @@ func LoadOrInitAuth(dir string) (*AuthStore, *InitSecrets, error) {
 		return nil, nil, fmt.Errorf("create data dir: %w", err)
 	}
 	path := filepath.Join(dir, "auth.json")
-	a := &AuthStore{path: path, data: authData{Agents: map[string]authAgentEntry{}}}
+	a := &AuthStore{path: path, data: authData{Agents: map[string]authAgentEntry{}, Users: map[string]dashboardUser{}}}
 	b, err := os.ReadFile(path)
 	if err == nil {
 		if err := json.Unmarshal(b, &a.data); err != nil {
@@ -62,6 +75,9 @@ func LoadOrInitAuth(dir string) (*AuthStore, *InitSecrets, error) {
 		}
 		if a.data.Agents == nil {
 			a.data.Agents = map[string]authAgentEntry{}
+		}
+		if a.data.Users == nil {
+			a.data.Users = map[string]dashboardUser{}
 		}
 		return a, nil, nil
 	}
@@ -283,4 +299,103 @@ func InitAuthPrint(dir string, out io.Writer) error {
 		fmt.Fprintf(out, "marshal server: admin token  %s\n", secrets.AdminToken)
 	}
 	return nil
+}
+
+const dashboardPBKDF2Iter = 600000
+
+// SetDashboardUser creates or replaces the dashboard credential for user,
+// storing a PBKDF2-HMAC-SHA256 hash with a fresh random salt. It persists
+// atomically and rolls back the in-memory map on save failure.
+func (a *AuthStore) SetDashboardUser(user, password string) error {
+	if user == "" {
+		return errors.New("dashboard user name required")
+	}
+	if password == "" {
+		return errors.New("dashboard password required")
+	}
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return err
+	}
+	dk, err := pbkdf2.Key(sha256.New, password, salt, dashboardPBKDF2Iter, 32)
+	if err != nil {
+		return err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.data.Users == nil {
+		a.data.Users = map[string]dashboardUser{}
+	}
+	old, existed := a.data.Users[user]
+	a.data.Users[user] = dashboardUser{
+		PBKDF2: base64.StdEncoding.EncodeToString(dk),
+		Salt:   base64.StdEncoding.EncodeToString(salt),
+		Iter:   dashboardPBKDF2Iter,
+	}
+	if err := a.save(); err != nil {
+		if existed {
+			a.data.Users[user] = old
+		} else {
+			delete(a.data.Users, user)
+		}
+		return err
+	}
+	return nil
+}
+
+// VerifyDashboardUser reports whether password matches the stored credential
+// for user (constant-time). Unknown user or malformed record returns false.
+func (a *AuthStore) VerifyDashboardUser(user, password string) bool {
+	a.mu.Lock()
+	u, ok := a.data.Users[user]
+	a.mu.Unlock()
+	if !ok {
+		return false
+	}
+	salt, err := base64.StdEncoding.DecodeString(u.Salt)
+	if err != nil {
+		return false
+	}
+	want, err := base64.StdEncoding.DecodeString(u.PBKDF2)
+	if err != nil {
+		return false
+	}
+	dk, err := pbkdf2.Key(sha256.New, password, salt, u.Iter, len(want))
+	if err != nil {
+		return false
+	}
+	return subtle.ConstantTimeCompare(dk, want) == 1
+}
+
+// HasDashboardUser reports whether any dashboard user is configured.
+func (a *AuthStore) HasDashboardUser() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return len(a.data.Users) > 0
+}
+
+// SetDashboardPassword sets (or replaces) the dashboard credential for the
+// server rooted at dataDir.
+func SetDashboardPassword(dataDir, user, password string) error {
+	if err := ensureDataDir(dataDir); err != nil {
+		return fmt.Errorf("create data dir: %w", err)
+	}
+	a, _, err := loadOrInitAuth(dataDir)
+	if err != nil {
+		return err
+	}
+	return a.SetDashboardUser(user, password)
+}
+
+// HasDashboardUserDir reports whether the server at dataDir has a dashboard
+// user configured.
+func HasDashboardUserDir(dataDir string) (bool, error) {
+	if err := ensureDataDir(dataDir); err != nil {
+		return false, fmt.Errorf("create data dir: %w", err)
+	}
+	a, _, err := loadOrInitAuth(dataDir)
+	if err != nil {
+		return false, err
+	}
+	return a.HasDashboardUser(), nil
 }

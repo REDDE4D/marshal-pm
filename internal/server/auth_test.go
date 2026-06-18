@@ -119,3 +119,70 @@ func TestEnrollAndAuthAgent(t *testing.T) {
 		t.Fatal("revoked agent still authenticates")
 	}
 }
+
+func TestDashboardUserSetVerify(t *testing.T) {
+	dir := t.TempDir()
+	a, _, err := LoadOrInitAuth(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.HasDashboardUser() {
+		t.Fatal("expected no dashboard user initially")
+	}
+	if err := a.SetDashboardUser("admin", "s3cret"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.HasDashboardUser() {
+		t.Fatal("expected a dashboard user after set")
+	}
+	if !a.VerifyDashboardUser("admin", "s3cret") {
+		t.Fatal("correct password rejected")
+	}
+	if a.VerifyDashboardUser("admin", "wrong") {
+		t.Fatal("wrong password accepted")
+	}
+	if a.VerifyDashboardUser("nobody", "s3cret") {
+		t.Fatal("unknown user accepted")
+	}
+}
+
+func TestDashboardUserPersistsAndSaltsDiffer(t *testing.T) {
+	dir := t.TempDir()
+	a, _, _ := LoadOrInitAuth(dir)
+	if err := a.SetDashboardUser("admin", "pw"); err != nil {
+		t.Fatal(err)
+	}
+	// Reload from disk: the credential must persist.
+	b, _, err := LoadOrInitAuth(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.VerifyDashboardUser("admin", "pw") {
+		t.Fatal("dashboard user not persisted across reload")
+	}
+	// Same password for two users must hash differently (per-user random salt).
+	if err := a.SetDashboardUser("u1", "same"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SetDashboardUser("u2", "same"); err != nil {
+		t.Fatal(err)
+	}
+	if a.data.Users["u1"].PBKDF2 == a.data.Users["u2"].PBKDF2 {
+		t.Fatal("expected per-user random salt to produce different hashes")
+	}
+}
+
+func TestSetDashboardPasswordDir(t *testing.T) {
+	dir := t.TempDir()
+	if err := SetDashboardPassword(dir, "admin", "pw"); err != nil {
+		t.Fatal(err)
+	}
+	ok, err := HasDashboardUserDir(dir)
+	if err != nil || !ok {
+		t.Fatalf("HasDashboardUserDir = %v, %v", ok, err)
+	}
+	a, _, _ := LoadOrInitAuth(dir)
+	if !a.VerifyDashboardUser("admin", "pw") {
+		t.Fatal("password set via dir wrapper not verifiable")
+	}
+}

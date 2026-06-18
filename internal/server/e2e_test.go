@@ -123,7 +123,7 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx1, cancel1 := context.WithCancel(context.Background())
-	go func() { _ = ServeDir(ctx1, lis1, dataDir, "", "") }()
+	go func() { _ = ServeDir(ctx1, lis1, dataDir, "", "", "") }()
 
 	c1 := fleet.New(lis1.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
@@ -159,7 +159,7 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 	}
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
-	go func() { _ = ServeDir(ctx2, lis2, dataDir, "", "") }()
+	go func() { _ = ServeDir(ctx2, lis2, dataDir, "", "", "") }()
 
 	// Use the minted agent token (not the enroll token) to avoid re-enrollment.
 	c2 := fleet.New(lis2.Addr().String(), "web-1", "test",
@@ -319,7 +319,7 @@ func TestE2EMetricsIngestAndBackfill(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx1, cancel1 := context.WithCancel(context.Background())
-	go func() { _ = ServeDir(ctx1, lis1, dataDir, "", "") }()
+	go func() { _ = ServeDir(ctx1, lis1, dataDir, "", "", "") }()
 
 	c1 := fleet.New(lis1.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
@@ -356,7 +356,7 @@ func TestE2EMetricsIngestAndBackfill(t *testing.T) {
 	}
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
-	go func() { _ = ServeDir(ctx2, lis2, dataDir, "", "") }()
+	go func() { _ = ServeDir(ctx2, lis2, dataDir, "", "", "") }()
 
 	// Use the minted agent token (not the enroll token) to avoid re-enrollment.
 	c2 := fleet.New(lis2.Addr().String(), "web-1", "test",
