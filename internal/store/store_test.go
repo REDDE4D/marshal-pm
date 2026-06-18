@@ -108,3 +108,28 @@ func TestLoadServerMissing(t *testing.T) {
 		t.Fatalf("expected nil, got %+v", got)
 	}
 }
+
+func TestFleetTokenRoundTrip(t *testing.T) {
+	s := NewAt(t.TempDir())
+	if err := s.EnsureDir(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.LoadFleetToken()
+	if err != nil || got != "" {
+		t.Fatalf("missing token: %q, %v", got, err)
+	}
+	if err := s.SaveFleetToken("tok-123"); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.LoadFleetToken()
+	if err != nil || got != "tok-123" {
+		t.Fatalf("LoadFleetToken = %q, %v", got, err)
+	}
+	info, err := os.Stat(s.FleetTokenPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %o, want 600", info.Mode().Perm())
+	}
+}
