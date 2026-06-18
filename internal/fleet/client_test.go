@@ -2,6 +2,7 @@ package fleet_test
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"net"
 	"sync"
@@ -9,10 +10,12 @@ import (
 	"time"
 
 	"marshal/internal/fleet"
+	"marshal/internal/fleetauth"
 	"marshal/internal/pb"
 	"marshal/internal/server"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func waitFor(t *testing.T, cond func() bool) {
@@ -30,16 +33,12 @@ func waitFor(t *testing.T, cond func() bool) {
 func snap() []*pb.ProcInfo { return []*pb.ProcInfo{{Name: "api", State: "online"}} }
 
 func TestClientHelloAndPeriodicPush(t *testing.T) {
-	// The fleet agent client (internal/fleet) still dials insecure; TLS for the
-	// agent-side connection lands in Task 5. Skip this round-trip until then.
-	t.Skip("TLS agent client lands in Task 5")
-
 	reg := server.NewRegistry(server.WithOfflineAfter(time.Hour))
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	cert, _, err := server.LoadOrCreateCert(t.TempDir(), "", "")
+	cert, fp, err := server.LoadOrCreateCert(t.TempDir(), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +46,12 @@ func TestClientHelloAndPeriodicPush(t *testing.T) {
 	defer scancel()
 	go func() { _ = server.Serve(sctx, lis, reg, nil, nil, cert) }()
 
+	tlsCfg, err := fleetauth.ClientTLS(fp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	c := fleet.New(lis.Addr().String(), "web-1", "test", snap,
+		fleet.WithTLS(tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond))
 	cctx, ccancel := context.WithCancel(context.Background())
 	defer ccancel()
@@ -60,10 +64,6 @@ func TestClientHelloAndPeriodicPush(t *testing.T) {
 }
 
 func TestClientReconnectsWhenServerStartsLate(t *testing.T) {
-	// The fleet agent client (internal/fleet) still dials insecure; TLS for the
-	// agent-side connection lands in Task 5. Skip this round-trip until then.
-	t.Skip("TLS agent client lands in Task 5")
-
 	// Reserve an address, then free it so the server is initially down.
 	lis0, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -72,7 +72,18 @@ func TestClientReconnectsWhenServerStartsLate(t *testing.T) {
 	addr := lis0.Addr().String()
 	_ = lis0.Close()
 
+	// Generate a cert before binding so we know the fingerprint.
+	cert, fp, err := server.LoadOrCreateCert(t.TempDir(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsCfg, err := fleetauth.ClientTLS(fp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	c := fleet.New(addr, "web-1", "test", snap,
+		fleet.WithTLS(tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond))
 	cctx, ccancel := context.WithCancel(context.Background())
 	defer ccancel()
@@ -83,10 +94,6 @@ func TestClientReconnectsWhenServerStartsLate(t *testing.T) {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		t.Skipf("could not rebind %s: %v", addr, err)
-	}
-	cert, _, err := server.LoadOrCreateCert(t.TempDir(), "", "")
-	if err != nil {
-		t.Fatal(err)
 	}
 	reg := server.NewRegistry(server.WithOfflineAfter(time.Hour))
 	sctx, scancel := context.WithCancel(context.Background())
@@ -161,25 +168,38 @@ func (f *fakeFleetServer) sawLine(text string) bool {
 	return false
 }
 
-// newFakeServer starts a gRPC server backed by fakeFleetServer and returns it
-// with its listening address populated.
+// fakeServerHandle wraps a fakeFleetServer with its TLS listening address and
+// client TLS config so tests can dial securely.
 type fakeServerHandle struct {
 	*fakeFleetServer
-	addr string
+	addr   string
+	tlsCfg *tls.Config
 }
 
 func newFakeServer(t *testing.T) *fakeServerHandle {
 	t.Helper()
+	cert, fp, err := server.LoadOrCreateCert(t.TempDir(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsCfg, err := fleetauth.ClientTLS(fp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	fs := &fakeFleetServer{}
-	gs := grpc.NewServer()
+	serverCreds := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	})
+	gs := grpc.NewServer(grpc.Creds(serverCreds))
 	pb.RegisterFleetServer(gs, fs)
 	t.Cleanup(func() { gs.GracefulStop() })
 	go func() { _ = gs.Serve(lis) }()
-	return &fakeServerHandle{fakeFleetServer: fs, addr: lis.Addr().String()}
+	return &fakeServerHandle{fakeFleetServer: fs, addr: lis.Addr().String(), tlsCfg: tlsCfg}
 }
 
 func TestClientSeedsWatermarkFromAckAndBackfills(t *testing.T) {
@@ -204,6 +224,7 @@ func TestClientSeedsWatermarkFromAckAndBackfills(t *testing.T) {
 	}
 
 	c := fleet.New(fs.addr, "web-1", "test", func() []*pb.ProcInfo { return nil },
+		fleet.WithTLS(fs.tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithMetrics(metrics))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -225,7 +246,19 @@ func TestClientExecutesCommandAndRepliesResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gs := grpc.NewServer()
+	cert, fp, err := server.LoadOrCreateCert(t.TempDir(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsCfg, err := fleetauth.ClientTLS(fp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverCreds := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	})
+	gs := grpc.NewServer(grpc.Creds(serverCreds))
 	pb.RegisterFleetServer(gs, srv)
 	go func() { _ = gs.Serve(lis) }()
 	defer gs.Stop()
@@ -233,6 +266,7 @@ func TestClientExecutesCommandAndRepliesResult(t *testing.T) {
 	executed := make(chan string, 1)
 	c := fleet.New(lis.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
+		fleet.WithTLS(tlsCfg),
 		fleet.WithInterval(20*time.Millisecond),
 		fleet.WithCommands(func(cmd *pb.Command) *pb.ControlResult {
 			executed <- cmd.GetOp().GetRestart().GetTarget()
@@ -311,6 +345,7 @@ func TestClientShipsLogsAndSeedsLogWatermark(t *testing.T) {
 	}
 
 	c := fleet.New(fs.addr, "web-1", "test", func() []*pb.ProcInfo { return nil },
+		fleet.WithTLS(fs.tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithLogs(logs))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

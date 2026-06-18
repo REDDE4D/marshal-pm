@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"marshal/internal/fleet"
+	"marshal/internal/fleetauth"
 	"marshal/internal/logs"
 	"marshal/internal/manager"
 	"marshal/internal/metrics"
@@ -261,12 +263,18 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 		if name == "" {
 			name = "unknown"
 		}
-		fc := fleet.New(sc.Address, name, version.String(),
-			fleetSnapshot(mgr, sampler),
-			fleet.WithMetrics(metricsSince(mdb)),
-			fleet.WithLogs(logsSince(reg)),
-			fleet.WithCommands(srv.handleFleetCommand))
-		go fc.Run(serveCtx)
+		tlsCfg, tErr := fleetauth.ClientTLS(sc.Fingerprint, sc.CA)
+		if tErr != nil {
+			log.Printf("fleet: disabled, bad TLS config: %v", tErr)
+		} else {
+			fc := fleet.New(sc.Address, name, version.String(),
+				fleetSnapshot(mgr, sampler),
+				fleet.WithTLS(tlsCfg),
+				fleet.WithMetrics(metricsSince(mdb)),
+				fleet.WithLogs(logsSince(reg)),
+				fleet.WithCommands(srv.handleFleetCommand))
+			go fc.Run(serveCtx)
+		}
 	}
 	go sampler.Run(serveCtx, metricsSnapshot(mgr))
 	go func() {

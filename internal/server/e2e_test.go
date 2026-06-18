@@ -63,16 +63,15 @@ func waitForLogs(t *testing.T, conn *grpc.ClientConn, agent, selector string, wa
 }
 
 func TestE2ELogsIngestAndBackfill(t *testing.T) {
-	// The fleet agent client (internal/fleet) still dials insecure; TLS for the
-	// agent-side connection lands in Task 5. Skip the agent-connects-to-server
-	// round-trip here and remove this skip in Task 5.
-	t.Skip("TLS agent client lands in Task 5")
-
 	dataDir := t.TempDir()
 	base := time.Now().UnixMilli()
 
 	// Get the fingerprint before starting ServeDir (LoadOrCreateCert is idempotent).
 	_, fp, err := LoadOrCreateCert(dataDir, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsCfg, err := fleetauth.ClientTLS(fp, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,6 +103,7 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 
 	c1 := fleet.New(lis1.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
+		fleet.WithTLS(tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithLogs(logsFn))
 	cctx1, ccancel1 := context.WithCancel(context.Background())
 	go c1.Run(cctx1)
@@ -130,6 +130,7 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 
 	c2 := fleet.New(lis2.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
+		fleet.WithTLS(tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithLogs(logsFn))
 	cctx2, ccancel2 := context.WithCancel(context.Background())
 	defer ccancel2()
@@ -163,12 +164,11 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 }
 
 func TestE2EFleetControlRoundTrip(t *testing.T) {
-	// The fleet agent client (internal/fleet) still dials insecure; TLS for the
-	// agent-side connection lands in Task 5. Skip the agent-connects-to-server
-	// round-trip here and remove this skip in Task 5.
-	t.Skip("TLS agent client lands in Task 5")
-
 	cert, fp, err := LoadOrCreateCert(t.TempDir(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsCfg, err := fleetauth.ClientTLS(fp, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,12 +179,12 @@ func TestE2EFleetControlRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	reg := NewRegistry()
-	srv := NewServer(reg, nil, nil)
 	go func() { _ = Serve(ctx, lis, reg, nil, nil, cert) }()
 
 	// Real agent client whose command handler echoes the selector back.
 	c := fleet.New(lis.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
+		fleet.WithTLS(tlsCfg),
 		fleet.WithInterval(20*time.Millisecond),
 		fleet.WithCommands(func(cmd *pb.Command) *pb.ControlResult {
 			return &pb.ControlResult{Ok: true, Procs: []*pb.ProcInfo{
@@ -195,8 +195,11 @@ func TestE2EFleetControlRoundTrip(t *testing.T) {
 	defer ccancel()
 	go c.Run(cctx)
 
-	// Wait until the agent is registered (its session exists).
-	waitFor(t, func() bool { _, ok := srv.broker.get("web-1"); return ok })
+	// Wait until the agent is connected (registry reflects its live session).
+	waitFor(t, func() bool {
+		ag := reg.List()
+		return len(ag) == 1 && ag[0].GetConnected()
+	})
 
 	conn := e2eDialFleet(t, lis.Addr().String(), fp)
 	defer conn.Close()
@@ -215,11 +218,6 @@ func TestE2EFleetControlRoundTrip(t *testing.T) {
 }
 
 func TestE2EMetricsIngestAndBackfill(t *testing.T) {
-	// The fleet agent client (internal/fleet) still dials insecure; TLS for the
-	// agent-side connection lands in Task 5. Skip the agent-connects-to-server
-	// round-trip here and remove this skip in Task 5.
-	t.Skip("TLS agent client lands in Task 5")
-
 	dataDir := t.TempDir()
 
 	// Use time.Now()-relative timestamps so samples fall inside the 1h query window.
@@ -227,6 +225,10 @@ func TestE2EMetricsIngestAndBackfill(t *testing.T) {
 
 	// Get the fingerprint before starting ServeDir (LoadOrCreateCert is idempotent).
 	_, fp, err := LoadOrCreateCert(dataDir, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsCfg, err := fleetauth.ClientTLS(fp, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,6 +261,7 @@ func TestE2EMetricsIngestAndBackfill(t *testing.T) {
 
 	c1 := fleet.New(lis1.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
+		fleet.WithTLS(tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithMetrics(metricsFn))
 	cctx1, ccancel1 := context.WithCancel(context.Background())
 	go c1.Run(cctx1)
@@ -286,6 +289,7 @@ func TestE2EMetricsIngestAndBackfill(t *testing.T) {
 
 	c2 := fleet.New(lis2.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
+		fleet.WithTLS(tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithMetrics(metricsFn))
 	cctx2, ccancel2 := context.WithCancel(context.Background())
 	defer ccancel2()

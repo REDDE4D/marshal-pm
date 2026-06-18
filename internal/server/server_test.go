@@ -59,12 +59,6 @@ func newTLSTestServer(t *testing.T, reg *Registry) (addr, fingerprint string) {
 	return lis.Addr().String(), fp
 }
 
-// startServer starts a TLS Fleet server and returns (addr, fingerprint).
-func startServer(t *testing.T, reg *Registry) (addr, fingerprint string) {
-	t.Helper()
-	return newTLSTestServer(t, reg)
-}
-
 func TestConnectRejectsEmptyName(t *testing.T) {
 	srv := NewServer(NewRegistry(), newStores(t.TempDir()), nil)
 	st := &fakeConnectStream{ctx: context.Background(), recv: []*pb.AgentMessage{
@@ -159,7 +153,7 @@ func TestFleetMetricsHistory(t *testing.T) {
 
 func TestServerConnectListAndOffline(t *testing.T) {
 	reg := NewRegistry(WithOfflineAfter(time.Hour))
-	addr, fp := startServer(t, reg)
+	addr, fp := newTLSTestServer(t, reg)
 	cl := dialFleet(t, addr, fp)
 
 	stream, err := cl.Connect(context.Background())

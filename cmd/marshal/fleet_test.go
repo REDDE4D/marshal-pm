@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"io"
 	"net"
 	"strings"
@@ -11,8 +12,11 @@ import (
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
+	"marshal/internal/fleetauth"
 	"marshal/internal/pb"
+	"marshal/internal/server"
 )
 
 func TestFleetMetricsCmdShape(t *testing.T) {
@@ -101,19 +105,65 @@ func TestPrintFleetOfflineCPUMem(t *testing.T) {
 	}
 }
 
-func TestFleetRestartSendsControlOp(t *testing.T) {
-	captured := make(chan *pb.FleetControlRequest, 1)
+// newTLSControlStub starts a TLS gRPC server backed by the given Fleet
+// implementation. It returns the listening address and the pinned fingerprint.
+func newTLSControlStub(t *testing.T, impl pb.FleetServer) (addr, fingerprint string) {
+	t.Helper()
+	cert, fp, err := server.LoadOrCreateCert(t.TempDir(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	gs := grpc.NewServer()
-	pb.RegisterFleetServer(gs, &controlStub{captured: captured})
+	serverCreds := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	})
+	gs := grpc.NewServer(grpc.Creds(serverCreds))
+	pb.RegisterFleetServer(gs, impl)
+	t.Cleanup(func() { gs.GracefulStop() })
 	go func() { _ = gs.Serve(lis) }()
-	defer gs.Stop()
+	return lis.Addr().String(), fp
+}
+
+func TestResolveServerAuth(t *testing.T) {
+	// Flag wins.
+	addr, fp := resolveServerAuth("myhost:1234", "abc123")
+	if addr != "myhost:1234" || fp != "abc123" {
+		t.Fatalf("got addr=%q fp=%q, want myhost:1234 abc123", addr, fp)
+	}
+	// Env fallback for fingerprint.
+	t.Setenv("MARSHAL_FINGERPRINT", "envfp")
+	addr2, fp2 := resolveServerAuth("", "")
+	if fp2 != "envfp" {
+		t.Fatalf("fp from env = %q, want envfp", fp2)
+	}
+	_ = addr2
+	t.Setenv("MARSHAL_FINGERPRINT", "")
+}
+
+func TestFleetRestartSendsControlOp(t *testing.T) {
+	captured := make(chan *pb.FleetControlRequest, 1)
+	addr, fp := newTLSControlStub(t, &controlStub{captured: captured})
+
+	// Verify dialFleet works with the pinned fingerprint.
+	cfg, err := fleetauth.ClientTLS(fp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(credentials.NewTLS(cfg)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn.Close()
 
 	cmd := fleetCmd()
-	cmd.SetArgs([]string{"restart", "web-1", "api", "--server", lis.Addr().String()})
+	cmd.SetArgs([]string{"restart", "web-1", "api",
+		"--server", addr,
+		"--fingerprint", fp,
+	})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	if err := cmd.Execute(); err != nil {

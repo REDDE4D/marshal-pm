@@ -5,6 +5,7 @@ package fleet
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"log"
 	"sync"
@@ -13,7 +14,7 @@ import (
 	"marshal/internal/pb"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 )
 
 // SnapshotFunc returns the agent's current process state.
@@ -40,6 +41,7 @@ type Client struct {
 	interval time.Duration
 	minBO    time.Duration
 	maxBO    time.Duration
+	tls      *tls.Config
 }
 
 // Option configures a Client.
@@ -61,6 +63,10 @@ func WithLogs(fn LogsFunc) Option { return func(c *Client) { c.logs = fn } }
 
 // WithCommands enables down-stream command handling sourced from fn.
 func WithCommands(fn CommandFunc) Option { return func(c *Client) { c.commands = fn } }
+
+// WithTLS sets the client TLS config (pinned fingerprint or CA). Required in
+// fleet mode; there is no insecure fallback.
+func WithTLS(cfg *tls.Config) Option { return func(c *Client) { c.tls = cfg } }
 
 // New builds a fleet client. snap must be non-nil.
 func New(addr, name, version string, snap SnapshotFunc, opts ...Option) *Client {
@@ -107,7 +113,10 @@ func (c *Client) Run(ctx context.Context) {
 // watermark, then pushes snapshots and metrics until the stream errors or ctx
 // is canceled. The bool reports whether the stream was established.
 func (c *Client) connectOnce(ctx context.Context) (bool, error) {
-	conn, err := grpc.NewClient(c.addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if c.tls == nil {
+		return false, errors.New("fleet: TLS config required")
+	}
+	conn, err := grpc.NewClient(c.addr, grpc.WithTransportCredentials(credentials.NewTLS(c.tls)))
 	if err != nil {
 		return false, err
 	}
