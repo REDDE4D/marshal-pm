@@ -28,7 +28,7 @@ func sessionCookieFrom(resp *http.Response) *http.Cookie {
 func TestLoginFleetLogout(t *testing.T) {
 	auth := fakeAuth{user: "admin", pass: "pw"}
 	lister := fakeLister{agents: []*pb.AgentState{{AgentName: "dev-1", Connected: true}}}
-	srv := httptest.NewServer(NewHandler(lister, &fakeMetrics{}, auth, time.Hour))
+	srv := httptest.NewServer(NewHandler(lister, &fakeMetrics{}, &fakeLogs{}, auth, time.Hour))
 	defer srv.Close()
 	c := srv.Client()
 
@@ -87,7 +87,7 @@ func TestLoginFleetLogout(t *testing.T) {
 }
 
 func TestSPAFallback(t *testing.T) {
-	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, fakeAuth{}, time.Hour))
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fakeAuth{}, time.Hour))
 	defer srv.Close()
 
 	resp, err := srv.Client().Get(srv.URL + "/some/client/route")
@@ -104,7 +104,7 @@ func TestSPAFallback(t *testing.T) {
 }
 
 func TestUnknownAPIRouteNotFound(t *testing.T) {
-	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, fakeAuth{}, time.Hour))
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fakeAuth{}, time.Hour))
 	defer srv.Close()
 	resp, _ := srv.Client().Get(srv.URL + "/api/does-not-exist")
 	if resp.StatusCode != http.StatusNotFound {
