@@ -27,7 +27,9 @@ func LoadOrCreateCert(dir, certPath, keyPath string) (tls.Certificate, string, e
 	if keyPath == "" {
 		keyPath = filepath.Join(dir, "key.pem")
 	}
-	if _, err := os.Stat(certPath); os.IsNotExist(err) {
+	_, certErr := os.Stat(certPath)
+	_, keyErr := os.Stat(keyPath)
+	if os.IsNotExist(certErr) || os.IsNotExist(keyErr) {
 		if err := generateSelfSigned(certPath, keyPath); err != nil {
 			return tls.Certificate{}, "", err
 		}
@@ -71,6 +73,10 @@ func writePEM(path, blockType string, der []byte) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	return pem.Encode(f, &pem.Block{Type: blockType, Bytes: der})
+	encErr := pem.Encode(f, &pem.Block{Type: blockType, Bytes: der})
+	closeErr := f.Close()
+	if encErr != nil {
+		return encErr
+	}
+	return closeErr
 }

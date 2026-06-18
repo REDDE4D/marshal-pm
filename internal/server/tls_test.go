@@ -41,3 +41,29 @@ func TestLoadOrCreateCertIsStableAcrossCalls(t *testing.T) {
 		t.Fatalf("fingerprint changed across calls: %s vs %s", fp1, fp2)
 	}
 }
+
+func TestLoadOrCreateCertRegeneratesWhenKeyMissing(t *testing.T) {
+	dir := t.TempDir()
+	cert, fp, err := LoadOrCreateCert(dir, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp == "" || len(cert.Certificate) == 0 {
+		t.Fatal("empty cert or fingerprint")
+	}
+
+	// Delete only the key.pem file.
+	keyPath := filepath.Join(dir, "key.pem")
+	if err := os.Remove(keyPath); err != nil {
+		t.Fatalf("failed to remove key.pem: %v", err)
+	}
+
+	// LoadOrCreateCert should regenerate both files.
+	cert2, fp2, err := LoadOrCreateCert(dir, "", "")
+	if err != nil {
+		t.Fatalf("LoadOrCreateCert failed after key was missing: %v", err)
+	}
+	if fp2 == "" || len(cert2.Certificate) == 0 {
+		t.Fatal("empty cert or fingerprint after regeneration")
+	}
+}
