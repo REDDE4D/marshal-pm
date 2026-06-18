@@ -769,6 +769,7 @@ type FleetLogsHistoryRequest struct {
 	Selector      string                 `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`                        // app name or "name#instance" label
 	Lines         int32                  `protobuf:"varint,3,opt,name=lines,proto3" json:"lines,omitempty"`                             // backfill count
 	Stream        LogStream              `protobuf:"varint,4,opt,name=stream,proto3,enum=marshal.v1.LogStream" json:"stream,omitempty"` // reuse daemon.proto enum; unspecified = merged
+	Grep          string                 `protobuf:"bytes,5,opt,name=grep,proto3" json:"grep,omitempty"`                                // only lines containing this substring (case-insensitive); empty = all
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -829,6 +830,13 @@ func (x *FleetLogsHistoryRequest) GetStream() LogStream {
 		return x.Stream
 	}
 	return LogStream_LOG_STREAM_UNSPECIFIED
+}
+
+func (x *FleetLogsHistoryRequest) GetGrep() string {
+	if x != nil {
+		return x.Grep
+	}
+	return ""
 }
 
 type FleetLogsHistoryResponse struct {
@@ -1370,13 +1378,14 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"\x06stderr\x18\x03 \x01(\bR\x06stderr\x12\x12\n" +
 	"\x04text\x18\x04 \x01(\tR\x04text\"9\n" +
 	"\bLogBatch\x12-\n" +
-	"\x05lines\x18\x01 \x03(\v2\x17.marshal.v1.LogShipLineR\x05lines\"\x99\x01\n" +
+	"\x05lines\x18\x01 \x03(\v2\x17.marshal.v1.LogShipLineR\x05lines\"\xad\x01\n" +
 	"\x17FleetLogsHistoryRequest\x12\x1d\n" +
 	"\n" +
 	"agent_name\x18\x01 \x01(\tR\tagentName\x12\x1a\n" +
 	"\bselector\x18\x02 \x01(\tR\bselector\x12\x14\n" +
 	"\x05lines\x18\x03 \x01(\x05R\x05lines\x12-\n" +
-	"\x06stream\x18\x04 \x01(\x0e2\x15.marshal.v1.LogStreamR\x06stream\"E\n" +
+	"\x06stream\x18\x04 \x01(\x0e2\x15.marshal.v1.LogStreamR\x06stream\x12\x12\n" +
+	"\x04grep\x18\x05 \x01(\tR\x04grep\"E\n" +
 	"\x18FleetLogsHistoryResponse\x12)\n" +
 	"\x05lines\x18\x01 \x03(\v2\x13.marshal.v1.LogLineR\x05lines\"\x8f\x01\n" +
 	"\x1aFleetMetricsHistoryRequest\x12\x1d\n" +
