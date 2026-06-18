@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"text/tabwriter"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	"gopkg.in/yaml.v3"
 
 	"marshal/internal/config"
 	"marshal/internal/fleetauth"
@@ -179,12 +181,42 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
+// cliConfig holds optional defaults loaded from ~/.config/marshal/cli.yaml.
+type cliConfig struct {
+	Server      string `yaml:"server"`
+	Token       string `yaml:"token"`
+	Fingerprint string `yaml:"fingerprint"`
+}
+
+// loadCLIConfig reads $XDG_CONFIG_HOME/marshal/cli.yaml (falling back to
+// ~/.config/marshal/cli.yaml). A missing or unreadable file returns a zero
+// cliConfig without error.
+func loadCLIConfig() cliConfig {
+	base := os.Getenv("XDG_CONFIG_HOME")
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return cliConfig{}
+		}
+		base = filepath.Join(home, ".config")
+	}
+	b, err := os.ReadFile(filepath.Join(base, "marshal", "cli.yaml"))
+	if err != nil {
+		return cliConfig{}
+	}
+	var c cliConfig
+	_ = yaml.Unmarshal(b, &c)
+	return c
+}
+
 // resolveServerAuth resolves the server address, pinned fingerprint, and admin
-// token from flags, then env (MARSHAL_SERVER / MARSHAL_FINGERPRINT / MARSHAL_TOKEN).
+// token from flags, then env (MARSHAL_SERVER / MARSHAL_FINGERPRINT /
+// MARSHAL_TOKEN), then ~/.config/marshal/cli.yaml, then built-in defaults.
 func resolveServerAuth(serverFlag, fpFlag, tokenFlag string) (addr, fingerprint, token string) {
-	addr = resolveServer(serverFlag)
-	fingerprint = firstNonEmpty(fpFlag, os.Getenv("MARSHAL_FINGERPRINT"))
-	token = firstNonEmpty(tokenFlag, os.Getenv("MARSHAL_TOKEN"))
+	cfg := loadCLIConfig()
+	addr = firstNonEmpty(serverFlag, os.Getenv("MARSHAL_SERVER"), cfg.Server, "localhost:9000")
+	fingerprint = firstNonEmpty(fpFlag, os.Getenv("MARSHAL_FINGERPRINT"), cfg.Fingerprint)
+	token = firstNonEmpty(tokenFlag, os.Getenv("MARSHAL_TOKEN"), cfg.Token)
 	return
 }
 

@@ -6,6 +6,8 @@ import (
 	"crypto/tls"
 	"io"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -130,6 +132,9 @@ func newTLSControlStub(t *testing.T, impl pb.FleetServer) (addr, fingerprint str
 }
 
 func TestResolveServerAuth(t *testing.T) {
+	// Isolate from any real cli.yaml the developer may have on disk.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
 	// Flag wins.
 	addr, fp, tok := resolveServerAuth("myhost:1234", "abc123", "mytoken")
 	if addr != "myhost:1234" || fp != "abc123" || tok != "mytoken" {
@@ -148,6 +153,25 @@ func TestResolveServerAuth(t *testing.T) {
 	_ = addr2
 	t.Setenv("MARSHAL_FINGERPRINT", "")
 	t.Setenv("MARSHAL_TOKEN", "")
+}
+
+func TestResolveServerAuthFromConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "marshal"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := "server: h:1234\ntoken: tok-cfg\nfingerprint: fp-cfg\n"
+	if err := os.WriteFile(filepath.Join(dir, "marshal", "cli.yaml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MARSHAL_SERVER", "")
+	t.Setenv("MARSHAL_TOKEN", "")
+	t.Setenv("MARSHAL_FINGERPRINT", "")
+	addr, fp, tok := resolveServerAuth("", "", "")
+	if addr != "h:1234" || fp != "fp-cfg" || tok != "tok-cfg" {
+		t.Fatalf("got addr=%q fp=%q tok=%q", addr, fp, tok)
+	}
 }
 
 func TestFleetRestartSendsControlOp(t *testing.T) {
