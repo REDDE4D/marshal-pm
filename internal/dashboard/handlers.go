@@ -16,6 +16,7 @@ const sessionCookie = "marshal_session"
 // Authenticator verifies dashboard credentials. *server.AuthStore satisfies it.
 type Authenticator interface {
 	VerifyDashboardUser(user, password string) bool
+	DashboardCredentialStamp(user string) (string, bool)
 }
 
 type ctxKey string
@@ -109,7 +110,8 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.limiter.reset(key)
-	tok, err := h.sessions.create(body.User)
+	stamp, _ := h.auth.DashboardCredentialStamp(body.User)
+	tok, err := h.sessions.create(body.User, stamp)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -143,8 +145,16 @@ func (h *handler) requireSession(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		user, ok := h.sessions.validate(c.Value)
+		user, stamp, ok := h.sessions.validate(c.Value)
 		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		// Invalidate if the credential changed (stamp mismatch) or the user is
+		// gone. The session dies on its next request; no push needed.
+		cur, exists := h.auth.DashboardCredentialStamp(user)
+		if !exists || cur != stamp {
+			h.sessions.delete(c.Value)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

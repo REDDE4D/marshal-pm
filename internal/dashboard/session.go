@@ -15,6 +15,7 @@ import (
 
 type session struct {
 	User   string    `json:"user"`
+	Stamp  string    `json:"stamp"`
 	Expiry time.Time `json:"expiry"`
 }
 
@@ -51,37 +52,39 @@ func newSessionStore(ttl time.Duration, now func() time.Time, path string) *sess
 	return s
 }
 
-// create mints a random 256-bit session token for user and returns the
-// plaintext token; the store keeps only its hash.
-func (s *sessionStore) create(user string) (string, error) {
+// create mints a random 256-bit session token for user, recording the
+// credential stamp under which it was minted, and returns the plaintext token;
+// the store keeps only its hash.
+func (s *sessionStore) create(user, stamp string) (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
 	tok := base64.RawURLEncoding.EncodeToString(b)
 	s.mu.Lock()
-	s.m[hashSessionToken(tok)] = session{User: user, Expiry: s.now().Add(s.ttl)}
+	s.m[hashSessionToken(tok)] = session{User: user, Stamp: stamp, Expiry: s.now().Add(s.ttl)}
 	s.persistLocked()
 	s.mu.Unlock()
 	return tok, nil
 }
 
-// validate returns the user for a live token, or ok=false if the token is
-// unknown or expired (expired tokens are removed).
-func (s *sessionStore) validate(tok string) (string, bool) {
+// validate returns the user and credential stamp for a live token, or ok=false
+// if the token is unknown or expired (expired tokens are removed). The caller
+// compares the stamp against the user's current credential.
+func (s *sessionStore) validate(tok string) (string, string, bool) {
 	h := hashSessionToken(tok)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess, ok := s.m[h]
 	if !ok {
-		return "", false
+		return "", "", false
 	}
 	if !s.now().Before(sess.Expiry) {
 		delete(s.m, h)
 		s.persistLocked()
-		return "", false
+		return "", "", false
 	}
-	return sess.User, true
+	return sess.User, sess.Stamp, true
 }
 
 // delete removes a token (logout).
