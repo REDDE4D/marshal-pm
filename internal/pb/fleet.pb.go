@@ -289,6 +289,7 @@ type HelloAck struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	LastMetricTsMs int64                  `protobuf:"varint,1,opt,name=last_metric_ts_ms,json=lastMetricTsMs,proto3" json:"last_metric_ts_ms,omitempty"` // server's stored high-water-mark for this agent (0 = none)
 	LastLogTsMs    int64                  `protobuf:"varint,2,opt,name=last_log_ts_ms,json=lastLogTsMs,proto3" json:"last_log_ts_ms,omitempty"`          // server's stored log high-water-mark (0 = none)
+	AgentToken     string                 `protobuf:"bytes,3,opt,name=agent_token,json=agentToken,proto3" json:"agent_token,omitempty"`                  // M10: minted per-agent token (set only on enrollment)
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -335,6 +336,13 @@ func (x *HelloAck) GetLastLogTsMs() int64 {
 		return x.LastLogTsMs
 	}
 	return 0
+}
+
+func (x *HelloAck) GetAgentToken() string {
+	if x != nil {
+		return x.AgentToken
+	}
+	return ""
 }
 
 type StateSnapshot struct {
@@ -1331,10 +1339,12 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"\x05Hello\x12\x1d\n" +
 	"\n" +
 	"agent_name\x18\x01 \x01(\tR\tagentName\x12'\n" +
-	"\x0fmarshal_version\x18\x02 \x01(\tR\x0emarshalVersion\"Z\n" +
+	"\x0fmarshal_version\x18\x02 \x01(\tR\x0emarshalVersion\"{\n" +
 	"\bHelloAck\x12)\n" +
 	"\x11last_metric_ts_ms\x18\x01 \x01(\x03R\x0elastMetricTsMs\x12#\n" +
-	"\x0elast_log_ts_ms\x18\x02 \x01(\x03R\vlastLogTsMs\";\n" +
+	"\x0elast_log_ts_ms\x18\x02 \x01(\x03R\vlastLogTsMs\x12\x1f\n" +
+	"\vagent_token\x18\x03 \x01(\tR\n" +
+	"agentToken\";\n" +
 	"\rStateSnapshot\x12*\n" +
 	"\x05procs\x18\x01 \x03(\v2\x14.marshal.v1.ProcInfoR\x05procs\"\x12\n" +
 	"\x10ListFleetRequest\"C\n" +

@@ -45,6 +45,7 @@ message Hello {
 message HelloAck {
   int64 last_metric_ts_ms = 1; // server's stored high-water-mark for this agent (0 = none)
   int64 last_log_ts_ms = 2;    // server's stored log high-water-mark (0 = none)
+  string agent_token = 3;      // M10: minted per-agent token (set only on enrollment)
 }
 
 message StateSnapshot { repeated ProcInfo procs = 1; } // ProcInfo from daemon.proto
