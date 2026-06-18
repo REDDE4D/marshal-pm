@@ -15,7 +15,7 @@ import (
 )
 
 func serverCmd() *cobra.Command {
-	var listen, dataDir, tlsCert, tlsKey string
+	var listen, dataDir, tlsCert, tlsKey, httpListen string
 	cmd := &cobra.Command{
 		Use:   "server",
 		Short: "Run the Marshal central server (fleet aggregation)",
@@ -41,13 +41,17 @@ func serverCmd() *cobra.Command {
 			defer stop()
 			fmt.Fprintf(cmd.OutOrStdout(), "marshal server: listening on %s, data %s\n", lis.Addr(), dataDir)
 			fmt.Fprintf(cmd.OutOrStdout(), "marshal server: cert fingerprint %s\n", fp)
-			return server.ServeDir(ctx, lis, dataDir, tlsCert, tlsKey)
+			if httpListen != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "marshal server: dashboard on %s\n", httpListen)
+			}
+			return server.ServeDir(ctx, lis, dataDir, tlsCert, tlsKey, httpListen)
 		},
 	}
 	cmd.Flags().StringVar(&listen, "listen", ":9000", "address to listen on")
 	cmd.Flags().StringVar(&dataDir, "data-dir", "", "metric storage directory (default $XDG_DATA_HOME/marshal-server)")
 	cmd.Flags().StringVar(&tlsCert, "tls-cert", "", "path to TLS cert PEM (default <data-dir>/cert.pem, generated if absent)")
 	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "path to TLS key PEM (default <data-dir>/key.pem)")
+	cmd.Flags().StringVar(&httpListen, "http-listen", "", "address for the web dashboard (e.g. :9001); disabled if empty")
 	cmd.AddCommand(serverFingerprintCmd(), serverTokenCmd(), serverAgentCmd(), serverPasswdCmd())
 	return cmd
 }

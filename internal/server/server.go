@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"marshal/internal/dashboard"
 	"marshal/internal/logstore"
 	"marshal/internal/metricstore"
 	"marshal/internal/pb"
@@ -345,7 +346,7 @@ func Serve(ctx context.Context, lis net.Listener, reg *Registry, ss *stores, ls 
 // serves over TLS until ctx is canceled. certPath and keyPath may be empty
 // strings, in which case they default to dataDir/cert.pem and dataDir/key.pem
 // (and are generated on first run).
-func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath string, opts ...RegOption) error {
+func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath, httpAddr string, opts ...RegOption) error {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return fmt.Errorf("create data dir %s: %w", dataDir, err)
 	}
@@ -375,5 +376,17 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath 
 			}
 		}
 	}()
-	return Serve(ctx, lis, NewRegistry(opts...), ss, ls, cert, auth)
+	reg := NewRegistry(opts...)
+	if httpAddr != "" {
+		if !auth.HasDashboardUser() {
+			log.Printf("dashboard: no user set — run 'marshal server passwd'")
+		}
+		go func() {
+			if err := dashboard.Serve(ctx, httpAddr, reg, auth, cert); err != nil {
+				log.Printf("dashboard: %v", err)
+			}
+		}()
+		log.Printf("dashboard: serving on %s", httpAddr)
+	}
+	return Serve(ctx, lis, reg, ss, ls, cert, auth)
 }
