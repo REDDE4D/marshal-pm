@@ -7,13 +7,14 @@ import (
 	"testing"
 	"time"
 
+	"marshal/internal/fleetauth"
 	"marshal/internal/logstore"
 	"marshal/internal/metricstore"
 	"marshal/internal/pb"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 )
 
@@ -40,16 +41,28 @@ func (f *fakeConnectStream) Recv() (*pb.AgentMessage, error) {
 	return m, nil
 }
 
-func startServer(t *testing.T, reg *Registry) string {
+// newTLSTestServer starts a TLS Fleet server in the background and returns
+// (addr, fingerprint). The server is shut down when t ends.
+func newTLSTestServer(t *testing.T, reg *Registry) (addr, fingerprint string) {
 	t.Helper()
+	cert, fp, err := LoadOrCreateCert(t.TempDir(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	go func() { _ = Serve(ctx, lis, reg, nil, nil) }()
-	return lis.Addr().String()
+	go func() { _ = Serve(ctx, lis, reg, nil, nil, cert) }()
+	return lis.Addr().String(), fp
+}
+
+// startServer starts a TLS Fleet server and returns (addr, fingerprint).
+func startServer(t *testing.T, reg *Registry) (addr, fingerprint string) {
+	t.Helper()
+	return newTLSTestServer(t, reg)
 }
 
 func TestConnectRejectsEmptyName(t *testing.T) {
@@ -94,9 +107,13 @@ func TestConnectAcksWatermarkAndStoresBatch(t *testing.T) {
 	}
 }
 
-func dialFleet(t *testing.T, addr string) pb.FleetClient {
+func dialFleet(t *testing.T, addr, fingerprint string) pb.FleetClient {
 	t.Helper()
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	tlsCfg, err := fleetauth.ClientTLS(fingerprint, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,8 +159,8 @@ func TestFleetMetricsHistory(t *testing.T) {
 
 func TestServerConnectListAndOffline(t *testing.T) {
 	reg := NewRegistry(WithOfflineAfter(time.Hour))
-	addr := startServer(t, reg)
-	cl := dialFleet(t, addr)
+	addr, fp := startServer(t, reg)
+	cl := dialFleet(t, addr, fp)
 
 	stream, err := cl.Connect(context.Background())
 	if err != nil {

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 )
 
@@ -289,10 +291,11 @@ func (s *Server) FleetControl(ctx context.Context, req *pb.FleetControlRequest) 
 	return &pb.FleetControlResponse{Result: res}, nil
 }
 
-// Serve registers the Fleet service on lis and serves until ctx is canceled.
+// Serve registers the Fleet service on lis (TLS) and serves until ctx is canceled.
 // ss/ls may be nil (no storage); when set they are closed on shutdown.
-func Serve(ctx context.Context, lis net.Listener, reg *Registry, ss *stores, ls *logStores) error {
-	gs := grpc.NewServer()
+func Serve(ctx context.Context, lis net.Listener, reg *Registry, ss *stores, ls *logStores, cert tls.Certificate) error {
+	creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
+	gs := grpc.NewServer(grpc.Creds(creds))
 	pb.RegisterFleetServer(gs, NewServer(reg, ss, ls))
 	go func() {
 		<-ctx.Done()
@@ -308,11 +311,18 @@ func Serve(ctx context.Context, lis net.Listener, reg *Registry, ss *stores, ls 
 }
 
 // ServeDir builds a registry + per-agent metric stores rooted at dataDir, then
-// serves until ctx is canceled.
-func ServeDir(ctx context.Context, lis net.Listener, dataDir string, opts ...RegOption) error {
+// serves over TLS until ctx is canceled. certPath and keyPath may be empty
+// strings, in which case they default to dataDir/cert.pem and dataDir/key.pem
+// (and are generated on first run).
+func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath string, opts ...RegOption) error {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return fmt.Errorf("create data dir %s: %w", dataDir, err)
 	}
+	cert, fp, err := LoadOrCreateCert(dataDir, certPath, keyPath)
+	if err != nil {
+		return err
+	}
+	log.Printf("fleet: server cert fingerprint %s", fp)
 	ss := newStores(dataDir)
 	ls := newLogStores(dataDir)
 	go func() {
@@ -330,5 +340,5 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir string, opts ...Reg
 			}
 		}
 	}()
-	return Serve(ctx, lis, NewRegistry(opts...), ss, ls)
+	return Serve(ctx, lis, NewRegistry(opts...), ss, ls, cert)
 }
