@@ -27,7 +27,7 @@ export function MetricChart({ buckets, metric }: MetricChartProps) {
   const y = (v: number) => H - PAD - ((v - lo) / span) * (H - 2 * PAD);
   const line = (series: number[]) =>
     series.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-  const color = metric === "cpu" ? "#4ade80" : "#60a5fa";
+  const color = metric === "cpu" ? "#2DD4BF" : "#5B6BD8";
 
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="metric-chart" role="img">
