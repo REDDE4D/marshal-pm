@@ -1,6 +1,7 @@
 package server
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -184,5 +185,84 @@ func TestSetDashboardPasswordDir(t *testing.T) {
 	a, _, _ := LoadOrInitAuth(dir)
 	if !a.VerifyDashboardUser("admin", "pw") {
 		t.Fatal("password set via dir wrapper not verifiable")
+	}
+}
+
+func TestReloadPicksUpNewPassword(t *testing.T) {
+	dir := t.TempDir()
+	if err := SetDashboardPassword(dir, "admin", "old"); err != nil {
+		t.Fatal(err)
+	}
+	a, _, err := loadOrInitAuth(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !a.VerifyDashboardUser("admin", "old") {
+		t.Fatal("baseline password did not verify")
+	}
+
+	// A separate process (here, a separate call) changes the password on disk.
+	if err := SetDashboardPassword(dir, "admin", "new"); err != nil {
+		t.Fatal(err)
+	}
+	// Before reload, the running store still has the old password.
+	if a.VerifyDashboardUser("admin", "new") {
+		t.Fatal("store saw the new password without a reload")
+	}
+	if err := a.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if !a.VerifyDashboardUser("admin", "new") {
+		t.Fatal("reload did not pick up the new password")
+	}
+	if a.VerifyDashboardUser("admin", "old") {
+		t.Fatal("old password still valid after reload")
+	}
+}
+
+func TestReloadNoopWhenUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	if err := SetDashboardPassword(dir, "admin", "pw"); err != nil {
+		t.Fatal(err)
+	}
+	a, _, err := loadOrInitAuth(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Corrupt the in-memory data, then Reload with an unchanged file: because the
+	// mtime is unchanged, Reload must NOT overwrite our in-memory change.
+	a.mu.Lock()
+	a.data.Users["sentinel"] = dashboardUser{}
+	a.mu.Unlock()
+	if err := a.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	_, present := a.data.Users["sentinel"]
+	a.mu.Unlock()
+	if !present {
+		t.Fatal("Reload reparsed the file despite an unchanged mtime")
+	}
+}
+
+func TestReloadCorruptKeepsOldData(t *testing.T) {
+	dir := t.TempDir()
+	if err := SetDashboardPassword(dir, "admin", "pw"); err != nil {
+		t.Fatal(err)
+	}
+	a, _, err := loadOrInitAuth(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Overwrite auth.json with garbage (changes mtime).
+	if err := os.WriteFile(filepath.Join(dir, "auth.json"), []byte("{ not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Reload(); err == nil {
+		t.Fatal("Reload of a corrupt file returned nil error")
+	}
+	// The previously-loaded password still verifies.
+	if !a.VerifyDashboardUser("admin", "pw") {
+		t.Fatal("corrupt reload dropped the good in-memory data")
 	}
 }

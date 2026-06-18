@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -365,12 +366,14 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 	}()
 	reg := NewRegistry(opts...)
 	srv := NewServer(reg, ss, ls, auth)
+	go auth.ReloadLoop(ctx, 3*time.Second)
 	if httpAddr != "" {
 		if !auth.HasDashboardUser() {
 			log.Printf("dashboard: no user set — run 'marshal server passwd'")
 		}
+		sessionsPath := filepath.Join(dataDir, "sessions.json")
 		go func() {
-			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert); err != nil {
+			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath); err != nil {
 				log.Printf("dashboard: %v", err)
 			}
 		}()

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"io/fs"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -27,13 +29,15 @@ type handler struct {
 	controller  FleetController
 	auth        Authenticator
 	sessions    *sessionStore
+	limiter     *loginLimiter
 	files       fs.FS
 	static      http.Handler
 	mux         http.Handler
 }
 
 // newHandler builds a *handler (with its mux) for the given session lifetime.
-func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration) *handler {
+// sessionsPath persists sessions to disk; "" keeps them in-memory.
+func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration, sessionsPath string) *handler {
 	files := staticFS()
 	h := &handler{
 		lister:      lister,
@@ -41,7 +45,8 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 		logsHist:    logs,
 		controller:  controller,
 		auth:        auth,
-		sessions:    newSessionStore(ttl, nil),
+		sessions:    newSessionStore(ttl, nil, sessionsPath),
+		limiter:     newLoginLimiter(nil),
 		files:       files,
 		static:      http.FileServer(http.FS(files)),
 	}
@@ -61,7 +66,7 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 // NewHandler builds the dashboard HTTP handler with the given session lifetime.
 // The returned http.Handler is safe to use with httptest servers in unit tests.
 func NewHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration) http.Handler {
-	return newHandler(lister, metrics, logs, controller, auth, ttl).mux
+	return newHandler(lister, metrics, logs, controller, auth, ttl, "").mux
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -88,10 +93,22 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	key := body.User + "|" + clientIP(r)
+	if locked, wait := h.limiter.retryAfter(key); locked {
+		secs := int(wait.Seconds())
+		if secs < 1 {
+			secs = 1
+		}
+		w.Header().Set("Retry-After", strconv.Itoa(secs))
+		http.Error(w, "too many attempts", http.StatusTooManyRequests)
+		return
+	}
 	if !h.auth.VerifyDashboardUser(body.User, body.Pass) {
+		h.limiter.fail(key)
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
+	h.limiter.reset(key)
 	tok, err := h.sessions.create(body.User)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -99,6 +116,16 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 	}
 	h.setSessionCookie(w, tok, 0)
 	writeJSON(w, http.StatusOK, map[string]string{"user": body.User})
+}
+
+// clientIP returns the source IP for r, stripping the port. It falls back to the
+// raw RemoteAddr if there is no port (Marshal serves direct TLS, so RemoteAddr
+// is the real client — no X-Forwarded-For to consult).
+func clientIP(r *http.Request) string {
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.RemoteAddr
 }
 
 func (h *handler) logout(w http.ResponseWriter, r *http.Request) {
