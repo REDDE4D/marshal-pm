@@ -42,7 +42,7 @@ func (h *handler) logs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "agent and selector required", http.StatusBadRequest)
 		return
 	}
-	lines, cursor, err := h.logsHist.Since(agent, selector, parseAfter(q.Get("after")), parseLimit(q.Get("limit")), streamFilterFor(q.Get("stream")), "")
+	lines, cursor, err := h.logsHist.Since(agent, selector, parseAfter(q.Get("after")), parseLimit(q.Get("limit")), streamFilterFor(q.Get("stream")), q.Get("q"))
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
