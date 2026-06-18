@@ -182,40 +182,16 @@ func (s *Server) FleetMetricsHistory(_ context.Context, req *pb.FleetMetricsHist
 	if s.stores == nil || !s.stores.has(req.GetAgentName()) {
 		return nil, status.Errorf(codes.NotFound, "no metric history for agent %q", req.GetAgentName())
 	}
-	st, err := s.stores.get(req.GetAgentName())
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "open store: %v", err)
-	}
-	labels, err := st.Labels()
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "labels: %v", err)
-	}
-	sel := req.GetSelector()
-	var matched []string
-	for _, l := range labels {
-		if l == sel || strings.HasPrefix(l, sel+"#") {
-			matched = append(matched, l)
-		}
-	}
-
 	sinceMs := req.GetSinceMs()
 	if sinceMs <= 0 {
 		sinceMs = defaultHistoryMs
 	}
-	bucketMs := metricstore.AutoBucketMs(sinceMs, req.GetBucketMs())
-	lowerMs := time.Now().UnixMilli() - sinceMs
-
-	var series [][]metricstore.Bucket
-	for _, l := range matched {
-		bs, err := st.Query(metricstore.QueryReq{Label: l, SinceMs: lowerMs, BucketMs: bucketMs})
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "query: %v", err)
-		}
-		series = append(series, bs)
+	buckets, err := s.stores.History(req.GetAgentName(), req.GetSelector(), sinceMs, req.GetBucketMs())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "history: %v", err)
 	}
-
 	resp := &pb.MetricsHistoryResponse{}
-	for _, b := range metricstore.MergeBuckets(series) {
+	for _, b := range buckets {
 		resp.Buckets = append(resp.Buckets, &pb.MetricBucket{
 			TsMs: b.TsMs, CpuAvg: b.CpuAvg, CpuMax: b.CpuMax, MemAvg: b.MemAvg, MemMax: b.MemMax,
 		})
