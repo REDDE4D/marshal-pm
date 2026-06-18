@@ -68,3 +68,19 @@ func TestSessionDiesWhenUserGone(t *testing.T) {
 		t.Fatalf("fleet after user removed = %d; want 401", got)
 	}
 }
+
+// TestPreUpgradeEmptyStampInvalidated covers the back-compat path: a session
+// minted before this upgrade carries an empty stamp. Once the credential reports
+// a real (non-empty) stamp, that session must be invalidated on its next request
+// — forcing exactly one re-login, the secure default.
+func TestPreUpgradeEmptyStampInvalidated(t *testing.T) {
+	auth := &stampAuth{user: "admin", pass: "pw", stamp: "", known: true}
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, auth, time.Hour))
+	defer srv.Close()
+	c := srv.Client()
+	ck := loginCookie(t, c, srv.URL) // session minted with an empty stamp
+	auth.stamp = "s1"                // credential now has a real stamp
+	if got := fleetStatus(t, c, srv.URL, ck); got != http.StatusUnauthorized {
+		t.Fatalf("fleet for empty-stamp session against real stamp = %d; want 401", got)
+	}
+}
