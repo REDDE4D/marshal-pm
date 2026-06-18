@@ -26,14 +26,14 @@ export function ControlButtons({ agent, proc, state, connected }: { agent: strin
   if (busy) return <span className="ctl"><span className="ctl-msg">…</span></span>;
   if (pending) {
     return (
-      <span className="ctl" onClick={(e) => e.stopPropagation()}>
+      <span className="ctl" onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}>
         <button className="ctl-confirm" onClick={() => fire(pending.op)}>confirm {pending.label}</button>
         <button className="ctl-btn" onClick={() => setPending(null)}>✕</button>
       </span>
     );
   }
   return (
-    <span className="ctl" onClick={(e) => e.stopPropagation()}>
+    <span className="ctl" onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}>
       {/* start: revive a stopped/errored proc via restart; no confirm (it's already down) */}
       <button className="ctl-btn" disabled={!connected || running} onClick={() => fire("restart")}>start</button>
       <button className="ctl-btn" disabled={!connected || !running} onClick={() => ask("restart", "restart")}>restart</button>
