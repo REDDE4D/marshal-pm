@@ -65,26 +65,44 @@ func (s *Server) Connect(stream pb.Fleet_ConnectServer) error {
 		}
 		switch m := msg.GetMsg().(type) {
 		case *pb.AgentMessage_Hello:
-			name = m.Hello.GetAgentName()
-			if name == "" {
-				return status.Error(codes.InvalidArgument, "agent_name must not be empty")
+			ctx := stream.Context()
+			ack := &pb.HelloAck{}
+			if s.auth == nil {
+				// No auth configured (direct unit-test calls that bypass the
+				// interceptor): trust the self-asserted name as before.
+				name = m.Hello.GetAgentName()
+				if name == "" {
+					return status.Error(codes.InvalidArgument, "agent_name must not be empty")
+				}
+			} else if isEnrolling(ctx) {
+				requested := m.Hello.GetAgentName()
+				if requested == "" {
+					return status.Error(codes.InvalidArgument, "agent_name must not be empty")
+				}
+				tok, err := s.auth.enrollAgent(requested)
+				if err != nil {
+					return status.Errorf(codes.AlreadyExists, "enroll %q: %v", requested, err)
+				}
+				name = requested
+				ack.AgentToken = tok
+			} else if authed, ok := authedAgentName(ctx); ok {
+				name = authed
+			} else {
+				return status.Error(codes.Unauthenticated, "unauthenticated connect")
 			}
 			s.reg.Open(name)
 			sess = s.broker.register(name, stream.Send)
-			var watermark, logWM int64
 			if s.stores != nil {
 				if st, err := s.stores.get(name); err == nil {
-					watermark, _ = st.MaxTs()
+					ack.LastMetricTsMs, _ = st.MaxTs()
 				}
 			}
 			if s.logs != nil {
 				if st, err := s.logs.get(name); err == nil {
-					logWM, _ = st.MaxTs()
+					ack.LastLogTsMs, _ = st.MaxTs()
 				}
 			}
-			_ = sess.sendMsg(&pb.ServerMessage{Msg: &pb.ServerMessage_HelloAck{
-				HelloAck: &pb.HelloAck{LastMetricTsMs: watermark, LastLogTsMs: logWM},
-			}})
+			_ = sess.sendMsg(&pb.ServerMessage{Msg: &pb.ServerMessage_HelloAck{HelloAck: ack}})
 		case *pb.AgentMessage_Snapshot:
 			if name != "" {
 				s.reg.Update(name, m.Snapshot.GetProcs())

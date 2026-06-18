@@ -261,6 +261,94 @@ func TestFleetControlNotConnected(t *testing.T) {
 	}
 }
 
+// TestEnrollAndAuthenticatedIdentity is the enrollment e2e test required by
+// Task 13. It verifies two properties:
+//  1. A Connect with marshal-enroll metadata + Hello{AgentName:"dev-1"} receives a
+//     non-empty HelloAck.AgentToken (the server minted a per-agent token).
+//  2. A second Connect with marshal-token = that minted token and
+//     Hello{AgentName:"anything"} registers state under "dev-1" (the
+//     authenticated name), NOT "anything" — verified via ListFleet.
+func TestEnrollAndAuthenticatedIdentity(t *testing.T) {
+	reg := NewRegistry(WithOfflineAfter(time.Hour))
+	addr, fp, secrets := newTLSTestServer(t, reg)
+
+	tlsCfg, err := fleetauth.ClientTLS(fp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	// --- Step 1: Enroll "dev-1", expect a minted token in HelloAck ---
+	enrollCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("marshal-enroll", secrets.EnrollToken))
+	stream1, err := pb.NewFleetClient(conn).Connect(enrollCtx)
+	if err != nil {
+		t.Fatalf("Connect (enroll): %v", err)
+	}
+	if err := stream1.Send(&pb.AgentMessage{Msg: &pb.AgentMessage_Hello{Hello: &pb.Hello{AgentName: "dev-1"}}}); err != nil {
+		t.Fatalf("Send Hello (enroll): %v", err)
+	}
+	ack1, err := stream1.Recv()
+	if err != nil {
+		t.Fatalf("Recv HelloAck (enroll): %v", err)
+	}
+	helloAck1 := ack1.GetHelloAck()
+	if helloAck1 == nil {
+		t.Fatalf("first recv is not HelloAck: %T", ack1.GetMsg())
+	}
+	mintedToken := helloAck1.GetAgentToken()
+	if mintedToken == "" {
+		t.Fatal("HelloAck.AgentToken is empty; server did not mint a token on enrollment")
+	}
+	// Close enrollment stream.
+	_ = stream1.CloseSend()
+
+	// --- Step 2: Authenticate with minted token; send Hello{AgentName:"anything"} ---
+	// The server must register state under "dev-1" (the authenticated name),
+	// ignoring the self-asserted "anything".
+	authCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("marshal-token", mintedToken))
+	stream2, err := pb.NewFleetClient(conn).Connect(authCtx)
+	if err != nil {
+		t.Fatalf("Connect (auth): %v", err)
+	}
+	if err := stream2.Send(&pb.AgentMessage{Msg: &pb.AgentMessage_Hello{Hello: &pb.Hello{AgentName: "anything"}}}); err != nil {
+		t.Fatalf("Send Hello (auth): %v", err)
+	}
+	_, err = stream2.Recv()
+	if err != nil {
+		t.Fatalf("Recv HelloAck (auth): %v", err)
+	}
+	// Send a snapshot so the server has state to list.
+	if err := stream2.Send(&pb.AgentMessage{Msg: &pb.AgentMessage_Snapshot{Snapshot: &pb.StateSnapshot{
+		Procs: []*pb.ProcInfo{{Name: "worker", State: "online"}},
+	}}}); err != nil {
+		t.Fatalf("Send Snapshot: %v", err)
+	}
+
+	// Wait for the registry to reflect the agent.
+	waitFor(t, func() bool {
+		for _, ag := range reg.List() {
+			if ag.GetAgentName() == "dev-1" && ag.GetConnected() {
+				return true
+			}
+		}
+		return false
+	})
+
+	// Verify no agent named "anything" was registered.
+	agents := reg.List()
+	for _, ag := range agents {
+		if ag.GetAgentName() == "anything" {
+			t.Fatalf("server registered agent under self-asserted name %q; should have used %q", "anything", "dev-1")
+		}
+	}
+
+	_ = stream2.CloseSend()
+}
+
 func TestConnectStoresLogBatchAndAcksWatermark(t *testing.T) {
 	dir := t.TempDir()
 	ls := newLogStores(dir)

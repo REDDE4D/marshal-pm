@@ -108,6 +108,16 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 	}
 
 	// --- leg 1: serve, connect, ship the first two lines ---
+	// Capture the minted agent token so leg 2 can reconnect without re-enrolling.
+	var mintedTokMu sync.Mutex
+	var mintedTok string
+	persistTok := func(tok string) error {
+		mintedTokMu.Lock()
+		mintedTok = tok
+		mintedTokMu.Unlock()
+		return nil
+	}
+
 	lis1, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +129,7 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 		func() []*pb.ProcInfo { return nil },
 		fleet.WithTLS(tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithLogs(logsFn),
-		fleet.WithAuth("", enrollToken, func(string) error { return nil }))
+		fleet.WithAuth("", enrollToken, persistTok))
 	cctx1, ccancel1 := context.WithCancel(context.Background())
 	go c1.Run(cctx1)
 
@@ -129,6 +139,14 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 	ccancel1()
 	cancel1()
 	lis1.Close()
+
+	// Retrieve the minted token — guaranteed available after waitForLogs succeeded.
+	mintedTokMu.Lock()
+	agentTok := mintedTok
+	mintedTokMu.Unlock()
+	if agentTok == "" {
+		t.Fatal("minted agent token not captured from leg-1 enrollment")
+	}
 
 	// --- leg 2: add a gap line, restart server on SAME dir, reconnect ---
 	mu.Lock()
@@ -143,11 +161,12 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 	defer cancel2()
 	go func() { _ = ServeDir(ctx2, lis2, dataDir, "", "") }()
 
+	// Use the minted agent token (not the enroll token) to avoid re-enrollment.
 	c2 := fleet.New(lis2.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
 		fleet.WithTLS(tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithLogs(logsFn),
-		fleet.WithAuth("", enrollToken, func(string) error { return nil }))
+		fleet.WithAuth(agentTok, "", func(string) error { return nil }))
 	cctx2, ccancel2 := context.WithCancel(context.Background())
 	defer ccancel2()
 	go c2.Run(cctx2)
@@ -285,6 +304,16 @@ func TestE2EMetricsIngestAndBackfill(t *testing.T) {
 	}
 
 	// --- leg 1: serve, connect, ship base-2000 and base-1000 ---
+	// Capture the minted agent token so leg 2 can reconnect without re-enrolling.
+	var mintedTokMu sync.Mutex
+	var mintedTok string
+	persistTok := func(tok string) error {
+		mintedTokMu.Lock()
+		mintedTok = tok
+		mintedTokMu.Unlock()
+		return nil
+	}
+
 	lis1, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -296,7 +325,7 @@ func TestE2EMetricsIngestAndBackfill(t *testing.T) {
 		func() []*pb.ProcInfo { return nil },
 		fleet.WithTLS(tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithMetrics(metricsFn),
-		fleet.WithAuth("", enrollToken, func(string) error { return nil }))
+		fleet.WithAuth("", enrollToken, persistTok))
 	cctx1, ccancel1 := context.WithCancel(context.Background())
 	go c1.Run(cctx1)
 
@@ -307,6 +336,14 @@ func TestE2EMetricsIngestAndBackfill(t *testing.T) {
 	ccancel1()
 	cancel1()
 	lis1.Close()
+
+	// Retrieve the minted token — guaranteed available after waitForHistory succeeded.
+	mintedTokMu.Lock()
+	agentTok := mintedTok
+	mintedTokMu.Unlock()
+	if agentTok == "" {
+		t.Fatal("minted agent token not captured from leg-1 enrollment")
+	}
 
 	// --- leg 2: simulate a gap row, restart server on SAME dir, reconnect ---
 	mu.Lock()
@@ -321,11 +358,12 @@ func TestE2EMetricsIngestAndBackfill(t *testing.T) {
 	defer cancel2()
 	go func() { _ = ServeDir(ctx2, lis2, dataDir, "", "") }()
 
+	// Use the minted agent token (not the enroll token) to avoid re-enrollment.
 	c2 := fleet.New(lis2.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
 		fleet.WithTLS(tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithMetrics(metricsFn),
-		fleet.WithAuth("", enrollToken, func(string) error { return nil }))
+		fleet.WithAuth(agentTok, "", func(string) error { return nil }))
 	cctx2, ccancel2 := context.WithCancel(context.Background())
 	defer ccancel2()
 	go c2.Run(cctx2)
