@@ -41,7 +41,7 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 		logsHist:    logs,
 		controller:  controller,
 		auth:        auth,
-		sessions:    newSessionStore(ttl, nil),
+		sessions:    newSessionStore(ttl, nil, ""),
 		files:       files,
 		static:      http.FileServer(http.FS(files)),
 	}
