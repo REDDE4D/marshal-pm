@@ -30,6 +30,9 @@ func serverCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("load tls cert: %w", err)
 			}
+			if err := server.InitAuthPrint(dataDir, cmd.OutOrStdout()); err != nil {
+				return fmt.Errorf("init auth: %w", err)
+			}
 			lis, err := net.Listen("tcp", listen)
 			if err != nil {
 				return fmt.Errorf("listen %s: %w", listen, err)

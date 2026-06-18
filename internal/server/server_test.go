@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -42,10 +43,15 @@ func (f *fakeConnectStream) Recv() (*pb.AgentMessage, error) {
 }
 
 // newTLSTestServer starts a TLS Fleet server in the background and returns
-// (addr, fingerprint). The server is shut down when t ends.
-func newTLSTestServer(t *testing.T, reg *Registry) (addr, fingerprint string) {
+// (addr, fingerprint, secrets). The server is shut down when t ends.
+func newTLSTestServer(t *testing.T, reg *Registry) (addr, fingerprint string, secrets *InitSecrets) {
 	t.Helper()
-	cert, fp, err := LoadOrCreateCert(t.TempDir(), "", "")
+	dir := t.TempDir()
+	cert, fp, err := LoadOrCreateCert(dir, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth, sec, err := loadOrInitAuth(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,12 +61,12 @@ func newTLSTestServer(t *testing.T, reg *Registry) (addr, fingerprint string) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	go func() { _ = Serve(ctx, lis, reg, nil, nil, cert) }()
-	return lis.Addr().String(), fp
+	go func() { _ = Serve(ctx, lis, reg, nil, nil, cert, auth) }()
+	return lis.Addr().String(), fp, sec
 }
 
 func TestConnectRejectsEmptyName(t *testing.T) {
-	srv := NewServer(NewRegistry(), newStores(t.TempDir()), nil)
+	srv := NewServer(NewRegistry(), newStores(t.TempDir()), nil, nil)
 	st := &fakeConnectStream{ctx: context.Background(), recv: []*pb.AgentMessage{
 		{Msg: &pb.AgentMessage_Hello{Hello: &pb.Hello{AgentName: ""}}},
 	}}
@@ -72,7 +78,7 @@ func TestConnectRejectsEmptyName(t *testing.T) {
 
 func TestConnectAcksWatermarkAndStoresBatch(t *testing.T) {
 	ss := newStores(t.TempDir())
-	srv := NewServer(NewRegistry(), ss, nil)
+	srv := NewServer(NewRegistry(), ss, nil, nil)
 
 	// Pre-seed one sample so the second connect sees a non-zero watermark.
 	pre, _ := ss.get("web-1")
@@ -129,7 +135,7 @@ func waitFor(t *testing.T, cond func() bool) {
 
 func TestFleetMetricsHistory(t *testing.T) {
 	ss := newStores(t.TempDir())
-	srv := NewServer(NewRegistry(), ss, nil)
+	srv := NewServer(NewRegistry(), ss, nil, nil)
 	st, _ := ss.get("web-1")
 	now := time.Now().UnixMilli()
 	_ = st.Append(now-2000, []metricstore.Sample{{Label: "api#0", Cpu: 10, Mem: 100}, {Label: "api#1", Cpu: 5, Mem: 50}})
@@ -153,10 +159,12 @@ func TestFleetMetricsHistory(t *testing.T) {
 
 func TestServerConnectListAndOffline(t *testing.T) {
 	reg := NewRegistry(WithOfflineAfter(time.Hour))
-	addr, fp := newTLSTestServer(t, reg)
+	addr, fp, secrets := newTLSTestServer(t, reg)
 	cl := dialFleet(t, addr, fp)
 
-	stream, err := cl.Connect(context.Background())
+	// Connect stream requires the enroll token.
+	enrollCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("marshal-enroll", secrets.EnrollToken))
+	stream, err := cl.Connect(enrollCtx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,8 +188,9 @@ func TestServerConnectListAndOffline(t *testing.T) {
 		return len(ag) == 1 && !ag[0].GetConnected()
 	})
 
-	// ListFleet over the wire reflects the same offline state.
-	resp, err := cl.ListFleet(context.Background(), &pb.ListFleetRequest{})
+	// ListFleet over the wire requires admin token.
+	listCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("marshal-token", secrets.AdminToken))
+	resp, err := cl.ListFleet(listCtx, &pb.ListFleetRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +203,7 @@ func TestFleetLogsHistorySelectorMergeAndFilter(t *testing.T) {
 	dir := t.TempDir()
 	ls := newLogStores(dir)
 	defer ls.closeAll()
-	srv := NewServer(NewRegistry(WithOfflineAfter(time.Hour)), nil, ls)
+	srv := NewServer(NewRegistry(WithOfflineAfter(time.Hour)), nil, ls, nil)
 
 	srv.storeLogBatch("web-1", []*pb.LogShipLine{
 		{TsMs: 1, Label: "api#0", Stderr: false, Text: "o0"},
@@ -231,7 +240,7 @@ func TestFleetLogsHistorySelectorMergeAndFilter(t *testing.T) {
 func TestFleetLogsHistoryUnknownAgent(t *testing.T) {
 	ls := newLogStores(t.TempDir())
 	defer ls.closeAll()
-	srv := NewServer(NewRegistry(WithOfflineAfter(time.Hour)), nil, ls)
+	srv := NewServer(NewRegistry(WithOfflineAfter(time.Hour)), nil, ls, nil)
 	_, err := srv.FleetLogsHistory(context.Background(), &pb.FleetLogsHistoryRequest{
 		AgentName: "ghost", Selector: "api", Lines: 10,
 	})
@@ -242,7 +251,7 @@ func TestFleetLogsHistoryUnknownAgent(t *testing.T) {
 
 // FleetControl against an agent with no live session is Unavailable.
 func TestFleetControlNotConnected(t *testing.T) {
-	srv := NewServer(NewRegistry(), nil, nil)
+	srv := NewServer(NewRegistry(), nil, nil, nil)
 	_, err := srv.FleetControl(context.Background(), &pb.FleetControlRequest{
 		AgentName: "ghost",
 		Op:        &pb.ControlOp{Op: &pb.ControlOp_Restart{Restart: &pb.Selector{Target: "api"}}},
@@ -256,7 +265,7 @@ func TestConnectStoresLogBatchAndAcksWatermark(t *testing.T) {
 	dir := t.TempDir()
 	ls := newLogStores(dir)
 	defer ls.closeAll()
-	srv := NewServer(NewRegistry(WithOfflineAfter(time.Hour)), nil, ls)
+	srv := NewServer(NewRegistry(WithOfflineAfter(time.Hour)), nil, ls, nil)
 
 	srv.storeLogBatch("web-1", []*pb.LogShipLine{
 		{TsMs: 1000, Label: "api#0", Stderr: false, Text: "l1"},

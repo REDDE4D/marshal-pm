@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 
 	"marshal/internal/config"
 	"marshal/internal/fleetauth"
@@ -42,13 +43,13 @@ func fleetCmd() *cobra.Command {
 }
 
 func fleetPsCmd() *cobra.Command {
-	var serverAddr, fingerprintFlag string
+	var serverAddr, fingerprintFlag, tokenFlag string
 	cmd := &cobra.Command{
 		Use:   "ps",
 		Short: "List processes across all connected agents",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			addr, fp := resolveServerAuth(serverAddr, fingerprintFlag)
+			addr, fp, token := resolveServerAuth(serverAddr, fingerprintFlag, tokenFlag)
 			conn, err := dialFleet(addr, fp)
 			if err != nil {
 				return err
@@ -56,7 +57,7 @@ func fleetPsCmd() *cobra.Command {
 			defer conn.Close()
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			resp, err := pb.NewFleetClient(conn).ListFleet(ctx, &pb.ListFleetRequest{})
+			resp, err := pb.NewFleetClient(conn).ListFleet(authCtx(ctx, token), &pb.ListFleetRequest{})
 			if err != nil {
 				return err
 			}
@@ -66,11 +67,12 @@ func fleetPsCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&serverAddr, "server", "", "central server address (default $MARSHAL_SERVER or localhost:9000)")
 	cmd.Flags().StringVar(&fingerprintFlag, "fingerprint", "", "pinned server cert SHA-256 fingerprint (default $MARSHAL_FINGERPRINT)")
+	cmd.Flags().StringVar(&tokenFlag, "token", "", "admin token (default $MARSHAL_TOKEN)")
 	return cmd
 }
 
 func fleetMetricsCmd() *cobra.Command {
-	var serverAddr, fingerprintFlag string
+	var serverAddr, fingerprintFlag, tokenFlag string
 	var since, bucket time.Duration
 	var cpuOnly, memOnly bool
 	cmd := &cobra.Command{
@@ -78,7 +80,7 @@ func fleetMetricsCmd() *cobra.Command {
 		Short: "Show CPU/memory history for an app/instance on one agent",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			addr, fp := resolveServerAuth(serverAddr, fingerprintFlag)
+			addr, fp, token := resolveServerAuth(serverAddr, fingerprintFlag, tokenFlag)
 			conn, err := dialFleet(addr, fp)
 			if err != nil {
 				return err
@@ -86,7 +88,7 @@ func fleetMetricsCmd() *cobra.Command {
 			defer conn.Close()
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			resp, err := pb.NewFleetClient(conn).FleetMetricsHistory(ctx, &pb.FleetMetricsHistoryRequest{
+			resp, err := pb.NewFleetClient(conn).FleetMetricsHistory(authCtx(ctx, token), &pb.FleetMetricsHistoryRequest{
 				AgentName: args[0],
 				Selector:  args[1],
 				SinceMs:   since.Milliseconds(),
@@ -101,6 +103,7 @@ func fleetMetricsCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&serverAddr, "server", "", "central server address (default $MARSHAL_SERVER or localhost:9000)")
 	cmd.Flags().StringVar(&fingerprintFlag, "fingerprint", "", "pinned server cert SHA-256 fingerprint (default $MARSHAL_FINGERPRINT)")
+	cmd.Flags().StringVar(&tokenFlag, "token", "", "admin token (default $MARSHAL_TOKEN)")
 	cmd.Flags().DurationVar(&since, "since", time.Hour, "history window (e.g. 30m, 6h)")
 	cmd.Flags().DurationVar(&bucket, "bucket", 0, "bucket width (0 = auto)")
 	cmd.Flags().BoolVar(&cpuOnly, "cpu", false, "show only CPU")
@@ -109,7 +112,7 @@ func fleetMetricsCmd() *cobra.Command {
 }
 
 func fleetLogsCmd() *cobra.Command {
-	var serverAddr, fingerprintFlag string
+	var serverAddr, fingerprintFlag, tokenFlag string
 	var lines int
 	var stdoutOnly, stderrOnly bool
 	cmd := &cobra.Command{
@@ -121,7 +124,7 @@ func fleetLogsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			addr, fp := resolveServerAuth(serverAddr, fingerprintFlag)
+			addr, fp, token := resolveServerAuth(serverAddr, fingerprintFlag, tokenFlag)
 			conn, err := dialFleet(addr, fp)
 			if err != nil {
 				return err
@@ -129,7 +132,7 @@ func fleetLogsCmd() *cobra.Command {
 			defer conn.Close()
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			resp, err := pb.NewFleetClient(conn).FleetLogsHistory(ctx, &pb.FleetLogsHistoryRequest{
+			resp, err := pb.NewFleetClient(conn).FleetLogsHistory(authCtx(ctx, token), &pb.FleetLogsHistoryRequest{
 				AgentName: args[0],
 				Selector:  args[1],
 				Lines:     int32(lines),
@@ -147,6 +150,7 @@ func fleetLogsCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&serverAddr, "server", "", "central server address (default $MARSHAL_SERVER or localhost:9000)")
 	cmd.Flags().StringVar(&fingerprintFlag, "fingerprint", "", "pinned server cert SHA-256 fingerprint (default $MARSHAL_FINGERPRINT)")
+	cmd.Flags().StringVar(&tokenFlag, "token", "", "admin token (default $MARSHAL_TOKEN)")
 	cmd.Flags().IntVarP(&lines, "lines", "n", 15, "number of lines to show")
 	cmd.Flags().BoolVar(&stdoutOnly, "stdout", false, "show only stdout")
 	cmd.Flags().BoolVar(&stderrOnly, "stderr", false, "show only stderr")
@@ -165,16 +169,28 @@ func resolveServer(flag string) string {
 	return "localhost:9000"
 }
 
-// resolveServerAuth resolves the server address and pinned fingerprint from
-// flags, then env (MARSHAL_SERVER / MARSHAL_FINGERPRINT). Token is added in a
-// later task.
-func resolveServerAuth(serverFlag, fpFlag string) (addr, fingerprint string) {
-	addr = resolveServer(serverFlag)
-	fingerprint = fpFlag
-	if fingerprint == "" {
-		fingerprint = os.Getenv("MARSHAL_FINGERPRINT")
+// firstNonEmpty returns the first non-empty string from vals.
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
 	}
-	return addr, fingerprint
+	return ""
+}
+
+// resolveServerAuth resolves the server address, pinned fingerprint, and admin
+// token from flags, then env (MARSHAL_SERVER / MARSHAL_FINGERPRINT / MARSHAL_TOKEN).
+func resolveServerAuth(serverFlag, fpFlag, tokenFlag string) (addr, fingerprint, token string) {
+	addr = resolveServer(serverFlag)
+	fingerprint = firstNonEmpty(fpFlag, os.Getenv("MARSHAL_FINGERPRINT"))
+	token = firstNonEmpty(tokenFlag, os.Getenv("MARSHAL_TOKEN"))
+	return
+}
+
+// authCtx returns a context with the admin token appended as outgoing metadata.
+func authCtx(parent context.Context, token string) context.Context {
+	return metadata.AppendToOutgoingContext(parent, "marshal-token", token)
 }
 
 // dialFleet builds a TLS gRPC client connection to the server.
@@ -220,8 +236,8 @@ func printFleet(cmd *cobra.Command, resp *pb.ListFleetResponse) {
 
 // fleetControl dials the server, sends one control op to an agent, and prints
 // the resulting process table (or the agent's error).
-func fleetControl(cmd *cobra.Command, serverAddr, fingerprintFlag string, timeout time.Duration, agent string, op *pb.ControlOp) error {
-	addr, fp := resolveServerAuth(serverAddr, fingerprintFlag)
+func fleetControl(cmd *cobra.Command, serverAddr, fingerprintFlag, tokenFlag string, timeout time.Duration, agent string, op *pb.ControlOp) error {
+	addr, fp, token := resolveServerAuth(serverAddr, fingerprintFlag, tokenFlag)
 	conn, err := dialFleet(addr, fp)
 	if err != nil {
 		return err
@@ -229,7 +245,7 @@ func fleetControl(cmd *cobra.Command, serverAddr, fingerprintFlag string, timeou
 	defer conn.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	resp, err := pb.NewFleetClient(conn).FleetControl(ctx, &pb.FleetControlRequest{
+	resp, err := pb.NewFleetClient(conn).FleetControl(authCtx(ctx, token), &pb.FleetControlRequest{
 		AgentName: agent, Op: op,
 	})
 	if err != nil {
@@ -244,7 +260,7 @@ func fleetControl(cmd *cobra.Command, serverAddr, fingerprintFlag string, timeou
 }
 
 func fleetSelectorCmd(use, short string, build func(target string) *pb.ControlOp) *cobra.Command {
-	var serverAddr, fingerprintFlag string
+	var serverAddr, fingerprintFlag, tokenFlag string
 	var timeout time.Duration
 	cmd := &cobra.Command{
 		Use:          use + " <agent> <name|id|all>",
@@ -252,17 +268,18 @@ func fleetSelectorCmd(use, short string, build func(target string) *pb.ControlOp
 		Args:         cobra.ExactArgs(2),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fleetControl(cmd, serverAddr, fingerprintFlag, timeout, args[0], build(args[1]))
+			return fleetControl(cmd, serverAddr, fingerprintFlag, tokenFlag, timeout, args[0], build(args[1]))
 		},
 	}
 	cmd.Flags().StringVar(&serverAddr, "server", "", "central server address (default $MARSHAL_SERVER or localhost:9000)")
 	cmd.Flags().StringVar(&fingerprintFlag, "fingerprint", "", "pinned server cert SHA-256 fingerprint (default $MARSHAL_FINGERPRINT)")
+	cmd.Flags().StringVar(&tokenFlag, "token", "", "admin token (default $MARSHAL_TOKEN)")
 	cmd.Flags().DurationVar(&timeout, "timeout", 10*time.Second, "command timeout (a timeout does not guarantee the command did not run on the agent)")
 	return cmd
 }
 
 func fleetStartCmd() *cobra.Command {
-	var serverAddr, fingerprintFlag string
+	var serverAddr, fingerprintFlag, tokenFlag string
 	var timeout time.Duration
 	cmd := &cobra.Command{
 		Use:          "start <agent> <marshal.yaml>",
@@ -279,11 +296,12 @@ func fleetStartCmd() *cobra.Command {
 				specs = append(specs, appToSpec(a))
 			}
 			op := &pb.ControlOp{Op: &pb.ControlOp_Start{Start: &pb.StartRequest{Apps: specs}}}
-			return fleetControl(cmd, serverAddr, fingerprintFlag, timeout, args[0], op)
+			return fleetControl(cmd, serverAddr, fingerprintFlag, tokenFlag, timeout, args[0], op)
 		},
 	}
 	cmd.Flags().StringVar(&serverAddr, "server", "", "central server address (default $MARSHAL_SERVER or localhost:9000)")
 	cmd.Flags().StringVar(&fingerprintFlag, "fingerprint", "", "pinned server cert SHA-256 fingerprint (default $MARSHAL_FINGERPRINT)")
+	cmd.Flags().StringVar(&tokenFlag, "token", "", "admin token (default $MARSHAL_TOKEN)")
 	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "command timeout (a timeout does not guarantee the command did not run on the agent)")
 	return cmd
 }

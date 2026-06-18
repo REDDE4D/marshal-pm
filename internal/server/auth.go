@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -24,20 +25,32 @@ type authData struct {
 	Agents          map[string]authAgentEntry `json:"agents"`
 }
 
-type authStore struct {
+// AuthStore holds the persisted auth tokens for a Marshal server instance.
+type AuthStore struct {
 	path string
 	mu   sync.Mutex
 	data authData
 }
 
-type initSecrets struct {
+// InitSecrets carries the plaintext tokens generated on first init.
+// It is non-nil only when auth.json is created for the first time.
+type InitSecrets struct {
 	EnrollToken string
 	AdminToken  string
 }
 
-func loadOrInitAuth(dir string) (*authStore, *initSecrets, error) {
+// loadOrInitAuth is the internal variant (returns unexported aliases for
+// backwards compat with internal callers that already use the exported types).
+func loadOrInitAuth(dir string) (*AuthStore, *InitSecrets, error) {
+	return LoadOrInitAuth(dir)
+}
+
+// LoadOrInitAuth loads or creates the auth store for dir.
+// On first call it creates auth.json and returns the plaintext tokens in
+// secrets; on subsequent calls secrets is nil (tokens are only available once).
+func LoadOrInitAuth(dir string) (*AuthStore, *InitSecrets, error) {
 	path := filepath.Join(dir, "auth.json")
-	a := &authStore{path: path, data: authData{Agents: map[string]authAgentEntry{}}}
+	a := &AuthStore{path: path, data: authData{Agents: map[string]authAgentEntry{}}}
 	b, err := os.ReadFile(path)
 	if err == nil {
 		if err := json.Unmarshal(b, &a.data); err != nil {
@@ -64,12 +77,12 @@ func loadOrInitAuth(dir string) (*authStore, *initSecrets, error) {
 	if err := a.save(); err != nil {
 		return nil, nil, err
 	}
-	return a, &initSecrets{EnrollToken: enroll, AdminToken: admin}, nil
+	return a, &InitSecrets{EnrollToken: enroll, AdminToken: admin}, nil
 }
 
 // save writes auth.json atomically (0600). Caller holds a.mu, or it is called
 // during init before the store is shared.
-func (a *authStore) save() error {
+func (a *AuthStore) save() error {
 	b, err := json.MarshalIndent(a.data, "", "  ")
 	if err != nil {
 		return err
@@ -81,19 +94,19 @@ func (a *authStore) save() error {
 	return os.Rename(tmp, a.path)
 }
 
-func (a *authStore) verifyAdmin(token string) bool {
+func (a *AuthStore) verifyAdmin(token string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return fleetauth.VerifyToken(token, a.data.AdminTokenHash)
 }
 
-func (a *authStore) verifyEnroll(token string) bool {
+func (a *AuthStore) verifyEnroll(token string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return fleetauth.VerifyToken(token, a.data.EnrollTokenHash)
 }
 
-func (a *authStore) enrollAgent(name string) (string, error) {
+func (a *AuthStore) enrollAgent(name string) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if _, exists := a.data.Agents[name]; exists {
@@ -111,7 +124,7 @@ func (a *authStore) enrollAgent(name string) (string, error) {
 	return tok, nil
 }
 
-func (a *authStore) authAgent(token string) (string, bool) {
+func (a *AuthStore) authAgent(token string) (string, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for name, e := range a.data.Agents {
@@ -122,7 +135,7 @@ func (a *authStore) authAgent(token string) (string, bool) {
 	return "", false
 }
 
-func (a *authStore) removeAgent(name string) bool {
+func (a *AuthStore) removeAgent(name string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if _, ok := a.data.Agents[name]; !ok {
@@ -143,7 +156,7 @@ type listedAgent struct {
 	EnrolledAt int64
 }
 
-func (a *authStore) listAgents() []listedAgent {
+func (a *AuthStore) listAgents() []listedAgent {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	out := make([]listedAgent, 0, len(a.data.Agents))
@@ -154,7 +167,7 @@ func (a *authStore) listAgents() []listedAgent {
 	return out
 }
 
-func (a *authStore) rotate(which string) (string, error) {
+func (a *AuthStore) rotate(which string) (string, error) {
 	tok, err := fleetauth.GenerateToken()
 	if err != nil {
 		return "", err
@@ -181,4 +194,20 @@ func (a *authStore) rotate(which string) (string, error) {
 	default:
 		return "", fmt.Errorf("unknown token %q (want enroll|admin)", which)
 	}
+}
+
+// InitAuthPrint calls loadOrInitAuth for dir and, if fresh secrets were
+// generated, writes them to out. This lets the server command print the
+// secrets to its stdout before calling ServeDir (which also calls
+// loadOrInitAuth — idempotent because auth.json exists by then).
+func InitAuthPrint(dir string, out io.Writer) error {
+	_, secrets, err := loadOrInitAuth(dir)
+	if err != nil {
+		return err
+	}
+	if secrets != nil {
+		fmt.Fprintf(out, "marshal server: enroll token %s\n", secrets.EnrollToken)
+		fmt.Fprintf(out, "marshal server: admin token  %s\n", secrets.AdminToken)
+	}
+	return nil
 }

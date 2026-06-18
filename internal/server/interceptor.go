@@ -29,7 +29,7 @@ func metaToken(ctx context.Context, key string) string {
 }
 
 // unaryAuth requires a valid admin token on every unary operator RPC.
-func (a *authStore) unaryAuth(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+func (a *AuthStore) unaryAuth(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	tok := metaToken(ctx, "marshal-token")
 	if tok == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing admin token")
@@ -49,7 +49,7 @@ func (w *wrappedStream) Context() context.Context { return w.ctx }
 
 // streamAuth authenticates the Connect stream: a valid per-agent token resolves
 // to its bound identity; otherwise a valid enroll token permits enrollment.
-func (a *authStore) streamAuth(srv any, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+func (a *AuthStore) streamAuth(srv any, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	ctx := ss.Context()
 	if tok := metaToken(ctx, "marshal-token"); tok != "" {
 		if name, ok := a.authAgent(tok); ok {

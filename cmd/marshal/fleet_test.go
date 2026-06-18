@@ -130,18 +130,23 @@ func newTLSControlStub(t *testing.T, impl pb.FleetServer) (addr, fingerprint str
 
 func TestResolveServerAuth(t *testing.T) {
 	// Flag wins.
-	addr, fp := resolveServerAuth("myhost:1234", "abc123")
-	if addr != "myhost:1234" || fp != "abc123" {
-		t.Fatalf("got addr=%q fp=%q, want myhost:1234 abc123", addr, fp)
+	addr, fp, tok := resolveServerAuth("myhost:1234", "abc123", "mytoken")
+	if addr != "myhost:1234" || fp != "abc123" || tok != "mytoken" {
+		t.Fatalf("got addr=%q fp=%q tok=%q, want myhost:1234 abc123 mytoken", addr, fp, tok)
 	}
-	// Env fallback for fingerprint.
+	// Env fallback for fingerprint and token.
 	t.Setenv("MARSHAL_FINGERPRINT", "envfp")
-	addr2, fp2 := resolveServerAuth("", "")
+	t.Setenv("MARSHAL_TOKEN", "envtok")
+	addr2, fp2, tok2 := resolveServerAuth("", "", "")
 	if fp2 != "envfp" {
 		t.Fatalf("fp from env = %q, want envfp", fp2)
 	}
+	if tok2 != "envtok" {
+		t.Fatalf("token from env = %q, want envtok", tok2)
+	}
 	_ = addr2
 	t.Setenv("MARSHAL_FINGERPRINT", "")
+	t.Setenv("MARSHAL_TOKEN", "")
 }
 
 func TestFleetRestartSendsControlOp(t *testing.T) {

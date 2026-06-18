@@ -12,7 +12,10 @@ import (
 	"marshal/internal/pb"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 func e2eDialFleet(t *testing.T, addr, fingerprint string) *grpc.ClientConn {
@@ -28,12 +31,13 @@ func e2eDialFleet(t *testing.T, addr, fingerprint string) *grpc.ClientConn {
 	return conn
 }
 
-func waitForHistory(t *testing.T, conn *grpc.ClientConn, agent, selector string, wantBuckets int) {
+func waitForHistory(t *testing.T, conn *grpc.ClientConn, agent, selector string, wantBuckets int, adminToken string) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		resp, err := pb.NewFleetClient(conn).FleetMetricsHistory(ctx, &pb.FleetMetricsHistoryRequest{
+		authedCtx := metadata.AppendToOutgoingContext(ctx, "marshal-token", adminToken)
+		resp, err := pb.NewFleetClient(conn).FleetMetricsHistory(authedCtx, &pb.FleetMetricsHistoryRequest{
 			AgentName: agent, Selector: selector, SinceMs: time.Hour.Milliseconds(), BucketMs: 1000,
 		})
 		cancel()
@@ -45,12 +49,13 @@ func waitForHistory(t *testing.T, conn *grpc.ClientConn, agent, selector string,
 	t.Fatalf("history for %s/%s never reached %d buckets", agent, selector, wantBuckets)
 }
 
-func waitForLogs(t *testing.T, conn *grpc.ClientConn, agent, selector string, wantLines int) {
+func waitForLogs(t *testing.T, conn *grpc.ClientConn, agent, selector string, wantLines int, adminToken string) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		resp, err := pb.NewFleetClient(conn).FleetLogsHistory(ctx, &pb.FleetLogsHistoryRequest{
+		authedCtx := metadata.AppendToOutgoingContext(ctx, "marshal-token", adminToken)
+		resp, err := pb.NewFleetClient(conn).FleetLogsHistory(authedCtx, &pb.FleetLogsHistoryRequest{
 			AgentName: agent, Selector: selector, Lines: 100,
 		})
 		cancel()
@@ -75,6 +80,15 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Init auth before ServeDir so we have the plaintext tokens.
+	// ServeDir calls loadOrInitAuth internally — idempotent once auth.json exists.
+	_, secrets, err := loadOrInitAuth(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enrollToken := secrets.EnrollToken
+	adminToken := secrets.AdminToken
 
 	var mu sync.Mutex
 	local := []*pb.LogShipLine{
@@ -106,10 +120,10 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 		fleet.WithTLS(tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithLogs(logsFn))
 	cctx1, ccancel1 := context.WithCancel(context.Background())
-	go c1.Run(cctx1)
+	go c1.Run(metadata.AppendToOutgoingContext(cctx1, "marshal-enroll", enrollToken))
 
 	conn1 := e2eDialFleet(t, lis1.Addr().String(), fp)
-	waitForLogs(t, conn1, "web-1", "api", 2)
+	waitForLogs(t, conn1, "web-1", "api", 2, adminToken)
 	conn1.Close()
 	ccancel1()
 	cancel1()
@@ -134,18 +148,19 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 		fleet.WithInterval(20*time.Millisecond), fleet.WithLogs(logsFn))
 	cctx2, ccancel2 := context.WithCancel(context.Background())
 	defer ccancel2()
-	go c2.Run(cctx2)
+	go c2.Run(metadata.AppendToOutgoingContext(cctx2, "marshal-enroll", enrollToken))
 
 	conn2 := e2eDialFleet(t, lis2.Addr().String(), fp)
 	defer conn2.Close()
 	// After reconnect the watermark is seeded from the persisted max(ts), so the
 	// client ships only the gap line — total 3 lines proves backfill works.
-	waitForLogs(t, conn2, "web-1", "api", 3)
+	waitForLogs(t, conn2, "web-1", "api", 3, adminToken)
 
 	// Prove backfill shipped only the gap line: exactly 3 lines, no duplicates.
 	ctxF, cancelF := context.WithTimeout(context.Background(), time.Second)
 	defer cancelF()
-	final, err := pb.NewFleetClient(conn2).FleetLogsHistory(ctxF, &pb.FleetLogsHistoryRequest{
+	authedCtxF := metadata.AppendToOutgoingContext(ctxF, "marshal-token", adminToken)
+	final, err := pb.NewFleetClient(conn2).FleetLogsHistory(authedCtxF, &pb.FleetLogsHistoryRequest{
 		AgentName: "web-1", Selector: "api", Lines: 100,
 	})
 	if err != nil {
@@ -164,7 +179,12 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 }
 
 func TestE2EFleetControlRoundTrip(t *testing.T) {
-	cert, fp, err := LoadOrCreateCert(t.TempDir(), "", "")
+	dir := t.TempDir()
+	cert, fp, err := LoadOrCreateCert(dir, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth, secrets, err := loadOrInitAuth(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +199,7 @@ func TestE2EFleetControlRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	reg := NewRegistry()
-	go func() { _ = Serve(ctx, lis, reg, nil, nil, cert) }()
+	go func() { _ = Serve(ctx, lis, reg, nil, nil, cert, auth) }()
 
 	// Real agent client whose command handler echoes the selector back.
 	c := fleet.New(lis.Addr().String(), "web-1", "test",
@@ -193,7 +213,7 @@ func TestE2EFleetControlRoundTrip(t *testing.T) {
 		}))
 	cctx, ccancel := context.WithCancel(context.Background())
 	defer ccancel()
-	go c.Run(cctx)
+	go c.Run(metadata.AppendToOutgoingContext(cctx, "marshal-enroll", secrets.EnrollToken))
 
 	// Wait until the agent is connected (registry reflects its live session).
 	waitFor(t, func() bool {
@@ -205,7 +225,8 @@ func TestE2EFleetControlRoundTrip(t *testing.T) {
 	defer conn.Close()
 	rctx, rcancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer rcancel()
-	resp, err := pb.NewFleetClient(conn).FleetControl(rctx, &pb.FleetControlRequest{
+	authedRctx := metadata.AppendToOutgoingContext(rctx, "marshal-token", secrets.AdminToken)
+	resp, err := pb.NewFleetClient(conn).FleetControl(authedRctx, &pb.FleetControlRequest{
 		AgentName: "web-1",
 		Op:        &pb.ControlOp{Op: &pb.ControlOp_Restart{Restart: &pb.Selector{Target: "api"}}},
 	})
@@ -232,6 +253,15 @@ func TestE2EMetricsIngestAndBackfill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Init auth before ServeDir so we have the plaintext tokens.
+	// ServeDir calls loadOrInitAuth internally — idempotent once auth.json exists.
+	_, secrets, err := loadOrInitAuth(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enrollToken := secrets.EnrollToken
+	adminToken := secrets.AdminToken
 
 	// local "store" the agent ships from, strictly-newer-than semantics.
 	var mu sync.Mutex
@@ -264,11 +294,11 @@ func TestE2EMetricsIngestAndBackfill(t *testing.T) {
 		fleet.WithTLS(tlsCfg),
 		fleet.WithInterval(20*time.Millisecond), fleet.WithMetrics(metricsFn))
 	cctx1, ccancel1 := context.WithCancel(context.Background())
-	go c1.Run(cctx1)
+	go c1.Run(metadata.AppendToOutgoingContext(cctx1, "marshal-enroll", enrollToken))
 
 	// Query the server until 2 buckets are present.
 	conn1 := e2eDialFleet(t, lis1.Addr().String(), fp)
-	waitForHistory(t, conn1, "web-1", "api", 2)
+	waitForHistory(t, conn1, "web-1", "api", 2, adminToken)
 	conn1.Close()
 	ccancel1()
 	cancel1()
@@ -293,12 +323,58 @@ func TestE2EMetricsIngestAndBackfill(t *testing.T) {
 		fleet.WithInterval(20*time.Millisecond), fleet.WithMetrics(metricsFn))
 	cctx2, ccancel2 := context.WithCancel(context.Background())
 	defer ccancel2()
-	go c2.Run(cctx2)
+	go c2.Run(metadata.AppendToOutgoingContext(cctx2, "marshal-enroll", enrollToken))
 
 	conn2 := e2eDialFleet(t, lis2.Addr().String(), fp)
 	defer conn2.Close()
 	// After reconnect, the server's history must include ts=base (3 buckets at 1s).
 	// The server seeds the client's watermark from its persisted max(ts), so the
 	// client sends only the gap row (ts=base), proving backfill works.
-	waitForHistory(t, conn2, "web-1", "api", 3)
+	waitForHistory(t, conn2, "web-1", "api", 3, adminToken)
+}
+
+func TestOperatorRPCRequiresAdminToken(t *testing.T) {
+	dir := t.TempDir()
+	cert, fp, err := LoadOrCreateCert(dir, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth, secrets, err := loadOrInitAuth(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = Serve(ctx, lis, NewRegistry(), nil, nil, cert, auth) }()
+
+	tlsCfg, err := fleetauth.ClientTLS(fp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := grpc.NewClient(lis.Addr().String(), grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	// No token → Unauthenticated
+	noAuthCtx, noAuthCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer noAuthCancel()
+	_, err = pb.NewFleetClient(conn).ListFleet(noAuthCtx, &pb.ListFleetRequest{})
+	if status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("no token: got code %v, want Unauthenticated", status.Code(err))
+	}
+
+	// Valid admin token → success
+	adminCtx, adminCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer adminCancel()
+	authedCtx := metadata.AppendToOutgoingContext(adminCtx, "marshal-token", secrets.AdminToken)
+	_, err = pb.NewFleetClient(conn).ListFleet(authedCtx, &pb.ListFleetRequest{})
+	if err != nil {
+		t.Fatalf("valid admin token rejected: %v", err)
+	}
 }

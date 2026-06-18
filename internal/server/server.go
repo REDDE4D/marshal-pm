@@ -32,11 +32,13 @@ type Server struct {
 	stores *stores
 	logs   *logStores
 	broker *broker
+	auth   *AuthStore
 }
 
 // NewServer wires a Fleet server to a registry and (optional) metric/log stores.
-func NewServer(reg *Registry, ss *stores, ls *logStores) *Server {
-	return &Server{reg: reg, stores: ss, logs: ls, broker: newBroker()}
+// auth may be nil (no auth enforcement, for unit tests that call methods directly).
+func NewServer(reg *Registry, ss *stores, ls *logStores, auth *AuthStore) *Server {
+	return &Server{reg: reg, stores: ss, logs: ls, broker: newBroker(), auth: auth}
 }
 
 // Connect terminates one agent's upstream: reads Hello (acking the stored metric
@@ -293,10 +295,15 @@ func (s *Server) FleetControl(ctx context.Context, req *pb.FleetControlRequest) 
 
 // Serve registers the Fleet service on lis (TLS) and serves until ctx is canceled.
 // ss/ls may be nil (no storage); when set they are closed on shutdown.
-func Serve(ctx context.Context, lis net.Listener, reg *Registry, ss *stores, ls *logStores, cert tls.Certificate) error {
+// auth must not be nil: unary and stream interceptors enforce admin/enroll tokens.
+func Serve(ctx context.Context, lis net.Listener, reg *Registry, ss *stores, ls *logStores, cert tls.Certificate, auth *AuthStore) error {
 	creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
-	gs := grpc.NewServer(grpc.Creds(creds))
-	pb.RegisterFleetServer(gs, NewServer(reg, ss, ls))
+	gs := grpc.NewServer(
+		grpc.Creds(creds),
+		grpc.UnaryInterceptor(auth.unaryAuth),
+		grpc.StreamInterceptor(auth.streamAuth),
+	)
+	pb.RegisterFleetServer(gs, NewServer(reg, ss, ls, auth))
 	go func() {
 		<-ctx.Done()
 		gs.GracefulStop()
@@ -323,6 +330,14 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath 
 		return err
 	}
 	log.Printf("fleet: server cert fingerprint %s", fp)
+	auth, secrets, err := loadOrInitAuth(dataDir)
+	if err != nil {
+		return fmt.Errorf("init auth: %w", err)
+	}
+	if secrets != nil {
+		log.Printf("fleet: enroll token %s", secrets.EnrollToken)
+		log.Printf("fleet: admin token  %s", secrets.AdminToken)
+	}
 	ss := newStores(dataDir)
 	ls := newLogStores(dataDir)
 	go func() {
@@ -340,5 +355,5 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath 
 			}
 		}
 	}()
-	return Serve(ctx, lis, NewRegistry(opts...), ss, ls, cert)
+	return Serve(ctx, lis, NewRegistry(opts...), ss, ls, cert, auth)
 }

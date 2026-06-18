@@ -16,6 +16,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 )
 
 func waitFor(t *testing.T, cond func() bool) {
@@ -34,17 +35,22 @@ func snap() []*pb.ProcInfo { return []*pb.ProcInfo{{Name: "api", State: "online"
 
 func TestClientHelloAndPeriodicPush(t *testing.T) {
 	reg := server.NewRegistry(server.WithOfflineAfter(time.Hour))
+	dir := t.TempDir()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	cert, fp, err := server.LoadOrCreateCert(t.TempDir(), "", "")
+	cert, fp, err := server.LoadOrCreateCert(dir, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth, secrets, err := server.LoadOrInitAuth(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	sctx, scancel := context.WithCancel(context.Background())
 	defer scancel()
-	go func() { _ = server.Serve(sctx, lis, reg, nil, nil, cert) }()
+	go func() { _ = server.Serve(sctx, lis, reg, nil, nil, cert, auth) }()
 
 	tlsCfg, err := fleetauth.ClientTLS(fp, "")
 	if err != nil {
@@ -55,7 +61,7 @@ func TestClientHelloAndPeriodicPush(t *testing.T) {
 		fleet.WithInterval(20*time.Millisecond), fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond))
 	cctx, ccancel := context.WithCancel(context.Background())
 	defer ccancel()
-	go c.Run(cctx)
+	go c.Run(metadata.AppendToOutgoingContext(cctx, "marshal-enroll", secrets.EnrollToken))
 
 	waitFor(t, func() bool {
 		ag := reg.List()
@@ -72,8 +78,13 @@ func TestClientReconnectsWhenServerStartsLate(t *testing.T) {
 	addr := lis0.Addr().String()
 	_ = lis0.Close()
 
-	// Generate a cert before binding so we know the fingerprint.
-	cert, fp, err := server.LoadOrCreateCert(t.TempDir(), "", "")
+	// Generate a cert and auth before binding so we know the fingerprint and tokens.
+	dir := t.TempDir()
+	cert, fp, err := server.LoadOrCreateCert(dir, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth, secrets, err := server.LoadOrInitAuth(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +98,7 @@ func TestClientReconnectsWhenServerStartsLate(t *testing.T) {
 		fleet.WithInterval(20*time.Millisecond), fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond))
 	cctx, ccancel := context.WithCancel(context.Background())
 	defer ccancel()
-	go c.Run(cctx) // retries against a dead address
+	go c.Run(metadata.AppendToOutgoingContext(cctx, "marshal-enroll", secrets.EnrollToken)) // retries against a dead address
 
 	time.Sleep(60 * time.Millisecond)
 
@@ -98,7 +109,7 @@ func TestClientReconnectsWhenServerStartsLate(t *testing.T) {
 	reg := server.NewRegistry(server.WithOfflineAfter(time.Hour))
 	sctx, scancel := context.WithCancel(context.Background())
 	defer scancel()
-	go func() { _ = server.Serve(sctx, lis, reg, nil, nil, cert) }()
+	go func() { _ = server.Serve(sctx, lis, reg, nil, nil, cert, auth) }()
 
 	waitFor(t, func() bool {
 		ag := reg.List()
