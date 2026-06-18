@@ -117,6 +117,7 @@ func fleetLogsCmd() *cobra.Command {
 	var serverAddr, fingerprintFlag, tokenFlag string
 	var lines int
 	var stdoutOnly, stderrOnly bool
+	var grepFlag string
 	cmd := &cobra.Command{
 		Use:   "logs <agent> <name|label>",
 		Short: "Show recent captured logs for an app/instance on one agent",
@@ -139,6 +140,7 @@ func fleetLogsCmd() *cobra.Command {
 				Selector:  args[1],
 				Lines:     int32(lines),
 				Stream:    streamSel,
+				Grep:      grepFlag,
 			})
 			if err != nil {
 				return err
@@ -156,6 +158,7 @@ func fleetLogsCmd() *cobra.Command {
 	cmd.Flags().IntVarP(&lines, "lines", "n", 15, "number of lines to show")
 	cmd.Flags().BoolVar(&stdoutOnly, "stdout", false, "show only stdout")
 	cmd.Flags().BoolVar(&stderrOnly, "stderr", false, "show only stderr")
+	cmd.Flags().StringVar(&grepFlag, "grep", "", "only lines containing this substring (case-insensitive)")
 	return cmd
 }
 
