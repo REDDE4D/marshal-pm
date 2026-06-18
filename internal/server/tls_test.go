@@ -42,6 +42,30 @@ func TestLoadOrCreateCertIsStableAcrossCalls(t *testing.T) {
 	}
 }
 
+func TestLoadOrCreateCertCreatesMissingDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "does", "not", "exist")
+	cert, fp, err := LoadOrCreateCert(dir, "", "")
+	if err != nil {
+		t.Fatalf("expected no error with missing dir, got: %v", err)
+	}
+	if fp == "" {
+		t.Fatal("expected non-empty fingerprint")
+	}
+	if len(cert.Certificate) == 0 {
+		t.Fatal("expected non-empty certificate")
+	}
+	for _, name := range []string{"cert.pem", "key.pem"} {
+		p := filepath.Join(dir, name)
+		info, err := os.Stat(p)
+		if err != nil {
+			t.Fatalf("missing %s after creation: %v", name, err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("%s mode = %o, want 600", name, info.Mode().Perm())
+		}
+	}
+}
+
 func TestLoadOrCreateCertRegeneratesWhenKeyMissing(t *testing.T) {
 	dir := t.TempDir()
 	cert, fp, err := LoadOrCreateCert(dir, "", "")

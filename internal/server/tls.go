@@ -27,6 +27,12 @@ func LoadOrCreateCert(dir, certPath, keyPath string) (tls.Certificate, string, e
 	if keyPath == "" {
 		keyPath = filepath.Join(dir, "key.pem")
 	}
+	if err := os.MkdirAll(filepath.Dir(certPath), 0o700); err != nil {
+		return tls.Certificate{}, "", fmt.Errorf("create cert dir: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
+		return tls.Certificate{}, "", fmt.Errorf("create key dir: %w", err)
+	}
 	_, certErr := os.Stat(certPath)
 	_, keyErr := os.Stat(keyPath)
 	if os.IsNotExist(certErr) || os.IsNotExist(keyErr) {
