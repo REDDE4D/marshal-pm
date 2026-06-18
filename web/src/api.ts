@@ -76,3 +76,30 @@ export async function getMetricsForProc(
   if (r.status === 401) throw new Error("unauthorized");
   return (await r.json()) as AgentMetrics[];
 }
+
+export type LogLine = {
+  ts: number;
+  name: string;
+  instance: number;
+  stderr: boolean;
+  text: string;
+};
+
+export type LogsResponse = { cursor: number; lines: LogLine[] };
+
+export async function getLogs(
+  agent: string,
+  selector: string,
+  opts: { stream: string; limit: number; after: number },
+): Promise<LogsResponse> {
+  const q = new URLSearchParams({
+    agent,
+    selector,
+    stream: opts.stream,
+    limit: String(opts.limit),
+    after: String(opts.after),
+  });
+  const r = await fetch(`/api/logs?${q.toString()}`);
+  if (r.status === 401) throw new Error("unauthorized");
+  return (await r.json()) as LogsResponse;
+}

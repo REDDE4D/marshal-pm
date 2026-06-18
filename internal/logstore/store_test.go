@@ -85,3 +85,63 @@ func TestMergeTail(t *testing.T) {
 		t.Fatalf("MergeTail = %+v, want b2,a3,b4", got)
 	}
 }
+
+func TestSinceBackfillAndFollow(t *testing.T) {
+	st := open(t)
+	_ = st.Append([]Line{
+		{TsMs: 1, Label: "a#0", Text: "l1"},
+		{TsMs: 1, Label: "a#1", Text: "l2"}, // same ts, different instance
+		{TsMs: 2, Label: "a#0", Stderr: true, Text: "l3"},
+	})
+	// backfill: newest 2 across both labels, ascending by rowid
+	got, cur, err := st.Since([]string{"a#0", "a#1"}, 0, 2, StreamAny)
+	if err != nil {
+		t.Fatalf("since backfill: %v", err)
+	}
+	if len(got) != 2 || got[0].Text != "l2" || got[1].Text != "l3" {
+		t.Fatalf("backfill = %+v, want l2 then l3", got)
+	}
+	if cur != got[1].RowID || got[1].RowID == 0 {
+		t.Fatalf("cursor = %d, want max rowid %d", cur, got[1].RowID)
+	}
+	// follow after cursor: nothing new, cursor unchanged
+	got2, cur2, _ := st.Since([]string{"a#0", "a#1"}, cur, 100, StreamAny)
+	if len(got2) != 0 || cur2 != cur {
+		t.Fatalf("follow empty = %+v cur=%d, want none and cur=%d", got2, cur2, cur)
+	}
+	// append then follow returns only the new line, advancing the cursor
+	_ = st.Append([]Line{{TsMs: 3, Label: "a#0", Text: "l4"}})
+	got3, cur3, _ := st.Since([]string{"a#0", "a#1"}, cur, 100, StreamAny)
+	if len(got3) != 1 || got3[0].Text != "l4" || cur3 <= cur {
+		t.Fatalf("follow new = %+v cur=%d", got3, cur3)
+	}
+}
+
+func TestSinceStreamFilter(t *testing.T) {
+	st := open(t)
+	_ = st.Append([]Line{
+		{TsMs: 1, Label: "a#0", Text: "out"},
+		{TsMs: 2, Label: "a#0", Stderr: true, Text: "err"},
+	})
+	got, _, _ := st.Since([]string{"a#0"}, 0, 100, StreamStderr)
+	if len(got) != 1 || got[0].Text != "err" {
+		t.Fatalf("stderr filter = %+v, want [err]", got)
+	}
+}
+
+func TestSinceCursorSafeAfterPrune(t *testing.T) {
+	st := open(t)
+	_ = st.Append([]Line{
+		{TsMs: 1000, Label: "a#0", Text: "old"},
+		{TsMs: 5000, Label: "a#0", Text: "new"},
+	})
+	_, cur, _ := st.Since([]string{"a#0"}, 0, 100, StreamAny)
+	if _, err := st.Prune(3000); err != nil { // removes "old" (smallest rowid)
+		t.Fatalf("prune: %v", err)
+	}
+	_ = st.Append([]Line{{TsMs: 6000, Label: "a#0", Text: "newer"}})
+	got, _, _ := st.Since([]string{"a#0"}, cur, 100, StreamAny)
+	if len(got) != 1 || got[0].Text != "newer" {
+		t.Fatalf("after prune follow = %+v, want [newer]", got)
+	}
+}
