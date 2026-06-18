@@ -65,3 +65,31 @@ func TestLogStoresSinceSelector(t *testing.T) {
 		t.Fatalf("unknown agent = (%+v, %d, %v), want empty/0/nil", got2, cur2, err)
 	}
 }
+
+func TestLogStoresErrorCounts(t *testing.T) {
+	ls := newLogStores(t.TempDir())
+	defer ls.closeAll()
+	st, err := ls.get("dev-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Append([]logstore.Line{
+		{TsMs: 200, Label: "web#0", Stderr: true, Text: "e"},
+		{TsMs: 200, Label: "web#0", Stderr: false, Text: "o"},
+		{TsMs: 200, Label: "api#0", Stderr: true, Text: "e"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ls.ErrorCounts("dev-1", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["web#0"] != 1 || got["api#0"] != 1 {
+		t.Fatalf("counts = %v; want web#0:1 api#0:1", got)
+	}
+	// Unknown agent -> empty, no error.
+	g2, err := ls.ErrorCounts("ghost", 0)
+	if err != nil || len(g2) != 0 {
+		t.Fatalf("unknown agent = (%v, %v); want ({}, nil)", g2, err)
+	}
+}
