@@ -26,10 +26,11 @@ type handler struct {
 	sessions *sessionStore
 	files    fs.FS
 	static   http.Handler
+	mux      http.Handler
 }
 
-// NewHandler builds the dashboard HTTP handler with the given session lifetime.
-func NewHandler(lister FleetLister, auth Authenticator, ttl time.Duration) http.Handler {
+// newHandler builds a *handler (with its mux) for the given session lifetime.
+func newHandler(lister FleetLister, auth Authenticator, ttl time.Duration) *handler {
 	files := staticFS()
 	h := &handler{
 		lister:   lister,
@@ -44,7 +45,14 @@ func NewHandler(lister FleetLister, auth Authenticator, ttl time.Duration) http.
 	mux.HandleFunc("GET /api/session", h.requireSession(h.session))
 	mux.HandleFunc("GET /api/fleet", h.requireSession(h.fleet))
 	mux.HandleFunc("/", h.spa)
-	return mux
+	h.mux = mux
+	return h
+}
+
+// NewHandler builds the dashboard HTTP handler with the given session lifetime.
+// The returned http.Handler is safe to use with httptest servers in unit tests.
+func NewHandler(lister FleetLister, auth Authenticator, ttl time.Duration) http.Handler {
+	return newHandler(lister, auth, ttl).mux
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

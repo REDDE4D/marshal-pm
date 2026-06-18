@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -49,5 +50,51 @@ func TestSessionSweep(t *testing.T) {
 	s.sweep()
 	if _, present := s.m[tok]; present {
 		t.Fatal("sweep did not remove expired session")
+	}
+}
+
+func TestSweepLoop(t *testing.T) {
+	now := time.Unix(1000, 0)
+	s := newSessionStore(time.Hour, func() time.Time { return now })
+	tok, err := s.create("c")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Advance clock past expiry so the next sweep removes the session.
+	now = now.Add(2 * time.Hour)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.sweepLoop(ctx, 10*time.Millisecond)
+	}()
+
+	// Wait up to 500ms for the expired entry to be removed.
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		s.mu.Lock()
+		_, present := s.m[tok]
+		s.mu.Unlock()
+		if !present {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	s.mu.Lock()
+	_, present := s.m[tok]
+	s.mu.Unlock()
+	if present {
+		t.Fatal("sweepLoop did not remove expired session")
+	}
+
+	// Cancel and confirm the goroutine exits.
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("sweepLoop goroutine did not return after context cancel")
 	}
 }

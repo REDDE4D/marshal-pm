@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"sync"
@@ -74,6 +75,20 @@ func (s *sessionStore) sweep() {
 	for tok, sess := range s.m {
 		if !now.Before(sess.expiry) {
 			delete(s.m, tok)
+		}
+	}
+}
+
+// sweepLoop periodically removes expired sessions until ctx is canceled.
+func (s *sessionStore) sweepLoop(ctx context.Context, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.sweep()
 		}
 	}
 }
