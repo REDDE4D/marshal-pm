@@ -30,7 +30,7 @@ func loginCookie(t *testing.T, c *http.Client, base string) *http.Cookie {
 }
 
 func TestMetricsRequiresSession(t *testing.T) {
-	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
 	defer srv.Close()
 	resp, _ := srv.Client().Get(srv.URL + "/api/metrics")
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -44,7 +44,7 @@ func TestMetricsBatched(t *testing.T) {
 		Procs:     []*pb.ProcInfo{{Name: "ticker"}, {Name: "web"}},
 	}}}
 	fm := &fakeMetrics{}
-	srv := httptest.NewServer(NewHandler(lister, fm, &fakeLogs{}, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	srv := httptest.NewServer(NewHandler(lister, fm, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
 	defer srv.Close()
 	c := srv.Client()
 	cookie := loginCookie(t, c, srv.URL)
@@ -73,7 +73,7 @@ func TestMetricsBatched(t *testing.T) {
 func TestMetricsSingleSeries(t *testing.T) {
 	lister := fakeLister{agents: []*pb.AgentState{{AgentName: "dev-1", Procs: []*pb.ProcInfo{{Name: "ticker"}}}}}
 	fm := &fakeMetrics{}
-	srv := httptest.NewServer(NewHandler(lister, fm, &fakeLogs{}, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	srv := httptest.NewServer(NewHandler(lister, fm, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
 	defer srv.Close()
 	c := srv.Client()
 	cookie := loginCookie(t, c, srv.URL)

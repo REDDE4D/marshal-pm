@@ -4,6 +4,7 @@ import {
   AgentMetrics,
   Bucket,
   LogLine,
+  control,
   getFleet,
   getLogs,
   getMetrics,
@@ -27,6 +28,50 @@ function uptime(ms: number): string {
 function mib(bytes: number): string {
   if (bytes <= 0) return "—";
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function ProcActions({ agent, proc, disabled }: { agent: string; proc: string; disabled: boolean }) {
+  const [pending, setPending] = useState<"restart" | "stop" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  function ask(action: "restart" | "stop") {
+    setMsg("");
+    setPending(action);
+    window.setTimeout(() => setPending((p) => (p === action ? null : p)), 3000);
+  }
+
+  async function fire(action: "restart" | "stop") {
+    setPending(null);
+    setBusy(true);
+    setMsg("");
+    const res = await control(agent, proc, action);
+    setBusy(false);
+    setMsg(res.ok ? "✓" : res.error || "error");
+    window.setTimeout(() => setMsg(""), 4000);
+  }
+
+  if (disabled) return <span className="muted">—</span>;
+  if (busy) return <span className="muted">…</span>;
+
+  return (
+    <span className="actions" onClick={(e) => e.stopPropagation()}>
+      {pending ? (
+        <>
+          <button className="confirm" onClick={() => fire(pending)}>
+            Confirm {pending}?
+          </button>
+          <button onClick={() => setPending(null)}>✕</button>
+        </>
+      ) : (
+        <>
+          <button onClick={() => ask("restart")}>Restart</button>
+          <button onClick={() => ask("stop")}>Stop</button>
+        </>
+      )}
+      {msg && <span className="action-msg">{msg}</span>}
+    </span>
+  );
 }
 
 const WINDOWS: { label: string; ms: number }[] = [
@@ -193,6 +238,7 @@ export function Fleet({ onLogout }: { onLogout: () => void }) {
                 <th>Restarts</th>
                 <th>CPU</th>
                 <th>Mem</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -217,10 +263,13 @@ export function Fleet({ onLogout }: { onLogout: () => void }) {
                         {mib(p.mem)}
                         <Sparkline points={metrics[a.name]?.[p.name]?.mem ?? []} color="#60a5fa" />
                       </td>
+                      <td>
+                        <ProcActions agent={a.name} proc={p.name} disabled={!a.connected} />
+                      </td>
                     </tr>
                     {isOpen && (
                       <tr className="detail">
-                        <td colSpan={7}>
+                        <td colSpan={8}>
                           <div className="tabs">
                             <button
                               className={tab === "charts" ? "active" : ""}
@@ -311,7 +360,7 @@ export function Fleet({ onLogout }: { onLogout: () => void }) {
               })}
               {a.procs.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="empty">
+                  <td colSpan={8} className="empty">
                     No processes.
                   </td>
                 </tr>

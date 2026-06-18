@@ -90,3 +90,23 @@ tr.detail td { background: rgba(0, 0, 0, 0.04); }
 .logts { color: #6b7280; flex: 0 0 auto; }
 .logtext { flex: 1 1 auto; }
 .jump { position: absolute; right: 12px; bottom: 12px; font-size: 0.75rem; padding: 3px 8px; }
+.actions {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+.actions button {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+}
+.actions button.confirm {
+  background: #b91c1c;
+  color: #fff;
+}
+.action-msg {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+.muted {
+  color: #6b7280;
+}

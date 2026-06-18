@@ -50,7 +50,8 @@ func TestClientHelloAndPeriodicPush(t *testing.T) {
 	}
 	sctx, scancel := context.WithCancel(context.Background())
 	defer scancel()
-	go func() { _ = server.Serve(sctx, lis, reg, nil, nil, cert, auth) }()
+	srv := server.NewServer(reg, nil, nil, auth)
+	go func() { _ = server.Serve(sctx, lis, srv, cert) }()
 
 	tlsCfg, err := fleetauth.ClientTLS(fp, "")
 	if err != nil {
@@ -111,7 +112,8 @@ func TestClientReconnectsWhenServerStartsLate(t *testing.T) {
 	reg := server.NewRegistry(server.WithOfflineAfter(time.Hour))
 	sctx, scancel := context.WithCancel(context.Background())
 	defer scancel()
-	go func() { _ = server.Serve(sctx, lis, reg, nil, nil, cert, auth) }()
+	srv2 := server.NewServer(reg, nil, nil, auth)
+	go func() { _ = server.Serve(sctx, lis, srv2, cert) }()
 
 	waitFor(t, func() bool {
 		ag := reg.List()

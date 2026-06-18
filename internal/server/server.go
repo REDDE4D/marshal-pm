@@ -291,28 +291,39 @@ func (s *Server) FleetControl(ctx context.Context, req *pb.FleetControlRequest) 
 	return &pb.FleetControlResponse{Result: res}, nil
 }
 
-// Serve registers the Fleet service on lis (TLS) and serves until ctx is canceled.
-// ss/ls may be nil (no storage); when set they are closed on shutdown.
-// auth must not be nil: unary and stream interceptors enforce admin/enroll tokens.
-func Serve(ctx context.Context, lis net.Listener, reg *Registry, ss *stores, ls *logStores, cert tls.Certificate, auth *AuthStore) error {
-	if auth == nil {
+// Control routes one control op to a connected agent and returns the agent's
+// result. It is the write-side adapter the dashboard depends on. A nil error
+// means the op reached the agent; the *ControlResult carries the agent's Ok/Error.
+func (s *Server) Control(ctx context.Context, agent string, op *pb.ControlOp) (*pb.ControlResult, error) {
+	resp, err := s.FleetControl(ctx, &pb.FleetControlRequest{AgentName: agent, Op: op})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetResult(), nil
+}
+
+// Serve registers the Fleet service backed by srv on lis (TLS) and serves until
+// ctx is canceled. srv.auth must not be nil: unary and stream interceptors
+// enforce admin/enroll tokens. srv's stores (if any) are closed on shutdown.
+func Serve(ctx context.Context, lis net.Listener, srv *Server, cert tls.Certificate) error {
+	if srv.auth == nil {
 		return errors.New("server: Serve requires a non-nil AuthStore")
 	}
 	creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
 	gs := grpc.NewServer(
 		grpc.Creds(creds),
-		grpc.UnaryInterceptor(auth.unaryAuth),
-		grpc.StreamInterceptor(auth.streamAuth),
+		grpc.UnaryInterceptor(srv.auth.unaryAuth),
+		grpc.StreamInterceptor(srv.auth.streamAuth),
 	)
-	pb.RegisterFleetServer(gs, NewServer(reg, ss, ls, auth))
+	pb.RegisterFleetServer(gs, srv)
 	go func() {
 		<-ctx.Done()
 		gs.GracefulStop()
-		if ss != nil {
-			_ = ss.closeAll()
+		if srv.stores != nil {
+			_ = srv.stores.closeAll()
 		}
-		if ls != nil {
-			_ = ls.closeAll()
+		if srv.logs != nil {
+			_ = srv.logs.closeAll()
 		}
 	}()
 	return gs.Serve(lis)
@@ -353,16 +364,17 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 		}
 	}()
 	reg := NewRegistry(opts...)
+	srv := NewServer(reg, ss, ls, auth)
 	if httpAddr != "" {
 		if !auth.HasDashboardUser() {
 			log.Printf("dashboard: no user set — run 'marshal server passwd'")
 		}
 		go func() {
-			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, auth, cert); err != nil {
+			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert); err != nil {
 				log.Printf("dashboard: %v", err)
 			}
 		}()
 		log.Printf("dashboard: serving on %s", httpAddr)
 	}
-	return Serve(ctx, lis, reg, ss, ls, cert, auth)
+	return Serve(ctx, lis, srv, cert)
 }
