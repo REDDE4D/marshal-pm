@@ -58,10 +58,11 @@ func TestClientHelloAndPeriodicPush(t *testing.T) {
 	}
 	c := fleet.New(lis.Addr().String(), "web-1", "test", snap,
 		fleet.WithTLS(tlsCfg),
-		fleet.WithInterval(20*time.Millisecond), fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond))
+		fleet.WithInterval(20*time.Millisecond), fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond),
+		fleet.WithAuth("", secrets.EnrollToken, func(string) error { return nil }))
 	cctx, ccancel := context.WithCancel(context.Background())
 	defer ccancel()
-	go c.Run(metadata.AppendToOutgoingContext(cctx, "marshal-enroll", secrets.EnrollToken))
+	go c.Run(cctx)
 
 	waitFor(t, func() bool {
 		ag := reg.List()
@@ -95,10 +96,11 @@ func TestClientReconnectsWhenServerStartsLate(t *testing.T) {
 
 	c := fleet.New(addr, "web-1", "test", snap,
 		fleet.WithTLS(tlsCfg),
-		fleet.WithInterval(20*time.Millisecond), fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond))
+		fleet.WithInterval(20*time.Millisecond), fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond),
+		fleet.WithAuth("", secrets.EnrollToken, func(string) error { return nil }))
 	cctx, ccancel := context.WithCancel(context.Background())
 	defer ccancel()
-	go c.Run(metadata.AppendToOutgoingContext(cctx, "marshal-enroll", secrets.EnrollToken)) // retries against a dead address
+	go c.Run(cctx) // retries against a dead address
 
 	time.Sleep(60 * time.Millisecond)
 
@@ -333,6 +335,141 @@ func (s *cmdStubServer) Connect(stream pb.Fleet_ConnectServer) error {
 		if r := msg.GetResult(); r != nil {
 			s.gotReply <- r
 			return nil
+		}
+	}
+}
+
+// TestClientEnrollmentAndPersistence verifies the full enrollment round-trip:
+// the client sends marshal-enroll when token=="", persists the minted token from
+// HelloAck.AgentToken, then switches to marshal-token on the next connect.
+func TestClientEnrollmentAndPersistence(t *testing.T) {
+	// enrollServer simulates a fleet server that:
+	//   - accepts an enroll token via marshal-enroll metadata
+	//   - returns a minted per-agent token in HelloAck.AgentToken
+	//   - accepts subsequent connections using marshal-token
+	const mintedToken = "minted-per-agent-token-abc123"
+	const enrollToken = "the-enroll-token"
+
+	enrollSrv := &enrollStubServer{
+		enrollToken: enrollToken,
+		mintedToken: mintedToken,
+	}
+	dir := t.TempDir()
+	cert, fp, err := server.LoadOrCreateCert(dir, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsClientCfg, err := fleetauth.ClientTLS(fp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverCreds := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	})
+	gs := grpc.NewServer(grpc.Creds(serverCreds))
+	pb.RegisterFleetServer(gs, enrollSrv)
+	t.Cleanup(func() { gs.GracefulStop() })
+	go func() { _ = gs.Serve(lis) }()
+
+	// Phase 1: enroll — persist must be called with the minted token.
+	var persistMu sync.Mutex
+	var persistedToken string
+	persist := func(tok string) error {
+		persistMu.Lock()
+		persistedToken = tok
+		persistMu.Unlock()
+		return nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	c := fleet.New(lis.Addr().String(), "web-1", "test", snap,
+		fleet.WithTLS(tlsClientCfg),
+		fleet.WithInterval(20*time.Millisecond),
+		fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond),
+		fleet.WithAuth("", enrollToken, persist))
+	go c.Run(ctx)
+
+	// Wait until the server recorded an enrollment and the persist callback ran.
+	waitFor(t, func() bool {
+		enrollSrv.mu.Lock()
+		enrollSeen := enrollSrv.enrollSeen
+		enrollSrv.mu.Unlock()
+		persistMu.Lock()
+		got := persistedToken
+		persistMu.Unlock()
+		return enrollSeen && got != ""
+	})
+	persistMu.Lock()
+	got := persistedToken
+	persistMu.Unlock()
+	if got != mintedToken {
+		t.Fatalf("persisted token = %q, want %q", got, mintedToken)
+	}
+	cancel()
+
+	// Phase 2: reconnect using the minted token — server must accept it.
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	c2 := fleet.New(lis.Addr().String(), "web-1", "test", snap,
+		fleet.WithTLS(tlsClientCfg),
+		fleet.WithInterval(20*time.Millisecond),
+		fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond),
+		fleet.WithAuth(mintedToken, "", func(string) error { return nil }))
+	go c2.Run(ctx2)
+
+	waitFor(t, func() bool {
+		enrollSrv.mu.Lock()
+		defer enrollSrv.mu.Unlock()
+		return enrollSrv.agentTokenSeen
+	})
+}
+
+// enrollStubServer is a fake fleet server that handles enrollment and per-agent
+// token auth for TestClientEnrollmentAndPersistence.
+type enrollStubServer struct {
+	pb.UnimplementedFleetServer
+	enrollToken string
+	mintedToken string
+
+	mu             sync.Mutex
+	enrollSeen     bool
+	agentTokenSeen bool
+}
+
+func (s *enrollStubServer) Connect(stream pb.Fleet_ConnectServer) error {
+	// Check incoming metadata for enroll or per-agent token.
+	md, _ := metadata.FromIncomingContext(stream.Context())
+	enrollVals := md.Get("marshal-enroll")
+	agentVals := md.Get("marshal-token")
+
+	var sendAgentToken string
+	s.mu.Lock()
+	if len(enrollVals) > 0 && enrollVals[0] == s.enrollToken {
+		s.enrollSeen = true
+		sendAgentToken = s.mintedToken
+	} else if len(agentVals) > 0 && agentVals[0] == s.mintedToken {
+		s.agentTokenSeen = true
+	}
+	s.mu.Unlock()
+
+	// Drain until Hello then send HelloAck (with optional AgentToken).
+	for {
+		msg, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		if msg.GetHello() != nil {
+			return stream.Send(&pb.ServerMessage{Msg: &pb.ServerMessage_HelloAck{
+				HelloAck: &pb.HelloAck{AgentToken: sendAgentToken},
+			}})
 		}
 	}
 }

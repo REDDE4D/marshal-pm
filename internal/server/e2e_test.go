@@ -118,9 +118,10 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 	c1 := fleet.New(lis1.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
 		fleet.WithTLS(tlsCfg),
-		fleet.WithInterval(20*time.Millisecond), fleet.WithLogs(logsFn))
+		fleet.WithInterval(20*time.Millisecond), fleet.WithLogs(logsFn),
+		fleet.WithAuth("", enrollToken, func(string) error { return nil }))
 	cctx1, ccancel1 := context.WithCancel(context.Background())
-	go c1.Run(metadata.AppendToOutgoingContext(cctx1, "marshal-enroll", enrollToken))
+	go c1.Run(cctx1)
 
 	conn1 := e2eDialFleet(t, lis1.Addr().String(), fp)
 	waitForLogs(t, conn1, "web-1", "api", 2, adminToken)
@@ -145,10 +146,11 @@ func TestE2ELogsIngestAndBackfill(t *testing.T) {
 	c2 := fleet.New(lis2.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
 		fleet.WithTLS(tlsCfg),
-		fleet.WithInterval(20*time.Millisecond), fleet.WithLogs(logsFn))
+		fleet.WithInterval(20*time.Millisecond), fleet.WithLogs(logsFn),
+		fleet.WithAuth("", enrollToken, func(string) error { return nil }))
 	cctx2, ccancel2 := context.WithCancel(context.Background())
 	defer ccancel2()
-	go c2.Run(metadata.AppendToOutgoingContext(cctx2, "marshal-enroll", enrollToken))
+	go c2.Run(cctx2)
 
 	conn2 := e2eDialFleet(t, lis2.Addr().String(), fp)
 	defer conn2.Close()
@@ -210,10 +212,11 @@ func TestE2EFleetControlRoundTrip(t *testing.T) {
 			return &pb.ControlResult{Ok: true, Procs: []*pb.ProcInfo{
 				{Name: cmd.GetOp().GetRestart().GetTarget(), State: "online"},
 			}}
-		}))
+		}),
+		fleet.WithAuth("", secrets.EnrollToken, func(string) error { return nil }))
 	cctx, ccancel := context.WithCancel(context.Background())
 	defer ccancel()
-	go c.Run(metadata.AppendToOutgoingContext(cctx, "marshal-enroll", secrets.EnrollToken))
+	go c.Run(cctx)
 
 	// Wait until the agent is connected (registry reflects its live session).
 	waitFor(t, func() bool {
@@ -292,9 +295,10 @@ func TestE2EMetricsIngestAndBackfill(t *testing.T) {
 	c1 := fleet.New(lis1.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
 		fleet.WithTLS(tlsCfg),
-		fleet.WithInterval(20*time.Millisecond), fleet.WithMetrics(metricsFn))
+		fleet.WithInterval(20*time.Millisecond), fleet.WithMetrics(metricsFn),
+		fleet.WithAuth("", enrollToken, func(string) error { return nil }))
 	cctx1, ccancel1 := context.WithCancel(context.Background())
-	go c1.Run(metadata.AppendToOutgoingContext(cctx1, "marshal-enroll", enrollToken))
+	go c1.Run(cctx1)
 
 	// Query the server until 2 buckets are present.
 	conn1 := e2eDialFleet(t, lis1.Addr().String(), fp)
@@ -320,10 +324,11 @@ func TestE2EMetricsIngestAndBackfill(t *testing.T) {
 	c2 := fleet.New(lis2.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
 		fleet.WithTLS(tlsCfg),
-		fleet.WithInterval(20*time.Millisecond), fleet.WithMetrics(metricsFn))
+		fleet.WithInterval(20*time.Millisecond), fleet.WithMetrics(metricsFn),
+		fleet.WithAuth("", enrollToken, func(string) error { return nil }))
 	cctx2, ccancel2 := context.WithCancel(context.Background())
 	defer ccancel2()
-	go c2.Run(metadata.AppendToOutgoingContext(cctx2, "marshal-enroll", enrollToken))
+	go c2.Run(cctx2)
 
 	conn2 := e2eDialFleet(t, lis2.Addr().String(), fp)
 	defer conn2.Close()
