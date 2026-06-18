@@ -16,7 +16,7 @@
 - Commit subject imperative + trailer `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
 - Branch `m19-dashboard-redesign`, not `main`.
 - Identity tokens (verbatim): bg `#0A0A0C`, panel `#121216`, panel-2 `#16161B`, border `#26262C`, border-soft `#1C1C22`, text `#C7CAD2`, text-dim `#7A7E8C`, text-faint `#4D5160`, cyan `#2DD4BF`, lime `#A3E635`, danger `#F87171`, mem `#5B6BD8`. Font `"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace`. Dark-only. Lowercase labels, never ALL-CAPS. Flat (no gradients/shadows). Prominent numbers (summary ~30px).
-- Process states: `starting · online · stopping · stopped · restarting · errored`. Errored = `state === "errored"`. start enabled when `state ∈ {stopped, errored}`; restart/stop enabled otherwise; all gated on agent `connected`.
+- Process states: `starting · online · stopping · stopped · restarting · errored`. Errored = `state === "errored"`. The **start** button is shown/enabled when `state ∈ {stopped, errored}`; restart/stop enabled otherwise; all gated on agent `connected`. **The start button issues a `Restart` control op** — `manager.Restart` stops-then-recreates the instances, which revives a stopped/errored managed process. There is NO separate `start` control op in M19 (the proto's `ControlOp_Start` launches *new* apps from an app-spec, which is a planned future "add app via dashboard" milestone, out of scope here).
 - `NewHandler`'s exported signature must not change.
 
 ---
@@ -40,65 +40,15 @@ Frontend (`web/`):
 
 ---
 
-## Task 1: `start` control action (backend)
+## Task 1: (DROPPED)
 
-**Files:**
-- Modify: `internal/dashboard/control.go`
-- Test: `internal/dashboard/control_test.go`
-
-**Interfaces:**
-- Consumes: `pb.ControlOp_Start` (already generated), the existing `fakeController` (records `gotOp`).
-- Produces: `/api/control` accepting `action:"start"`.
-
-- [ ] **Step 1: Write the failing test**
-
-Add to `internal/dashboard/control_test.go` (mirrors the existing control tests; logs in for a session first — copy the session/cookie setup from `TestControl…` already in that file, or use the `postControl` helper with a cookie obtained via `/api/login`):
-
-```go
-func TestControlStartMapsToStartOp(t *testing.T) {
-	fc := &fakeController{res: &pb.ControlResult{Ok: true}}
-	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fc, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
-	defer srv.Close()
-	c := srv.Client()
-	resp, _ := c.Post(srv.URL+"/api/login", "application/json", strings.NewReader(`{"User":"admin","Pass":"pw"}`))
-	ck := sessionCookieFrom(resp)
-	r := postControl(t, c, srv.URL, ck, `{"agent":"dev-1","selector":"web","action":"start"}`)
-	if r.StatusCode != 200 {
-		t.Fatalf("start control = %d; want 200", r.StatusCode)
-	}
-	if _, ok := fc.gotOp.GetOp().(*pb.ControlOp_Start); !ok {
-		t.Fatalf("op = %T; want *pb.ControlOp_Start", fc.gotOp.GetOp())
-	}
-}
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `go test ./internal/dashboard/ -run TestControlStartMapsToStartOp -count=1`
-Expected: FAIL — `controlOp("start", …)` returns nil ⇒ 400 (`unknown action`).
-
-- [ ] **Step 3: Add the `start` case**
-
-In `internal/dashboard/control.go`, in `controlOp`, add before `default`:
-
-```go
-	case "start":
-		return &pb.ControlOp{Op: &pb.ControlOp_Start{Start: &pb.Selector{Target: selector}}}
-```
-
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `go test ./internal/dashboard/ -run TestControl -race -count=1`
-Expected: PASS (the new test + existing control tests). Then `gofmt -l internal/dashboard/`.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add internal/dashboard/control.go internal/dashboard/control_test.go
-git commit -m "feat(dashboard): support start in /api/control
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
-```
+Originally a backend `start` control case. Dropped during execution: the proto's
+`ControlOp_Start` carries a `StartRequest` (an app-spec list to launch *new* apps), not a
+by-name selector, so it cannot "start a stopped process by name". `manager.Restart` already
+revives a stopped/errored managed process (stop-then-recreate). Decision: the **start button
+issues a `Restart` op** (handled entirely in the frontend `ControlButtons`, Task 5) — no
+backend change. A true "add app via dashboard" (app-spec → `StartRequest`) is a planned future
+milestone. No work in this task; proceed to Task 2.
 
 ---
 
@@ -657,18 +607,8 @@ export function procHref(agent: string, proc: string) {
 
 - [ ] **Step 2: Extend `api.ts`**
 
-Change the `control` action union and add `getLogStats`:
-
-```ts
-export async function control(
-  agent: string,
-  selector: string,
-  action: "start" | "restart" | "stop",
-): Promise<ControlResult> {
-```
-(only the type annotation changes; the body is unchanged.)
-
-Add at the end of `api.ts`:
+The `control` action type stays `"restart" | "stop"` (the UI "start" maps to a `restart` op —
+see `ControlButtons`). Only add `getLogStats` at the end of `api.ts`:
 
 ```ts
 export async function getLogStats(agent: string): Promise<Record<string, number>> {
@@ -685,40 +625,43 @@ export async function getLogStats(agent: string): Promise<Record<string, number>
 import { useState } from "react";
 import { control } from "./api";
 
-type Action = "start" | "restart" | "stop";
+// Backend ops are restart/stop. The UI "start" (shown when a process is
+// stopped/errored) issues a restart, which revives the managed process.
+type Op = "restart" | "stop";
 
 export function ControlButtons({ agent, proc, state, connected }: { agent: string; proc: string; state: string; connected: boolean }) {
-  const [pending, setPending] = useState<Action | null>(null);
+  const [pending, setPending] = useState<{ op: Op; label: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const running = !["stopped", "errored"].includes(state);
 
-  async function fire(a: Action) {
+  async function fire(op: Op) {
     setPending(null); setBusy(true); setMsg("");
-    const res = await control(agent, proc, a);
+    const res = await control(agent, proc, op);
     setBusy(false);
     setMsg(res.ok ? "✓" : res.error || "error");
     window.setTimeout(() => setMsg(""), 4000);
   }
-  function ask(a: Action) {
-    setMsg(""); setPending(a);
-    window.setTimeout(() => setPending((p) => (p === a ? null : p)), 3000);
+  function ask(op: Op, label: string) {
+    setMsg(""); setPending({ op, label });
+    window.setTimeout(() => setPending((p) => (p?.op === op ? null : p)), 3000);
   }
 
   if (busy) return <span className="ctl"><span className="ctl-msg">…</span></span>;
   if (pending) {
     return (
       <span className="ctl" onClick={(e) => e.stopPropagation()}>
-        <button className="ctl-confirm" onClick={() => fire(pending)}>confirm {pending}</button>
+        <button className="ctl-confirm" onClick={() => fire(pending.op)}>confirm {pending.label}</button>
         <button className="ctl-btn" onClick={() => setPending(null)}>✕</button>
       </span>
     );
   }
   return (
     <span className="ctl" onClick={(e) => e.stopPropagation()}>
-      <button className="ctl-btn" disabled={!connected || running} onClick={() => fire("start")}>start</button>
-      <button className="ctl-btn" disabled={!connected || !running} onClick={() => ask("restart")}>restart</button>
-      <button className="ctl-btn danger" disabled={!connected || !running} onClick={() => ask("stop")}>stop</button>
+      {/* start: revive a stopped/errored proc via restart; no confirm (it's already down) */}
+      <button className="ctl-btn" disabled={!connected || running} onClick={() => fire("restart")}>start</button>
+      <button className="ctl-btn" disabled={!connected || !running} onClick={() => ask("restart", "restart")}>restart</button>
+      <button className="ctl-btn danger" disabled={!connected || !running} onClick={() => ask("stop", "stop")}>stop</button>
       {msg && <span className="ctl-msg">{msg}</span>}
     </span>
   );
@@ -1170,10 +1113,11 @@ the overview and detail. Tear down (stop agent + server + Vite, remove scratch +
 - [ ] **Step 3: Write the handoff**
 
 Write `docs/handoffs/2026-06-18-m19-redesign.md`: state + branch, what changed (Signal identity,
-overview→detail IA, start control, error counts), build/run/test (incl. `make ui`), the live-demo
-result with screenshots noted, deferred items (one-click port open; light mode; per-instance
-error attribution; process command on the detail page needs a proto/agent change), and the next
-step. Commit it.
+overview→detail IA, start-as-restart, error counts), build/run/test (incl. `make ui`), the
+live-demo result with screenshots noted, deferred items (**add an app via the dashboard / true
+start = app-spec → `StartRequest`, a planned next milestone**; one-click port open; light mode;
+per-instance error attribution; process command on the detail page needs a proto/agent change),
+and the next step. Commit it.
 
 - [ ] **Step 4: Finish the branch**
 
@@ -1188,7 +1132,7 @@ Use `superpowers:finishing-a-development-branch` to merge `m19-dashboard-redesig
 - Hash router (overview ↔ detail) → Task 5 (`router.ts`). ✅
 - Overview: summary cards (incl. errors) + full-width process cards (state, meta, sparklines, recent-error badge, state-aware start/restart/stop, link) → Task 6. ✅
 - Process detail: back/breadcrumb, header + controls, stat tiles incl `errors·5m`, side-by-side cpu/mem charts + window selector, log panel + search → Task 5 (`ProcessDetail`). ✅
-- `start` control → Task 1. ✅
+- `start` button → revives via a `Restart` op in `ControlButtons` (Task 5); no backend `start` op (Task 1 dropped — proto `Start` launches new apps). ✅
 - Recent-error count (`stderr`, last 5 min): logstore + server + `/api/logstats` → Tasks 2–3; consumed by overview badges + detail tile → Tasks 5–6. ✅
 - `Fleet.tsx` split into focused components → Tasks 5–6. ✅
 - No proto/agent/manager changes; `NewHandler` unchanged → confirmed (only the `LogsHistory` interface grew, satisfied by `*server.logStores` + test fakes). ✅
