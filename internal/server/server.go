@@ -67,6 +67,9 @@ func (s *Server) Connect(stream pb.Fleet_ConnectServer) error {
 		case *pb.AgentMessage_Hello:
 			ctx := stream.Context()
 			ack := &pb.HelloAck{}
+			// s.auth == nil only occurs in unit tests that call NewServer directly and
+			// drive Connect without the interceptor. Serve rejects a nil AuthStore, so
+			// this branch is unreachable when the server is run for real.
 			if s.auth == nil {
 				// No auth configured (direct unit-test calls that bypass the
 				// interceptor): trust the self-asserted name as before.
@@ -315,6 +318,9 @@ func (s *Server) FleetControl(ctx context.Context, req *pb.FleetControlRequest) 
 // ss/ls may be nil (no storage); when set they are closed on shutdown.
 // auth must not be nil: unary and stream interceptors enforce admin/enroll tokens.
 func Serve(ctx context.Context, lis net.Listener, reg *Registry, ss *stores, ls *logStores, cert tls.Certificate, auth *AuthStore) error {
+	if auth == nil {
+		return errors.New("server: Serve requires a non-nil AuthStore")
+	}
 	creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
 	gs := grpc.NewServer(
 		grpc.Creds(creds),
