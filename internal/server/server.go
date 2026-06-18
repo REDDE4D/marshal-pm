@@ -372,8 +372,9 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 			log.Printf("dashboard: no user set — run 'marshal server passwd'")
 		}
 		sessionsPath := filepath.Join(dataDir, "sessions.json")
+		auditPath := filepath.Join(dataDir, "login-audit.log")
 		go func() {
-			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath); err != nil {
+			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath, auditPath); err != nil {
 				log.Printf("dashboard: %v", err)
 			}
 		}()
