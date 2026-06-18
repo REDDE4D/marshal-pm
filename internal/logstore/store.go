@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -21,6 +22,7 @@ type Line struct {
 
 // StoredLine is one row read back from the store.
 type StoredLine struct {
+	RowID  int64
 	TsMs   int64
 	Label  string
 	Stderr bool
@@ -131,6 +133,77 @@ func (s *Store) Tail(label string, limit int, filter StreamFilter) ([]StoredLine
 		desc[i], desc[j] = desc[j], desc[i]
 	}
 	return desc, nil
+}
+
+// Since returns lines for the given labels with rowid > afterRowID, ascending by
+// rowid, plus the max rowid returned (the next cursor). When afterRowID <= 0 it
+// returns the newest `limit` lines instead (backfill), still ascending by rowid.
+// limit <= 0 means no limit. An empty result returns the unchanged afterRowID so
+// the caller's cursor never goes backwards.
+func (s *Store) Since(labels []string, afterRowID int64, limit int, filter StreamFilter) ([]StoredLine, int64, error) {
+	if len(labels) == 0 {
+		return nil, afterRowID, nil
+	}
+	ph := make([]string, len(labels))
+	args := make([]any, 0, len(labels)+2)
+	for i, l := range labels {
+		ph[i] = "?"
+		args = append(args, l)
+	}
+	q := `SELECT rowid, ts, label, stderr, text FROM log_line WHERE label IN (` + strings.Join(ph, ",") + `)`
+	switch filter {
+	case StreamStdout:
+		q += ` AND stderr = 0`
+	case StreamStderr:
+		q += ` AND stderr = 1`
+	}
+	reverse := false
+	if afterRowID > 0 {
+		q += ` AND rowid > ? ORDER BY rowid`
+		args = append(args, afterRowID)
+		if limit > 0 {
+			q += ` LIMIT ?`
+			args = append(args, limit)
+		}
+	} else {
+		// backfill: newest `limit` by rowid, reversed below to ascending.
+		q += ` ORDER BY rowid DESC`
+		if limit > 0 {
+			q += ` LIMIT ?`
+			args = append(args, limit)
+		}
+		reverse = true
+	}
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, afterRowID, err
+	}
+	defer rows.Close()
+	var out []StoredLine
+	for rows.Next() {
+		var ln StoredLine
+		var se int64
+		if err := rows.Scan(&ln.RowID, &ln.TsMs, &ln.Label, &se, &ln.Text); err != nil {
+			return nil, afterRowID, err
+		}
+		ln.Stderr = se != 0
+		out = append(out, ln)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, afterRowID, err
+	}
+	if reverse {
+		for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+			out[i], out[j] = out[j], out[i]
+		}
+	}
+	cursor := afterRowID
+	for _, ln := range out {
+		if ln.RowID > cursor {
+			cursor = ln.RowID
+		}
+	}
+	return out, cursor, nil
 }
 
 // MaxTs returns the largest stored ts, or 0 when the store is empty.
