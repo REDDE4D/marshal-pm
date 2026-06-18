@@ -66,8 +66,11 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 
 // ServerConfig points the agent at a central server. Presence enables fleet mode.
 type ServerConfig struct {
-	Address string `yaml:"address" json:"address"`
-	Name    string `yaml:"name" json:"name,omitempty"`
+	Address     string `yaml:"address" json:"address"`
+	Name        string `yaml:"name" json:"name,omitempty"`
+	Token       string `yaml:"token" json:"token,omitempty"`             // enrollment token (used until enrolled)
+	Fingerprint string `yaml:"fingerprint" json:"fingerprint,omitempty"` // pinned server cert SHA-256
+	CA          string `yaml:"ca" json:"ca,omitempty"`                   // CA file path (alternative to fingerprint)
 }
 
 // App is one supervised application definition.
@@ -136,8 +139,16 @@ func (c *Config) applyDefaults() {
 }
 
 func (c *Config) validate() error {
-	if c.Server != nil && c.Server.Address == "" {
-		return fmt.Errorf("server.address is required when a server block is present")
+	if c.Server != nil {
+		if c.Server.Address == "" {
+			return fmt.Errorf("server.address is required when a server block is present")
+		}
+		if c.Server.Fingerprint != "" && c.Server.CA != "" {
+			return fmt.Errorf("server.fingerprint and server.ca are mutually exclusive")
+		}
+		if c.Server.Fingerprint == "" && c.Server.CA == "" {
+			return fmt.Errorf("server needs a trust source: set server.fingerprint or server.ca")
+		}
 	}
 	if len(c.Apps) == 0 {
 		return fmt.Errorf("config has no apps")
