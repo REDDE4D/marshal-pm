@@ -36,3 +36,32 @@ func TestLogStoresPruneAll(t *testing.T) {
 		t.Fatalf("MaxTs after prune = %d, want 5000", mx)
 	}
 }
+
+func TestLogStoresSinceSelector(t *testing.T) {
+	ls := newLogStores(t.TempDir())
+	st, err := ls.get("dev-1")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	_ = st.Append([]logstore.Line{
+		{TsMs: 1, Label: "web#0", Text: "a"},
+		{TsMs: 2, Label: "web#1", Text: "b"},
+		{TsMs: 3, Label: "api#0", Text: "c"},
+	})
+	// selector "web" matches web#0 and web#1 (prefix), not api#0
+	got, cur, err := ls.Since("dev-1", "web", 0, 100, logstore.StreamAny)
+	if err != nil {
+		t.Fatalf("since: %v", err)
+	}
+	if len(got) != 2 || got[0].Text != "a" || got[1].Text != "b" {
+		t.Fatalf("Since web = %+v, want a then b", got)
+	}
+	if cur != got[1].RowID {
+		t.Fatalf("cursor = %d, want %d", cur, got[1].RowID)
+	}
+	// unknown agent -> graceful empty
+	got2, cur2, err := ls.Since("ghost", "web", 0, 100, logstore.StreamAny)
+	if err != nil || len(got2) != 0 || cur2 != 0 {
+		t.Fatalf("unknown agent = (%+v, %d, %v), want empty/0/nil", got2, cur2, err)
+	}
+}

@@ -3,6 +3,7 @@ package server
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"marshal/internal/logstore"
@@ -70,4 +71,32 @@ func (s *logStores) pruneAll(beforeMs int64) {
 	for _, st := range s.m {
 		_, _ = st.Prune(beforeMs)
 	}
+}
+
+// Since resolves selector to the agent's matching labels (exact or "selector#"
+// prefix) and returns lines with rowid > afterRowID (afterRowID <= 0 means the
+// newest `limit`), the next cursor, and any error. An unknown agent returns
+// (nil, 0, nil); a known agent with no matching labels returns (nil, afterRowID, nil).
+func (s *logStores) Since(agent, selector string, afterRowID int64, limit int, filter logstore.StreamFilter) ([]logstore.StoredLine, int64, error) {
+	if !s.has(agent) {
+		return nil, 0, nil
+	}
+	st, err := s.get(agent)
+	if err != nil {
+		return nil, 0, err
+	}
+	labels, err := st.Labels()
+	if err != nil {
+		return nil, 0, err
+	}
+	var matched []string
+	for _, l := range labels {
+		if l == selector || strings.HasPrefix(l, selector+"#") {
+			matched = append(matched, l)
+		}
+	}
+	if len(matched) == 0 {
+		return nil, afterRowID, nil
+	}
+	return st.Since(matched, afterRowID, limit, filter)
 }
