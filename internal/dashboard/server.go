@@ -10,9 +10,10 @@ import (
 
 // Serve runs the dashboard HTTP server over TLS on addr until ctx is canceled.
 // cert is the server's TLS certificate (shared with the gRPC service).
-// sessionsPath persists sessions to disk; "" keeps them in-memory.
-func Serve(ctx context.Context, addr string, lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, cert tls.Certificate, sessionsPath string) error {
-	h := newHandler(lister, metrics, logs, controller, auth, 24*time.Hour, sessionsPath)
+// sessionsPath persists sessions to disk; "" keeps them in-memory. auditPath
+// enables the login audit log; "" disables it.
+func Serve(ctx context.Context, addr string, lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, cert tls.Certificate, sessionsPath, auditPath string) error {
+	h := newHandler(lister, metrics, logs, controller, auth, 24*time.Hour, sessionsPath, auditPath)
 	go h.sessions.sweepLoop(ctx, time.Hour)
 	srv := &http.Server{
 		Addr:      addr,

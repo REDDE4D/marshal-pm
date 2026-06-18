@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"marshal/internal/audit"
 )
 
 const sessionCookie = "marshal_session"
@@ -31,6 +33,7 @@ type handler struct {
 	auth        Authenticator
 	sessions    *sessionStore
 	limiter     *loginLimiter
+	audit       *audit.Log
 	files       fs.FS
 	static      http.Handler
 	mux         http.Handler
@@ -38,8 +41,13 @@ type handler struct {
 
 // newHandler builds a *handler (with its mux) for the given session lifetime.
 // sessionsPath persists sessions to disk; "" keeps them in-memory.
-func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration, sessionsPath string) *handler {
+// auditPath enables the login audit log; "" disables it.
+func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration, sessionsPath, auditPath string) *handler {
 	files := staticFS()
+	var al *audit.Log
+	if auditPath != "" {
+		al = audit.New(auditPath, audit.DefaultMaxBytes)
+	}
 	h := &handler{
 		lister:      lister,
 		metricsHist: metrics,
@@ -48,6 +56,7 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 		auth:        auth,
 		sessions:    newSessionStore(ttl, nil, sessionsPath),
 		limiter:     newLoginLimiter(nil),
+		audit:       al,
 		files:       files,
 		static:      http.FileServer(http.FS(files)),
 	}
@@ -67,7 +76,7 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 // NewHandler builds the dashboard HTTP handler with the given session lifetime.
 // The returned http.Handler is safe to use with httptest servers in unit tests.
 func NewHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration) http.Handler {
-	return newHandler(lister, metrics, logs, controller, auth, ttl, "").mux
+	return newHandler(lister, metrics, logs, controller, auth, ttl, "", "").mux
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -94,8 +103,10 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	key := body.User + "|" + clientIP(r)
+	ip := clientIP(r)
+	key := body.User + "|" + ip
 	if locked, wait := h.limiter.retryAfter(key); locked {
+		h.audit.Record(audit.Event{Time: time.Now().UTC(), User: body.User, IP: ip, Outcome: audit.OutcomeRateLimited})
 		secs := int(wait.Seconds())
 		if secs < 1 {
 			secs = 1
@@ -106,6 +117,7 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 	}
 	if !h.auth.VerifyDashboardUser(body.User, body.Pass) {
 		h.limiter.fail(key)
+		h.audit.Record(audit.Event{Time: time.Now().UTC(), User: body.User, IP: ip, Outcome: audit.OutcomeInvalid})
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
@@ -116,6 +128,7 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	h.audit.Record(audit.Event{Time: time.Now().UTC(), User: body.User, IP: ip, Outcome: audit.OutcomeSuccess})
 	h.setSessionCookie(w, tok, 0)
 	writeJSON(w, http.StatusOK, map[string]string{"user": body.User})
 }

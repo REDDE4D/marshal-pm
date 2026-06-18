@@ -52,7 +52,7 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringVar(&tlsCert, "tls-cert", "", "path to TLS cert PEM (default <data-dir>/cert.pem, generated if absent)")
 	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "path to TLS key PEM (default <data-dir>/key.pem)")
 	cmd.Flags().StringVar(&httpListen, "http-listen", "", "address for the web dashboard (e.g. :9001); disabled if empty")
-	cmd.AddCommand(serverFingerprintCmd(), serverTokenCmd(), serverAgentCmd(), serverPasswdCmd())
+	cmd.AddCommand(serverFingerprintCmd(), serverTokenCmd(), serverAgentCmd(), serverPasswdCmd(), serverAuditCmd())
 	return cmd
 }
 
