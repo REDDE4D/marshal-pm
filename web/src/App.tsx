@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getSession } from "./api";
 import { Login } from "./Login";
-import { Fleet } from "./Fleet";
+import { Overview } from "./Overview";
 import { ProcessDetail } from "./ProcessDetail";
 import { useRoute } from "./router";
 
@@ -13,5 +13,5 @@ export function App() {
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;
   const onLogout = () => setAuthed(false);
   if (route.name === "detail") return <ProcessDetail agent={route.agent} proc={route.proc} onLogout={onLogout} />;
-  return <Fleet onLogout={onLogout} />;
+  return <Overview onLogout={onLogout} />;
 }
