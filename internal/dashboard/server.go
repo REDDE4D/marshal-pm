@@ -10,8 +10,8 @@ import (
 
 // Serve runs the dashboard HTTP server over TLS on addr until ctx is canceled.
 // cert is the server's TLS certificate (shared with the gRPC service).
-func Serve(ctx context.Context, addr string, lister FleetLister, auth Authenticator, cert tls.Certificate) error {
-	h := newHandler(lister, auth, 24*time.Hour)
+func Serve(ctx context.Context, addr string, lister FleetLister, metrics MetricsHistory, auth Authenticator, cert tls.Certificate) error {
+	h := newHandler(lister, metrics, auth, 24*time.Hour)
 	go h.sessions.sweepLoop(ctx, time.Hour)
 	srv := &http.Server{
 		Addr:      addr,
