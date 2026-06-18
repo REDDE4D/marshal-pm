@@ -33,7 +33,8 @@ type handler struct {
 }
 
 // newHandler builds a *handler (with its mux) for the given session lifetime.
-func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration) *handler {
+// sessionsPath persists sessions to disk; "" keeps them in-memory.
+func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration, sessionsPath string) *handler {
 	files := staticFS()
 	h := &handler{
 		lister:      lister,
@@ -41,7 +42,7 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 		logsHist:    logs,
 		controller:  controller,
 		auth:        auth,
-		sessions:    newSessionStore(ttl, nil, ""),
+		sessions:    newSessionStore(ttl, nil, sessionsPath),
 		files:       files,
 		static:      http.FileServer(http.FS(files)),
 	}
@@ -61,7 +62,7 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 // NewHandler builds the dashboard HTTP handler with the given session lifetime.
 // The returned http.Handler is safe to use with httptest servers in unit tests.
 func NewHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration) http.Handler {
-	return newHandler(lister, metrics, logs, controller, auth, ttl).mux
+	return newHandler(lister, metrics, logs, controller, auth, ttl, "").mux
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

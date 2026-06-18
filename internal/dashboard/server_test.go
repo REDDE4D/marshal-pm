@@ -111,3 +111,30 @@ func TestUnknownAPIRouteNotFound(t *testing.T) {
 		t.Fatalf("unknown api route = %d; want 404", resp.StatusCode)
 	}
 }
+
+func TestSessionSurvivesHandlerRestart(t *testing.T) {
+	path := t.TempDir() + "/sessions.json"
+	auth := fakeAuth{user: "admin", pass: "pw"}
+
+	// First handler: log in, capture the cookie.
+	h1 := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, auth, time.Hour, path)
+	srv1 := httptest.NewServer(h1.mux)
+	c1 := srv1.Client()
+	resp, _ := c1.Post(srv1.URL+"/api/login", "application/json", strings.NewReader(`{"User":"admin","Pass":"pw"}`))
+	cookie := sessionCookieFrom(resp)
+	srv1.Close()
+	if cookie == nil {
+		t.Fatal("login set no session cookie")
+	}
+
+	// Second handler at the same path (simulating a restart): the cookie still validates.
+	h2 := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, auth, time.Hour, path)
+	srv2 := httptest.NewServer(h2.mux)
+	defer srv2.Close()
+	req, _ := http.NewRequest("GET", srv2.URL+"/api/fleet", nil)
+	req.AddCookie(cookie)
+	resp, _ = srv2.Client().Do(req)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("post-restart fleet = %d; want 200 (session not persisted)", resp.StatusCode)
+	}
+}
