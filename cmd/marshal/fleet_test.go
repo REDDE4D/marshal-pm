@@ -226,6 +226,17 @@ func TestFleetRestartSendsControlOp(t *testing.T) {
 	}
 }
 
+func TestFleetLogsGrepFlag(t *testing.T) {
+	cmd := fleetLogsCmd()
+	f := cmd.Flags().Lookup("grep")
+	if f == nil {
+		t.Fatal("fleet logs has no --grep flag")
+	}
+	if f.DefValue != "" {
+		t.Fatalf("--grep default = %q; want empty", f.DefValue)
+	}
+}
+
 type controlStub struct {
 	pb.UnimplementedFleetServer
 	captured      chan *pb.FleetControlRequest

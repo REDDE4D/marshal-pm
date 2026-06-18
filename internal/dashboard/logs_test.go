@@ -12,7 +12,7 @@ import (
 
 type fakeLogs struct{ afters []int64 }
 
-func (f *fakeLogs) Since(agent, selector string, afterRowID int64, limit int, filter logstore.StreamFilter) ([]logstore.StoredLine, int64, error) {
+func (f *fakeLogs) Since(agent, selector string, afterRowID int64, limit int, filter logstore.StreamFilter, text string) ([]logstore.StoredLine, int64, error) {
 	f.afters = append(f.afters, afterRowID)
 	return []logstore.StoredLine{
 		{RowID: 7, TsMs: 1000, Label: "web#0", Stderr: false, Text: "hello"},
@@ -89,5 +89,26 @@ func TestLogsMissingParams(t *testing.T) {
 	resp, _ := c.Do(req)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("missing selector = %d; want 400", resp.StatusCode)
+	}
+}
+
+type recordingLogs struct{ gotText string }
+
+func (r *recordingLogs) Since(agent, selector string, afterRowID int64, limit int, filter logstore.StreamFilter, text string) ([]logstore.StoredLine, int64, error) {
+	r.gotText = text
+	return []logstore.StoredLine{{RowID: 1, TsMs: 1, Label: "web#0", Stderr: false, Text: "x"}}, 1, nil
+}
+
+func TestLogsThreadsQueryFilter(t *testing.T) {
+	rl := &recordingLogs{}
+	h := newHandler(fakeLister{}, &fakeMetrics{}, rl, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", "")
+	req := httptest.NewRequest("GET", "/api/logs?agent=dev-1&selector=web&q=boom", nil)
+	rec := httptest.NewRecorder()
+	h.logs(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status = %d; want 200", rec.Code)
+	}
+	if rl.gotText != "boom" {
+		t.Fatalf("Since received text %q; want %q", rl.gotText, "boom")
 	}
 }

@@ -231,7 +231,7 @@ func (s *Server) FleetLogsHistory(_ context.Context, req *pb.FleetLogsHistoryReq
 
 	var series [][]logstore.StoredLine
 	for _, l := range matched {
-		lines, err := st.Tail(l, limit, filter)
+		lines, err := st.Tail(l, limit, filter, req.GetGrep())
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "tail: %v", err)
 		}

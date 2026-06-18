@@ -350,6 +350,36 @@ func TestEnrollAndAuthenticatedIdentity(t *testing.T) {
 	_ = stream2.CloseSend()
 }
 
+func TestFleetLogsHistoryGrep(t *testing.T) {
+	ls := newLogStores(t.TempDir())
+	defer ls.closeAll()
+	srv := NewServer(NewRegistry(WithOfflineAfter(time.Hour)), nil, ls, nil)
+
+	srv.storeLogBatch("web-1", []*pb.LogShipLine{
+		{TsMs: 1, Label: "api#0", Stderr: false, Text: "starting up"},
+		{TsMs: 2, Label: "api#0", Stderr: true, Text: "ERROR: boom"},
+		{TsMs: 3, Label: "api#0", Stderr: false, Text: "recovered"},
+	})
+
+	resp, err := srv.FleetLogsHistory(context.Background(), &pb.FleetLogsHistoryRequest{
+		AgentName: "web-1", Selector: "api", Lines: 10, Grep: "error",
+	})
+	if err != nil {
+		t.Fatalf("FleetLogsHistory: %v", err)
+	}
+	if len(resp.GetLines()) != 1 || resp.GetLines()[0].GetLine() != "ERROR: boom" {
+		t.Fatalf("grep = %+v; want [ERROR: boom]", resp.GetLines())
+	}
+
+	// Empty grep is unchanged (all 3).
+	all, _ := srv.FleetLogsHistory(context.Background(), &pb.FleetLogsHistoryRequest{
+		AgentName: "web-1", Selector: "api", Lines: 10,
+	})
+	if len(all.GetLines()) != 3 {
+		t.Fatalf("empty grep = %d lines; want 3", len(all.GetLines()))
+	}
+}
+
 func TestConnectStoresLogBatchAndAcksWatermark(t *testing.T) {
 	dir := t.TempDir()
 	ls := newLogStores(dir)
@@ -365,7 +395,7 @@ func TestConnectStoresLogBatchAndAcksWatermark(t *testing.T) {
 	if mx, _ := st.MaxTs(); mx != 2000 {
 		t.Fatalf("MaxTs = %d, want 2000", mx)
 	}
-	got, _ := st.Tail("api#0", 10, logstore.StreamAny)
+	got, _ := st.Tail("api#0", 10, logstore.StreamAny, "")
 	if len(got) != 2 || got[0].Text != "l1" || got[1].Text != "l2" {
 		t.Fatalf("stored = %+v, want l1,l2", got)
 	}

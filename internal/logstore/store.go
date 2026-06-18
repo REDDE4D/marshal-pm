@@ -96,7 +96,7 @@ func (s *Store) Append(lines []Line) error {
 
 // Tail returns the newest `limit` lines for one label (after stream filtering),
 // ordered oldest-first. limit <= 0 means no limit.
-func (s *Store) Tail(label string, limit int, filter StreamFilter) ([]StoredLine, error) {
+func (s *Store) Tail(label string, limit int, filter StreamFilter, text string) ([]StoredLine, error) {
 	q := `SELECT ts, label, stderr, text FROM log_line WHERE label = ?`
 	args := []any{label}
 	switch filter {
@@ -104,6 +104,10 @@ func (s *Store) Tail(label string, limit int, filter StreamFilter) ([]StoredLine
 		q += ` AND stderr = 0`
 	case StreamStderr:
 		q += ` AND stderr = 1`
+	}
+	if text != "" {
+		q += ` AND text LIKE ? ESCAPE '\'`
+		args = append(args, "%"+escapeLike(text)+"%")
 	}
 	q += ` ORDER BY ts DESC`
 	if limit > 0 {
@@ -140,12 +144,12 @@ func (s *Store) Tail(label string, limit int, filter StreamFilter) ([]StoredLine
 // returns the newest `limit` lines instead (backfill), still ascending by rowid.
 // limit <= 0 means no limit. An empty result returns the unchanged afterRowID so
 // the caller's cursor never goes backwards.
-func (s *Store) Since(labels []string, afterRowID int64, limit int, filter StreamFilter) ([]StoredLine, int64, error) {
+func (s *Store) Since(labels []string, afterRowID int64, limit int, filter StreamFilter, text string) ([]StoredLine, int64, error) {
 	if len(labels) == 0 {
 		return nil, afterRowID, nil
 	}
 	ph := make([]string, len(labels))
-	args := make([]any, 0, len(labels)+2)
+	args := make([]any, 0, len(labels)+3)
 	for i, l := range labels {
 		ph[i] = "?"
 		args = append(args, l)
@@ -156,6 +160,10 @@ func (s *Store) Since(labels []string, afterRowID int64, limit int, filter Strea
 		q += ` AND stderr = 0`
 	case StreamStderr:
 		q += ` AND stderr = 1`
+	}
+	if text != "" {
+		q += ` AND text LIKE ? ESCAPE '\'`
+		args = append(args, "%"+escapeLike(text)+"%")
 	}
 	reverse := false
 	if afterRowID > 0 {
@@ -267,4 +275,10 @@ func b2i(b bool) int64 {
 		return 1
 	}
 	return 0
+}
+
+// escapeLike backslash-escapes the LIKE metacharacters in s so it matches as a
+// literal substring under `LIKE ? ESCAPE '\'`.
+func escapeLike(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
 }

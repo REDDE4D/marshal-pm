@@ -49,7 +49,7 @@ func TestLogStoresSinceSelector(t *testing.T) {
 		{TsMs: 3, Label: "api#0", Text: "c"},
 	})
 	// selector "web" matches web#0 and web#1 (prefix), not api#0
-	got, cur, err := ls.Since("dev-1", "web", 0, 100, logstore.StreamAny)
+	got, cur, err := ls.Since("dev-1", "web", 0, 100, logstore.StreamAny, "")
 	if err != nil {
 		t.Fatalf("since: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestLogStoresSinceSelector(t *testing.T) {
 		t.Fatalf("cursor = %d, want %d", cur, got[1].RowID)
 	}
 	// unknown agent -> graceful empty
-	got2, cur2, err := ls.Since("ghost", "web", 0, 100, logstore.StreamAny)
+	got2, cur2, err := ls.Since("ghost", "web", 0, 100, logstore.StreamAny, "")
 	if err != nil || len(got2) != 0 || cur2 != 0 {
 		t.Fatalf("unknown agent = (%+v, %d, %v), want empty/0/nil", got2, cur2, err)
 	}

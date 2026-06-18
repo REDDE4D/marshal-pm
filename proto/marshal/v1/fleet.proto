@@ -86,6 +86,7 @@ message FleetLogsHistoryRequest {
   string    selector   = 2; // app name or "name#instance" label
   int32     lines      = 3; // backfill count
   LogStream stream     = 4; // reuse daemon.proto enum; unspecified = merged
+  string    grep       = 5; // only lines containing this substring (case-insensitive); empty = all
 }
 
 message FleetLogsHistoryResponse { repeated LogLine lines = 1; } // LogLine from daemon.proto
