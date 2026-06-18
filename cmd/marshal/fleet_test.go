@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 
 	"marshal/internal/fleetauth"
 	"marshal/internal/pb"
@@ -151,7 +152,9 @@ func TestResolveServerAuth(t *testing.T) {
 
 func TestFleetRestartSendsControlOp(t *testing.T) {
 	captured := make(chan *pb.FleetControlRequest, 1)
-	addr, fp := newTLSControlStub(t, &controlStub{captured: captured})
+	capturedToken := make(chan string, 1)
+	stub := &controlStub{captured: captured, capturedToken: capturedToken}
+	addr, fp := newTLSControlStub(t, stub)
 
 	// Verify dialFleet works with the pinned fingerprint.
 	cfg, err := fleetauth.ClientTLS(fp, "")
@@ -164,10 +167,12 @@ func TestFleetRestartSendsControlOp(t *testing.T) {
 	}
 	conn.Close()
 
+	const testToken = "test-admin-token"
 	cmd := fleetCmd()
 	cmd.SetArgs([]string{"restart", "web-1", "api",
 		"--server", addr,
 		"--fingerprint", fp,
+		"--token", testToken,
 	})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
@@ -183,14 +188,31 @@ func TestFleetRestartSendsControlOp(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("FleetControl was never called")
 	}
+
+	select {
+	case tok := <-capturedToken:
+		if tok != testToken {
+			t.Fatalf("marshal-token = %q, want %q", tok, testToken)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("token was never captured")
+	}
 }
 
 type controlStub struct {
 	pb.UnimplementedFleetServer
-	captured chan *pb.FleetControlRequest
+	captured      chan *pb.FleetControlRequest
+	capturedToken chan string
 }
 
-func (s *controlStub) FleetControl(_ context.Context, req *pb.FleetControlRequest) (*pb.FleetControlResponse, error) {
+func (s *controlStub) FleetControl(ctx context.Context, req *pb.FleetControlRequest) (*pb.FleetControlResponse, error) {
 	s.captured <- req
+	tok := ""
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if vals := md.Get("marshal-token"); len(vals) > 0 {
+			tok = vals[0]
+		}
+	}
+	s.capturedToken <- tok
 	return &pb.FleetControlResponse{Result: &pb.ControlResult{Ok: true}}, nil
 }

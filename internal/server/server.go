@@ -330,13 +330,9 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath 
 		return err
 	}
 	log.Printf("fleet: server cert fingerprint %s", fp)
-	auth, secrets, err := loadOrInitAuth(dataDir)
+	auth, _, err := loadOrInitAuth(dataDir)
 	if err != nil {
 		return fmt.Errorf("init auth: %w", err)
-	}
-	if secrets != nil {
-		log.Printf("fleet: enroll token %s", secrets.EnrollToken)
-		log.Printf("fleet: admin token  %s", secrets.AdminToken)
 	}
 	ss := newStores(dataDir)
 	ls := newLogStores(dataDir)
