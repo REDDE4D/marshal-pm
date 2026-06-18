@@ -100,3 +100,20 @@ func (s *logStores) Since(agent, selector string, afterRowID int64, limit int, f
 	}
 	return st.Since(matched, afterRowID, limit, filter, text)
 }
+
+// ErrorCounts returns per-label recent stderr counts (ts >= sinceMs) for one
+// agent's store. Unknown agent yields an empty map.
+func (s *logStores) ErrorCounts(agent string, sinceMs int64) (map[string]int64, error) {
+	if !s.has(agent) {
+		return map[string]int64{}, nil
+	}
+	st, err := s.get(agent)
+	if err != nil {
+		return nil, err
+	}
+	labels, err := st.Labels()
+	if err != nil {
+		return nil, err
+	}
+	return st.ErrorCounts(labels, sinceMs)
+}

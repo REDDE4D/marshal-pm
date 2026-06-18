@@ -2,8 +2,8 @@
 
 **Date:** 2026-06-18
 **Status:** approved (pending implementation)
-**Scope:** `web/src` (most of the work), `internal/dashboard` (small: a `start` control case +
-a recent-error-count endpoint), `internal/server` + `internal/logstore` (a count query). No
+**Scope:** `web/src` (most of the work), `internal/dashboard` (small: a recent-error-count
+endpoint), `internal/server` + `internal/logstore` (a count query). No
 proto, agent, or manager changes.
 
 ## Problem
@@ -138,14 +138,18 @@ in the log view. A text-match variant is a future refinement, not in M19.)
 
 ## Backend additions (small)
 
-1. **`start` control** — `internal/dashboard/control.go` `controlOp` gains
-   `case "start": return &pb.ControlOp{Op: &pb.ControlOp_Start{Start: &pb.Selector{Target:
-   selector}}}`. The proto `ControlOp_Start` and the server's `FleetControl` already handle it
-   (the CLI uses it); only the dashboard mapping is missing.
-2. **Recent-error count** — the `ErrorCounts` query + `LogStats` interface + `/api/logstats`
+1. **Recent-error count** — the `ErrorCounts` query + `LogStats` interface + `/api/logstats`
    endpoint described above.
 
-Everything else is frontend.
+That is the only backend change. Everything else is frontend.
+
+> **Revised during implementation:** an earlier draft of this spec added a `start` control op.
+> That was wrong — the proto's `ControlOp_Start` carries a `StartRequest` (an app-spec list to
+> launch *new* apps), not a by-name selector, so it cannot "start a stopped process by name".
+> `manager.Restart` already revives a stopped/errored managed process (stop-then-recreate), so the
+> **start button issues a `Restart` op** (handled in the frontend `ControlButtons`) — no backend
+> control change. A true "add app via dashboard" (app-spec → `StartRequest`) is a planned future
+> milestone.
 
 ## Frontend structure
 
@@ -163,7 +167,7 @@ Everything else is frontend.
   charts/logs logic, including `getLogs` polling + search from M18).
 - `ControlButtons.tsx` — the start/restart/stop cluster with the confirm step (shared by card
   and detail).
-- `api.ts` — add `getLogStats(agent)` and a `start` action to the control call.
+- `api.ts` — add `getLogStats(agent)` (the start button reuses the existing `restart` control action).
 - `styles.css` — replaced by the tokenized Signal system.
 - `assets/` — vendored JetBrains Mono woff2 + `@font-face`.
 - `Logo.tsx` — the mark + wordmark, reused.

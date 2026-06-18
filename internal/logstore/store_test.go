@@ -219,3 +219,29 @@ func TestSinceCursorSafeAfterPrune(t *testing.T) {
 		t.Fatalf("after prune follow = %+v, want [newer]", got)
 	}
 }
+
+func TestErrorCounts(t *testing.T) {
+	st := open(t)
+	if err := st.Append([]Line{
+		{TsMs: 100, Label: "web#0", Stderr: true, Text: "boom"},
+		{TsMs: 150, Label: "web#0", Stderr: false, Text: "ok"},
+		{TsMs: 200, Label: "web#0", Stderr: true, Text: "boom2"},
+		{TsMs: 50, Label: "web#0", Stderr: true, Text: "old"},
+		{TsMs: 300, Label: "api#0", Stderr: true, Text: "err"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.ErrorCounts([]string{"web#0", "api#0", "ghost#0"}, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["web#0"] != 2 {
+		t.Fatalf("web#0 = %d; want 2 (stderr only, ts>=100)", got["web#0"])
+	}
+	if got["api#0"] != 1 {
+		t.Fatalf("api#0 = %d; want 1", got["api#0"])
+	}
+	if _, present := got["ghost#0"]; present {
+		t.Fatalf("ghost#0 should be absent, got %d", got["ghost#0"])
+	}
+}

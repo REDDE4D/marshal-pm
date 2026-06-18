@@ -244,6 +244,38 @@ func (s *Store) Labels() ([]string, error) {
 	return out, rows.Err()
 }
 
+// ErrorCounts returns, per label, the number of stderr lines with ts >= sinceMs.
+// Labels with no matching rows are omitted from the map.
+func (s *Store) ErrorCounts(labels []string, sinceMs int64) (map[string]int64, error) {
+	out := map[string]int64{}
+	if len(labels) == 0 {
+		return out, nil
+	}
+	ph := make([]string, len(labels))
+	args := make([]any, 0, len(labels)+1)
+	for i, l := range labels {
+		ph[i] = "?"
+		args = append(args, l)
+	}
+	args = append(args, sinceMs)
+	q := `SELECT label, count(*) FROM log_line WHERE label IN (` + strings.Join(ph, ",") +
+		`) AND stderr = 1 AND ts >= ? GROUP BY label`
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var label string
+		var n int64
+		if err := rows.Scan(&label, &n); err != nil {
+			return nil, err
+		}
+		out[label] = n
+	}
+	return out, rows.Err()
+}
+
 // Prune deletes lines with ts < beforeMs, returning the count removed.
 func (s *Store) Prune(beforeMs int64) (int64, error) {
 	res, err := s.db.Exec(`DELETE FROM log_line WHERE ts < ?`, beforeMs)

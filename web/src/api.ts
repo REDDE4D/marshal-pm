@@ -105,6 +105,13 @@ export async function getLogs(
   return (await r.json()) as LogsResponse;
 }
 
+export async function getLogStats(agent: string): Promise<Record<string, number>> {
+  const r = await fetch(`/api/logstats?agent=${encodeURIComponent(agent)}`);
+  if (r.status === 401) throw new Error("unauthorized");
+  const j = (await r.json()) as { counts: Record<string, number> };
+  return j.counts ?? {};
+}
+
 export type ControlResult = { ok: boolean; error?: string };
 
 // control posts a Restart/Stop and surfaces server errors as values — it never
