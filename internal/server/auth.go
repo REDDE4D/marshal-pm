@@ -119,7 +119,13 @@ func (a *AuthStore) save() error {
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, a.path)
+	if err := os.Rename(tmp, a.path); err != nil {
+		return err
+	}
+	if fi, statErr := os.Stat(a.path); statErr == nil {
+		a.mtime = fi.ModTime()
+	}
+	return nil
 }
 
 // Reload re-reads auth.json if its modification time changed since the last

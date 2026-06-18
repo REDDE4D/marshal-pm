@@ -82,10 +82,19 @@ func (l *loginLimiter) reset(key string) {
 	l.mu.Unlock()
 }
 
-// pruneLocked drops entries that are unlocked and idle past the cap. Caller holds l.mu.
+// pruneLocked drops idle entries. Caller holds l.mu.
+//   - never-locked entries (fails below threshold): evicted once idle past the cap window.
+//   - previously-locked entries: evicted only once the lock has expired AND has been
+//     expired longer than the cap window, so an entry mid-backoff is never reset early.
 func (l *loginLimiter) pruneLocked(now time.Time) {
 	for k, e := range l.m {
-		if !e.lockUntil.IsZero() && now.After(e.lockUntil) && now.Sub(e.lockUntil) > lockoutCap {
+		if e.lockUntil.IsZero() {
+			if now.Sub(e.lastSeen) > lockoutCap {
+				delete(l.m, k)
+			}
+			continue
+		}
+		if now.After(e.lockUntil) && now.Sub(e.lockUntil) > lockoutCap {
 			delete(l.m, k)
 		}
 	}

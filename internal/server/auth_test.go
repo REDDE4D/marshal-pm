@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func TestRotateInvalidatesOldToken(t *testing.T) {
@@ -267,6 +266,3 @@ func TestReloadCorruptKeepsOldData(t *testing.T) {
 		t.Fatal("corrupt reload dropped the good in-memory data")
 	}
 }
-
-// Silence "imported and not used" for time until it is used in a future test.
-var _ = time.Second

@@ -68,6 +68,26 @@ func TestLimiterBackoffDoublesAndCaps(t *testing.T) {
 	}
 }
 
+func TestLimiterPrunesIdleNeverLockedEntries(t *testing.T) {
+	now := time.Unix(1000, 0)
+	l := newLoginLimiter(func() time.Time { return now })
+
+	// A few sub-threshold failures for a key that then goes idle.
+	l.fail("ghost|1.1.1.1")
+	l.fail("ghost|1.1.1.1")
+
+	// Long after the cap window, any subsequent fail() triggers a prune sweep.
+	now = now.Add(lockoutCap + time.Minute)
+	l.fail("other|2.2.2.2")
+
+	l.mu.Lock()
+	_, present := l.m["ghost|1.1.1.1"]
+	l.mu.Unlock()
+	if present {
+		t.Fatal("idle never-locked entry was not pruned")
+	}
+}
+
 func TestLimiterKeysIndependent(t *testing.T) {
 	now := time.Unix(1000, 0)
 	l := newLoginLimiter(func() time.Time { return now })

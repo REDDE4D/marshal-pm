@@ -152,13 +152,14 @@ func TestSessionDeletePersists(t *testing.T) {
 
 func TestSessionEmptyPathNoFile(t *testing.T) {
 	dir := t.TempDir()
+	path := dir + "/sessions.json"
+	// Store is constructed with "" (not path) — any I/O to path is a bug.
 	s := newSessionStore(time.Hour, nil, "")
 	if _, err := s.create("admin"); err != nil {
 		t.Fatal(err)
 	}
-	entries, _ := os.ReadDir(dir)
-	if len(entries) != 0 {
-		t.Fatalf("in-memory store wrote files: %v", entries)
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("in-memory store wrote a file at %s", path)
 	}
 }
 
