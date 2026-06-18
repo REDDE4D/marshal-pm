@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { login } from "./api";
+import { Logo } from "./Logo";
 
 export function Login({ onLogin }: { onLogin: () => void }) {
   const [user, setUser] = useState("admin");
@@ -9,27 +10,18 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (await login(user, pass)) {
-      onLogin();
-    } else {
-      setError("Invalid username or password.");
-    }
+    if (await login(user, pass)) onLogin();
+    else setError("invalid username or password");
   }
 
   return (
     <div className="login">
       <form onSubmit={submit}>
-        <h1>Marshal</h1>
-        <label>
-          Username
-          <input value={user} onChange={(e) => setUser(e.target.value)} autoFocus />
-        </label>
-        <label>
-          Password
-          <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} />
-        </label>
+        <Logo />
+        <label>username<input value={user} onChange={(e) => setUser(e.target.value)} autoFocus /></label>
+        <label>password<input type="password" value={pass} onChange={(e) => setPass(e.target.value)} /></label>
         {error && <p className="error">{error}</p>}
-        <button type="submit">Sign in</button>
+        <button type="submit">sign in</button>
       </form>
     </div>
   );
