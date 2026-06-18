@@ -26,7 +26,7 @@ function mib(b: number): string { return b <= 0 ? "—" : `${(b / 1048576).toFix
 
 export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: string; onLogout: () => void }) {
   const [p, setP] = useState<{ state: string; pid: number; uptime_ms: number; restarts: number; cpu: number; mem: number } | null>(null);
-  const [connected, setConnected] = useState(true);
+  const [connected, setConnected] = useState(false);
   const [errCount, setErrCount] = useState(0);
   const [windowMs, setWindowMs] = useState(WINDOWS[0].ms);
   const [detail, setDetail] = useState<Bucket[]>([]);
@@ -47,13 +47,15 @@ export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: 
         setConnected(a?.connected ?? false);
         const pr = a?.procs.find((x) => x.name === proc) ?? null;
         setP(pr);
+      } catch { if (!stop) onLogout(); return; }
+      try {
         const counts = await getLogStats(agent);
         if (!stop) {
           let n = 0;
           for (const [label, c] of Object.entries(counts)) if (label === proc || label.startsWith(proc + "#")) n += c;
           setErrCount(n);
         }
-      } catch { if (!stop) onLogout(); }
+      } catch { /* best-effort */ }
     }
     tick();
     const id = setInterval(tick, 2000);
