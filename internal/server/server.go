@@ -370,7 +370,7 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 			log.Printf("dashboard: no user set — run 'marshal server passwd'")
 		}
 		go func() {
-			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, auth, cert); err != nil {
+			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert); err != nil {
 				log.Printf("dashboard: %v", err)
 			}
 		}()

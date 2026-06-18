@@ -21,7 +21,7 @@ func (f *fakeLogs) Since(agent, selector string, afterRowID int64, limit int, fi
 }
 
 func TestLogsRequiresSession(t *testing.T) {
-	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
 	defer srv.Close()
 	resp, _ := srv.Client().Get(srv.URL + "/api/logs?agent=dev-1&selector=web")
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -31,7 +31,7 @@ func TestLogsRequiresSession(t *testing.T) {
 
 func TestLogsBackfill(t *testing.T) {
 	fl := &fakeLogs{}
-	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, fl, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, fl, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
 	defer srv.Close()
 	c := srv.Client()
 	cookie := loginCookie(t, c, srv.URL)
@@ -62,7 +62,7 @@ func TestLogsBackfill(t *testing.T) {
 
 func TestLogsFollowForwardsAfter(t *testing.T) {
 	fl := &fakeLogs{}
-	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, fl, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, fl, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
 	defer srv.Close()
 	c := srv.Client()
 	cookie := loginCookie(t, c, srv.URL)
@@ -79,7 +79,7 @@ func TestLogsFollowForwardsAfter(t *testing.T) {
 }
 
 func TestLogsMissingParams(t *testing.T) {
-	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
 	defer srv.Close()
 	c := srv.Client()
 	cookie := loginCookie(t, c, srv.URL)
