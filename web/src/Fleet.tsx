@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Agent, getFleet, logout } from "./api";
+import { Agent, AgentMetrics, getFleet, getMetrics, logout } from "./api";
+import { Sparkline } from "./Sparkline";
 
 function uptime(ms: number): string {
   if (ms <= 0) return "—";
@@ -11,9 +12,15 @@ function uptime(ms: number): string {
   return `${s}s`;
 }
 
+function mib(bytes: number): string {
+  if (bytes <= 0) return "—";
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function Fleet({ onLogout }: { onLogout: () => void }) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [err, setErr] = useState("");
+  const [metrics, setMetrics] = useState<Record<string, Record<string, { cpu: number[]; mem: number[] }>>>({});
 
   useEffect(() => {
     let stop = false;
@@ -35,6 +42,35 @@ export function Fleet({ onLogout }: { onLogout: () => void }) {
       clearInterval(id);
     };
   }, [onLogout]);
+
+  useEffect(() => {
+    let stop = false;
+    async function tick() {
+      try {
+        const data: AgentMetrics[] = await getMetrics(5 * 60 * 1000);
+        if (stop) return;
+        const next: Record<string, Record<string, { cpu: number[]; mem: number[] }>> = {};
+        for (const a of data) {
+          next[a.agent] = {};
+          for (const p of a.procs) {
+            next[a.agent][p.name] = {
+              cpu: p.buckets.map((b) => b.cpu_avg),
+              mem: p.buckets.map((b) => b.mem_avg),
+            };
+          }
+        }
+        setMetrics(next);
+      } catch {
+        // metrics are best-effort; the fleet poll owns auth/logout.
+      }
+    }
+    tick();
+    const id = setInterval(tick, 10000);
+    return () => {
+      stop = true;
+      clearInterval(id);
+    };
+  }, []);
 
   async function doLogout() {
     await logout();
@@ -65,6 +101,8 @@ export function Fleet({ onLogout }: { onLogout: () => void }) {
                 <th>PID</th>
                 <th>Uptime</th>
                 <th>Restarts</th>
+                <th>CPU</th>
+                <th>Mem</th>
               </tr>
             </thead>
             <tbody>
@@ -75,11 +113,19 @@ export function Fleet({ onLogout }: { onLogout: () => void }) {
                   <td>{p.pid || "—"}</td>
                   <td>{uptime(p.uptime_ms)}</td>
                   <td>{p.restarts}</td>
+                  <td>
+                    {(p.cpu * 100).toFixed(1)}%
+                    <Sparkline points={metrics[a.name]?.[p.name]?.cpu ?? []} color="#4ade80" />
+                  </td>
+                  <td>
+                    {mib(p.mem)}
+                    <Sparkline points={metrics[a.name]?.[p.name]?.mem ?? []} color="#60a5fa" />
+                  </td>
                 </tr>
               ))}
               {a.procs.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="empty">
+                  <td colSpan={7} className="empty">
                     No processes.
                   </td>
                 </tr>
