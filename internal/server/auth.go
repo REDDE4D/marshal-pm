@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -127,8 +128,13 @@ func (a *authStore) removeAgent(name string) bool {
 	if _, ok := a.data.Agents[name]; !ok {
 		return false
 	}
+	entry := a.data.Agents[name]
 	delete(a.data.Agents, name)
-	_ = a.save()
+	if err := a.save(); err != nil {
+		a.data.Agents[name] = entry // restore: revocation must persist or fail visibly
+		log.Printf("auth: failed to persist removal of agent %q: %v", name, err)
+		return false
+	}
 	return true
 }
 
@@ -157,14 +163,22 @@ func (a *authStore) rotate(which string) (string, error) {
 	defer a.mu.Unlock()
 	switch which {
 	case "enroll":
+		old := a.data.EnrollTokenHash
 		a.data.EnrollTokenHash = fleetauth.HashToken(tok)
+		if err := a.save(); err != nil {
+			a.data.EnrollTokenHash = old
+			return "", err
+		}
+		return tok, nil
 	case "admin":
+		old := a.data.AdminTokenHash
 		a.data.AdminTokenHash = fleetauth.HashToken(tok)
+		if err := a.save(); err != nil {
+			a.data.AdminTokenHash = old
+			return "", err
+		}
+		return tok, nil
 	default:
 		return "", fmt.Errorf("unknown token %q (want enroll|admin)", which)
 	}
-	if err := a.save(); err != nil {
-		return "", err
-	}
-	return tok, nil
 }
