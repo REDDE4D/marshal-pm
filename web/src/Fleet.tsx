@@ -97,6 +97,11 @@ export function Fleet({ onLogout }: { onLogout: () => void }) {
   const [logLimit, setLogLimit] = useState(500);
   const [logLines, setLogLines] = useState<LogLine[]>([]);
   const [logSearch, setLogSearch] = useState("");
+  const [logSearchDebounced, setLogSearchDebounced] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setLogSearchDebounced(logSearch), 250);
+    return () => clearTimeout(id);
+  }, [logSearch]);
 
   useEffect(() => {
     let stop = false;
@@ -185,6 +190,7 @@ export function Fleet({ onLogout }: { onLogout: () => void }) {
           stream: logStream,
           limit: logLimit,
           after: first ? 0 : cursor,
+          q: logSearchDebounced,
         });
         if (stop) return;
         cursor = res.cursor || cursor;
@@ -205,7 +211,7 @@ export function Fleet({ onLogout }: { onLogout: () => void }) {
       stop = true;
       clearInterval(id);
     };
-  }, [expanded, tab, logStream, logLimit]);
+  }, [expanded, tab, logStream, logLimit, logSearchDebounced]);
 
   async function doLogout() {
     await logout();
@@ -349,7 +355,7 @@ export function Fleet({ onLogout }: { onLogout: () => void }) {
                                   onChange={(e) => setLogSearch(e.target.value)}
                                 />
                               </div>
-                              <LogView lines={logLines} search={logSearch} />
+                              <LogView lines={logLines} />
                             </div>
                           )}
                         </td>

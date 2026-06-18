@@ -90,7 +90,7 @@ export type LogsResponse = { cursor: number; lines: LogLine[] };
 export async function getLogs(
   agent: string,
   selector: string,
-  opts: { stream: string; limit: number; after: number },
+  opts: { stream: string; limit: number; after: number; q: string },
 ): Promise<LogsResponse> {
   const q = new URLSearchParams({
     agent,
@@ -98,6 +98,7 @@ export async function getLogs(
     stream: opts.stream,
     limit: String(opts.limit),
     after: String(opts.after),
+    q: opts.q,
   });
   const r = await fetch(`/api/logs?${q.toString()}`);
   if (r.status === 401) throw new Error("unauthorized");
