@@ -15,6 +15,12 @@ import (
 type fakeAuth struct{ user, pass string }
 
 func (f fakeAuth) VerifyDashboardUser(u, p string) bool { return u == f.user && p == f.pass }
+func (f fakeAuth) DashboardCredentialStamp(u string) (string, bool) {
+	if u != f.user {
+		return "", false
+	}
+	return "stamp-" + f.pass, true
+}
 
 type countingAuth struct {
 	user, pass string
@@ -24,6 +30,13 @@ type countingAuth struct {
 func (c *countingAuth) VerifyDashboardUser(u, p string) bool {
 	c.calls++
 	return u == c.user && p == c.pass
+}
+
+func (c *countingAuth) DashboardCredentialStamp(u string) (string, bool) {
+	if u != c.user {
+		return "", false
+	}
+	return "stamp", true
 }
 
 func sessionCookieFrom(resp *http.Response) *http.Cookie {
