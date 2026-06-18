@@ -28,7 +28,8 @@ func TestServeRejectsNilAuth(t *testing.T) {
 	defer lis.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	serveErr := Serve(ctx, lis, NewRegistry(), nil, nil, cert, nil)
+	srv := NewServer(NewRegistry(), nil, nil, nil)
+	serveErr := Serve(ctx, lis, srv, cert)
 	if serveErr == nil {
 		t.Fatal("Serve with nil auth: expected non-nil error, got nil")
 	}
@@ -53,7 +54,8 @@ func TestServeOverTLS(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go Serve(ctx, lis, NewRegistry(), nil, nil, cert, auth)
+	srv := NewServer(NewRegistry(), nil, nil, auth)
+	go Serve(ctx, lis, srv, cert)
 
 	cfg, err := fleetauth.ClientTLS(fp, "")
 	if err != nil {

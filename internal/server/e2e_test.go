@@ -220,7 +220,8 @@ func TestE2EFleetControlRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	reg := NewRegistry()
-	go func() { _ = Serve(ctx, lis, reg, nil, nil, cert, auth) }()
+	srv := NewServer(reg, nil, nil, auth)
+	go func() { _ = Serve(ctx, lis, srv, cert) }()
 
 	// Real agent client whose command handler echoes the selector back.
 	c := fleet.New(lis.Addr().String(), "web-1", "test",
@@ -392,7 +393,8 @@ func TestOperatorRPCRequiresAdminToken(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() { _ = Serve(ctx, lis, NewRegistry(), nil, nil, cert, auth) }()
+	srv := NewServer(NewRegistry(), nil, nil, auth)
+	go func() { _ = Serve(ctx, lis, srv, cert) }()
 
 	tlsCfg, err := fleetauth.ClientTLS(fp, "")
 	if err != nil {

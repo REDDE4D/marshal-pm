@@ -61,7 +61,8 @@ func newTLSTestServer(t *testing.T, reg *Registry) (addr, fingerprint string, se
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	go func() { _ = Serve(ctx, lis, reg, nil, nil, cert, auth) }()
+	srv := NewServer(reg, nil, nil, auth)
+	go func() { _ = Serve(ctx, lis, srv, cert) }()
 	return lis.Addr().String(), fp, sec
 }
 
