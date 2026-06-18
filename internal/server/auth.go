@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
@@ -40,9 +41,10 @@ type authData struct {
 
 // AuthStore holds the persisted auth tokens for a Marshal server instance.
 type AuthStore struct {
-	path string
-	mu   sync.Mutex
-	data authData
+	path  string
+	mu    sync.Mutex
+	data  authData
+	mtime time.Time
 }
 
 // InitSecrets carries the plaintext tokens generated on first init.
@@ -79,6 +81,9 @@ func LoadOrInitAuth(dir string) (*AuthStore, *InitSecrets, error) {
 		if a.data.Users == nil {
 			a.data.Users = map[string]dashboardUser{}
 		}
+		if fi, statErr := os.Stat(path); statErr == nil {
+			a.mtime = fi.ModTime()
+		}
 		return a, nil, nil
 	}
 	if !os.IsNotExist(err) {
@@ -97,6 +102,9 @@ func LoadOrInitAuth(dir string) (*AuthStore, *InitSecrets, error) {
 	if err := a.save(); err != nil {
 		return nil, nil, err
 	}
+	if fi, statErr := os.Stat(path); statErr == nil {
+		a.mtime = fi.ModTime()
+	}
 	return a, &InitSecrets{EnrollToken: enroll, AdminToken: admin}, nil
 }
 
@@ -112,6 +120,56 @@ func (a *AuthStore) save() error {
 		return err
 	}
 	return os.Rename(tmp, a.path)
+}
+
+// Reload re-reads auth.json if its modification time changed since the last
+// successful load, swapping in the new data under the lock. A read or parse
+// error leaves the current in-memory data intact and is returned to the caller.
+// Atomic-rename writes guarantee we never observe a half-written file.
+func (a *AuthStore) Reload() error {
+	fi, err := os.Stat(a.path)
+	if err != nil {
+		return err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if fi.ModTime().Equal(a.mtime) {
+		return nil // unchanged — cheap no-op
+	}
+	b, err := os.ReadFile(a.path)
+	if err != nil {
+		return err
+	}
+	var fresh authData
+	if err := json.Unmarshal(b, &fresh); err != nil {
+		return fmt.Errorf("parse auth.json: %w", err)
+	}
+	if fresh.Agents == nil {
+		fresh.Agents = map[string]authAgentEntry{}
+	}
+	if fresh.Users == nil {
+		fresh.Users = map[string]dashboardUser{}
+	}
+	a.data = fresh
+	a.mtime = fi.ModTime()
+	return nil
+}
+
+// ReloadLoop polls Reload every interval until ctx is canceled, so a running
+// server picks up `server passwd` / `token --rotate` changes without a restart.
+func (a *AuthStore) ReloadLoop(ctx context.Context, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if err := a.Reload(); err != nil {
+				log.Printf("auth: reload failed: %v", err)
+			}
+		}
+	}
 }
 
 func (a *AuthStore) verifyAdmin(token string) bool {

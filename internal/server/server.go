@@ -366,6 +366,7 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 	}()
 	reg := NewRegistry(opts...)
 	srv := NewServer(reg, ss, ls, auth)
+	go auth.ReloadLoop(ctx, 3*time.Second)
 	if httpAddr != "" {
 		if !auth.HasDashboardUser() {
 			log.Printf("dashboard: no user set — run 'marshal server passwd'")
