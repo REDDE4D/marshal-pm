@@ -1,7 +1,11 @@
 # Build artifacts
 *.exe
 bin/
-dist/
+/dist/
+web/node_modules/
+web/*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
 /marshal
 # Locally-built protoc plugins (pinned via the go.mod tool directive instead)
 /protoc-gen-go
