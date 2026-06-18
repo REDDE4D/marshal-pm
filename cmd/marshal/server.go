@@ -48,6 +48,7 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringVar(&dataDir, "data-dir", "", "metric storage directory (default $XDG_DATA_HOME/marshal-server)")
 	cmd.Flags().StringVar(&tlsCert, "tls-cert", "", "path to TLS cert PEM (default <data-dir>/cert.pem, generated if absent)")
 	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "path to TLS key PEM (default <data-dir>/key.pem)")
+	cmd.AddCommand(serverFingerprintCmd(), serverTokenCmd(), serverAgentCmd())
 	return cmd
 }
 

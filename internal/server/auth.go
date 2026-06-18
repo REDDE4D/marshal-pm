@@ -48,7 +48,11 @@ func loadOrInitAuth(dir string) (*AuthStore, *InitSecrets, error) {
 // LoadOrInitAuth loads or creates the auth store for dir.
 // On first call it creates auth.json and returns the plaintext tokens in
 // secrets; on subsequent calls secrets is nil (tokens are only available once).
+// It creates dir (0700) if absent.
 func LoadOrInitAuth(dir string) (*AuthStore, *InitSecrets, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, nil, fmt.Errorf("create data dir: %w", err)
+	}
 	path := filepath.Join(dir, "auth.json")
 	a := &AuthStore{path: path, data: authData{Agents: map[string]authAgentEntry{}}}
 	b, err := os.ReadFile(path)
@@ -194,6 +198,75 @@ func (a *AuthStore) rotate(which string) (string, error) {
 	default:
 		return "", fmt.Errorf("unknown token %q (want enroll|admin)", which)
 	}
+}
+
+// EnrollAgent is the exported variant of enrollAgent, allowing external
+// packages (e.g. tests and CLI helpers) to enroll a new agent by name.
+func (a *AuthStore) EnrollAgent(name string) (string, error) {
+	return a.enrollAgent(name)
+}
+
+// ensureDataDir creates dataDir (mode 0700) if it does not exist.
+func ensureDataDir(dataDir string) error {
+	return os.MkdirAll(dataDir, 0o700)
+}
+
+// FingerprintForDir returns the TLS certificate fingerprint for the server
+// at dataDir, generating the cert pair if absent.
+func FingerprintForDir(dataDir string) (string, error) {
+	if err := ensureDataDir(dataDir); err != nil {
+		return "", fmt.Errorf("create data dir: %w", err)
+	}
+	_, fp, err := LoadOrCreateCert(dataDir, "", "")
+	return fp, err
+}
+
+// AgentInfo describes a single enrolled agent.
+type AgentInfo struct {
+	Name       string
+	EnrolledAt int64
+}
+
+// RotateToken rotates the enroll or admin token for the server at dataDir and
+// returns the new plaintext token. which must be "enroll" or "admin".
+func RotateToken(dataDir, which string) (string, error) {
+	if err := ensureDataDir(dataDir); err != nil {
+		return "", fmt.Errorf("create data dir: %w", err)
+	}
+	a, _, err := loadOrInitAuth(dataDir)
+	if err != nil {
+		return "", err
+	}
+	return a.rotate(which)
+}
+
+// ListAgents returns the enrolled agents for the server at dataDir.
+func ListAgents(dataDir string) ([]AgentInfo, error) {
+	if err := ensureDataDir(dataDir); err != nil {
+		return nil, fmt.Errorf("create data dir: %w", err)
+	}
+	a, _, err := loadOrInitAuth(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]AgentInfo, 0)
+	for _, la := range a.listAgents() {
+		out = append(out, AgentInfo{Name: la.Name, EnrolledAt: la.EnrolledAt})
+	}
+	return out, nil
+}
+
+// RemoveAgent revokes the named agent for the server at dataDir.
+// Returns false (no error) when the agent does not exist.
+func RemoveAgent(dataDir, name string) (bool, error) {
+	if err := ensureDataDir(dataDir); err != nil {
+		return false, fmt.Errorf("create data dir: %w", err)
+	}
+	a, _, err := loadOrInitAuth(dataDir)
+	if err != nil {
+		return false, err
+	}
+	return a.removeAgent(name), nil
 }
 
 // InitAuthPrint calls loadOrInitAuth for dir and, if fresh secrets were
