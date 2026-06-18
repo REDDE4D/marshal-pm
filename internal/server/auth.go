@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -441,6 +442,22 @@ func (a *AuthStore) VerifyDashboardUser(user, password string) bool {
 		return false
 	}
 	return subtle.ConstantTimeCompare(dk, want) == 1
+}
+
+// DashboardCredentialStamp returns an opaque fingerprint of user's current
+// dashboard credential, or ok=false if user has no credential. The fingerprint
+// changes whenever the password is (re)set, because SetDashboardUser draws a
+// fresh random salt each time. It reveals nothing useful: a hash over an
+// already-hashed secret plus its salt and iteration count.
+func (a *AuthStore) DashboardCredentialStamp(user string) (string, bool) {
+	a.mu.Lock()
+	u, ok := a.data.Users[user]
+	a.mu.Unlock()
+	if !ok {
+		return "", false
+	}
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s.%s.%d", u.PBKDF2, u.Salt, u.Iter)))
+	return hex.EncodeToString(sum[:]), true
 }
 
 // HasDashboardUser reports whether any dashboard user is configured.

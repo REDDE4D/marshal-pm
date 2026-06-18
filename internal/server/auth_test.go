@@ -274,3 +274,31 @@ func TestReloadCorruptKeepsOldData(t *testing.T) {
 		t.Fatal("corrupt reload dropped the good in-memory data")
 	}
 }
+
+func TestDashboardCredentialStamp(t *testing.T) {
+	dir := t.TempDir()
+	a, _, err := loadOrInitAuth(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := a.DashboardCredentialStamp("admin"); ok {
+		t.Fatal("stamp ok=true for unknown user")
+	}
+	if err := a.SetDashboardUser("admin", "pw"); err != nil {
+		t.Fatal(err)
+	}
+	s1, ok := a.DashboardCredentialStamp("admin")
+	if !ok || s1 == "" {
+		t.Fatalf("no stamp after SetDashboardUser (ok=%v, s=%q)", ok, s1)
+	}
+	if s1b, _ := a.DashboardCredentialStamp("admin"); s1b != s1 {
+		t.Fatalf("stamp not stable: %q vs %q", s1, s1b)
+	}
+	// A new password (fresh random salt) must change the stamp.
+	if err := a.SetDashboardUser("admin", "pw2"); err != nil {
+		t.Fatal(err)
+	}
+	if s2, _ := a.DashboardCredentialStamp("admin"); s2 == s1 {
+		t.Fatal("stamp unchanged after password change")
+	}
+}
