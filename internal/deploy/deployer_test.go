@@ -5,25 +5,32 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
 	"marshal/internal/config"
 )
 
+// fakeCall records one invocation of fakeRunner.Run.
+type fakeCall struct {
+	cmd []string
+	env []string
+}
+
 // fakeRunner records the commands it is asked to run and returns a scripted
 // error for the Nth call.
 type fakeRunner struct {
 	mu    sync.Mutex
-	calls [][]string
+	calls []fakeCall
 	errAt map[int]error // call index (0-based) -> error to return
 }
 
-func (f *fakeRunner) Run(_ context.Context, dir string, stdout, stderr io.Writer, name string, args ...string) error {
+func (f *fakeRunner) Run(_ context.Context, dir string, env []string, stdout, stderr io.Writer, name string, args ...string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	idx := len(f.calls)
-	f.calls = append(f.calls, append([]string{name}, args...))
+	f.calls = append(f.calls, fakeCall{cmd: append([]string{name}, args...), env: env})
 	if f.errAt != nil {
 		if err, ok := f.errAt[idx]; ok {
 			return err
@@ -35,7 +42,25 @@ func (f *fakeRunner) Run(_ context.Context, dir string, stdout, stderr io.Writer
 func (f *fakeRunner) cmds() [][]string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.calls
+	out := make([][]string, len(f.calls))
+	for i, c := range f.calls {
+		out[i] = c.cmd
+	}
+	return out
+}
+
+// find returns the first recorded call whose cmd slice contains arg.
+func (f *fakeRunner) find(arg string) *fakeCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.calls {
+		for _, a := range f.calls[i].cmd {
+			if a == arg {
+				return &f.calls[i]
+			}
+		}
+	}
+	return nil
 }
 
 // fakeHost records launches/restarts and answers existence/source queries.
@@ -90,7 +115,7 @@ func TestStartClonesBuildsAndLaunches(t *testing.T) {
 	d := New(host, runner, root)
 
 	app := gitApp("web")
-	if err := d.Start(app); err != nil {
+	if err := d.Start(app, Credential{}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	d.wait()
@@ -129,7 +154,7 @@ func TestStartBuildFailureLeavesFailedState(t *testing.T) {
 	runner := &fakeRunner{errAt: map[int]error{2: errBuild()}} // build (3rd call) fails
 	d := New(host, runner, root)
 
-	if err := d.Start(gitApp("web")); err != nil {
+	if err := d.Start(gitApp("web"), Credential{}); err != nil {
 		t.Fatalf("Start should accept: %v", err)
 	}
 	d.wait()
@@ -150,11 +175,11 @@ func TestStartRejectsEmptyRepoAndDuplicate(t *testing.T) {
 
 	bad := gitApp("web")
 	bad.Source.Repo = ""
-	if err := d.Start(bad); err == nil {
+	if err := d.Start(bad, Credential{}); err == nil {
 		t.Fatal("expected error for empty repo")
 	}
 	host.existing["web"] = true
-	if err := d.Start(gitApp("web")); err == nil {
+	if err := d.Start(gitApp("web"), Credential{}); err == nil {
 		t.Fatal("expected error for duplicate name")
 	}
 }
@@ -173,7 +198,7 @@ func TestRedeployFetchesRebuildsRestarts(t *testing.T) {
 	runner := &fakeRunner{}
 	d := New(host, runner, root)
 
-	if err := d.Redeploy("web"); err != nil {
+	if err := d.Redeploy("web", Credential{}); err != nil {
 		t.Fatalf("Redeploy: %v", err)
 	}
 	d.wait()
@@ -199,7 +224,7 @@ func TestRedeployBuildFailureDoesNotRestart(t *testing.T) {
 	runner := &fakeRunner{errAt: map[int]error{2: errBuild()}}
 	d := New(host, runner, root)
 
-	if err := d.Redeploy("web"); err != nil {
+	if err := d.Redeploy("web", Credential{}); err != nil {
 		t.Fatalf("Redeploy: %v", err)
 	}
 	d.wait()
@@ -215,8 +240,136 @@ func TestRedeployBuildFailureDoesNotRestart(t *testing.T) {
 
 func TestRedeployRejectsNonGitApp(t *testing.T) {
 	d := New(newFakeHost(), &fakeRunner{}, t.TempDir())
-	if err := d.Redeploy("nope"); err == nil {
+	if err := d.Redeploy("nope", Credential{}); err == nil {
 		t.Fatal("expected error when app has no git source")
+	}
+}
+
+// envHas reports whether env contains want. "GIT_ASKPASS" matches any
+// "GIT_ASKPASS=..." entry; "K=V" matches exactly.
+func envHas(env []string, want string) bool {
+	for _, e := range env {
+		if e == want || strings.HasPrefix(e, want+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+func argvHas(args []string, want string) bool {
+	for _, a := range args {
+		if a == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestCloneUsesAskpassAndHidesToken(t *testing.T) {
+	fr := &fakeRunner{}
+	host := newFakeHost()
+	d := New(host, fr, t.TempDir())
+
+	app := config.App{Name: "priv", Source: &config.GitSource{Repo: "https://github.com/me/priv.git"}}
+	if err := d.Start(app, Credential{Username: "octocat", Token: "ghp_SECRET"}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	d.wait()
+
+	clone := fr.find("clone")
+	if clone == nil {
+		t.Fatal("no clone call recorded")
+	}
+	// Token must never appear in argv.
+	for _, a := range clone.cmd {
+		if strings.Contains(a, "ghp_SECRET") {
+			t.Fatalf("token leaked into argv: %v", clone.cmd)
+		}
+	}
+	// URL carries the username only.
+	if !argvHas(clone.cmd, "https://octocat@github.com/me/priv.git") {
+		t.Fatalf("username not embedded in clone URL: %v", clone.cmd)
+	}
+	// Credential env is present on the clone, token only in env.
+	if !envHas(clone.env, "GIT_ASKPASS") || !envHas(clone.env, "MARSHAL_GIT_TOKEN=ghp_SECRET") ||
+		!envHas(clone.env, "MARSHAL_GIT_USER=octocat") || !envHas(clone.env, "GIT_TERMINAL_PROMPT=0") {
+		t.Fatalf("credential env missing/incomplete: %v", clone.env)
+	}
+}
+
+func TestNoCredentialNoAskpass(t *testing.T) {
+	fr := &fakeRunner{}
+	d := New(newFakeHost(), fr, t.TempDir())
+	app := config.App{Name: "pub", Source: &config.GitSource{Repo: "https://github.com/me/pub.git"}}
+	if err := d.Start(app, Credential{}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	d.wait()
+	clone := fr.find("clone")
+	if envHas(clone.env, "GIT_ASKPASS") {
+		t.Fatalf("askpass set without a credential")
+	}
+	if !argvHas(clone.cmd, "https://github.com/me/pub.git") {
+		t.Fatalf("URL should be unmodified without a credential: %v", clone.cmd)
+	}
+}
+
+// argvHasSeq reports whether args contains a immediately followed by b.
+func argvHasSeq(args []string, a, b string) bool {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == a && args[i+1] == b {
+			return true
+		}
+	}
+	return false
+}
+
+func TestCloneDisablesCredentialHelperWhenManaged(t *testing.T) {
+	fr := &fakeRunner{}
+	host := newFakeHost()
+	d := New(host, fr, t.TempDir())
+
+	// With a managed credential: clone args must disable credential helpers.
+	app := config.App{Name: "priv2", Source: &config.GitSource{Repo: "https://github.com/me/priv2.git"}}
+	if err := d.Start(app, Credential{Username: "octocat", Token: "ghp_x"}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	d.wait()
+
+	clone := fr.find("clone")
+	if clone == nil {
+		t.Fatal("no clone call recorded")
+	}
+	// Must have -c credential.helper= (consecutive args).
+	if !argvHasSeq(clone.cmd, "-c", "credential.helper=") {
+		t.Fatalf("managed clone did not disable credential helpers: %v", clone.cmd)
+	}
+	// Username-only URL still present.
+	if !argvHas(clone.cmd, "https://octocat@github.com/me/priv2.git") {
+		t.Fatalf("username-in-URL missing from managed clone: %v", clone.cmd)
+	}
+	// Token must not appear in argv.
+	for _, a := range clone.cmd {
+		if strings.Contains(a, "ghp_x") {
+			t.Fatalf("token leaked into argv: %v", clone.cmd)
+		}
+	}
+
+	// Without a managed credential: clone args must NOT disable credential helpers.
+	fr2 := &fakeRunner{}
+	d2 := New(newFakeHost(), fr2, t.TempDir())
+	app2 := config.App{Name: "pub2", Source: &config.GitSource{Repo: "https://github.com/me/pub2.git"}}
+	if err := d2.Start(app2, Credential{}); err != nil {
+		t.Fatalf("Start (no-cred): %v", err)
+	}
+	d2.wait()
+
+	clone2 := fr2.find("clone")
+	if clone2 == nil {
+		t.Fatal("no clone call recorded (no-cred)")
+	}
+	if argvHas(clone2.cmd, "credential.helper=") {
+		t.Fatalf("no-cred clone should not disable credential helpers: %v", clone2.cmd)
 	}
 }
 

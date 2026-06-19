@@ -56,3 +56,16 @@ func TestFleetViewEmpty(t *testing.T) {
 		t.Fatalf("len(v) = %d; want 0", len(v))
 	}
 }
+
+func TestProcViewCredential(t *testing.T) {
+	// Build a fleet lister fake whose ProcInfo carries Credential, then assert
+	// fleetView surfaces it.
+	f := fakeLister{agents: []*pb.AgentState{{
+		AgentName: "dev-1",
+		Procs:     []*pb.ProcInfo{{Name: "priv", Source: "git", Credential: "gh-ci"}},
+	}}}
+	views := fleetView(f)
+	if views[0].Procs[0].Credential != "gh-ci" {
+		t.Fatalf("credential dropped by procView: %+v", views[0].Procs[0])
+	}
+}

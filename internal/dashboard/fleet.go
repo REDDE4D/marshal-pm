@@ -9,15 +9,16 @@ type FleetLister interface {
 }
 
 type procView struct {
-	Name     string  `json:"name"`
-	State    string  `json:"state"`
-	PID      int32   `json:"pid"`
-	UptimeMs int64   `json:"uptime_ms"`
-	Restarts int32   `json:"restarts"`
-	CPU      float64 `json:"cpu"`
-	Mem      int64   `json:"mem"`
-	Source   string  `json:"source"` // "command" | "git" — drives the redeploy button (M21)
-	Detail   string  `json:"detail"` // status summary for in-flight/failed deploys (M21)
+	Name       string  `json:"name"`
+	State      string  `json:"state"`
+	PID        int32   `json:"pid"`
+	UptimeMs   int64   `json:"uptime_ms"`
+	Restarts   int32   `json:"restarts"`
+	CPU        float64 `json:"cpu"`
+	Mem        int64   `json:"mem"`
+	Source     string  `json:"source"`               // "command" | "git" — drives the redeploy button (M21)
+	Detail     string  `json:"detail"`               // status summary for in-flight/failed deploys (M21)
+	Credential string  `json:"credential,omitempty"` // M22 credential name (drives redeploy)
 }
 
 type agentView struct {
@@ -35,15 +36,16 @@ func fleetView(l FleetLister) []agentView {
 		procs := make([]procView, 0, len(a.GetProcs()))
 		for _, p := range a.GetProcs() {
 			procs = append(procs, procView{
-				Name:     p.GetName(),
-				State:    p.GetState(),
-				PID:      p.GetPid(),
-				UptimeMs: p.GetUptimeMs(),
-				Restarts: p.GetRestarts(),
-				CPU:      p.GetCpu(),
-				Mem:      p.GetMem(),
-				Source:   p.GetSource(),
-				Detail:   p.GetDetail(),
+				Name:       p.GetName(),
+				State:      p.GetState(),
+				PID:        p.GetPid(),
+				UptimeMs:   p.GetUptimeMs(),
+				Restarts:   p.GetRestarts(),
+				CPU:        p.GetCpu(),
+				Mem:        p.GetMem(),
+				Source:     p.GetSource(),
+				Detail:     p.GetDetail(),
+				Credential: p.GetCredential(),
 			})
 		}
 		out = append(out, agentView{

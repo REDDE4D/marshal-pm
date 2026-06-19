@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 
+	"marshal/internal/deploy"
 	"marshal/internal/manager"
 	"marshal/internal/pb"
 )
@@ -54,7 +55,9 @@ func (s *Server) handleFleetCommand(cmd *pb.Command) *pb.ControlResult {
 		if cerr != nil {
 			return &pb.ControlResult{Ok: false, Error: cerr.Error()}
 		}
-		if derr := s.deployer.Start(app); derr != nil {
+		c := v.Deploy.GetCredential()
+		cred := deploy.Credential{Username: c.GetUsername(), Token: c.GetToken()}
+		if derr := s.deployer.Start(app, cred); derr != nil {
 			return &pb.ControlResult{Ok: false, Error: derr.Error()}
 		}
 		return &pb.ControlResult{Ok: true}
@@ -63,7 +66,9 @@ func (s *Server) handleFleetCommand(cmd *pb.Command) *pb.ControlResult {
 		if s.deployer == nil {
 			return &pb.ControlResult{Ok: false, Error: "deploy not supported"}
 		}
-		if derr := s.deployer.Redeploy(v.Redeploy.GetTarget()); derr != nil {
+		rc := v.Redeploy.GetCredential()
+		cred := deploy.Credential{Username: rc.GetUsername(), Token: rc.GetToken()}
+		if derr := s.deployer.Redeploy(v.Redeploy.GetTarget(), cred); derr != nil {
 			return &pb.ControlResult{Ok: false, Error: derr.Error()}
 		}
 		return &pb.ControlResult{Ok: true}

@@ -8,6 +8,7 @@ export type Proc = {
   mem: number;
   source?: "command" | "git";
   detail?: string;
+  credential?: string;
 };
 
 export type Agent = {
@@ -167,6 +168,7 @@ export interface GitSource {
   ref?: string;
   build?: string;
   subdir?: string;
+  credential?: string;
 }
 
 // addApp creates a new app on an agent via POST /api/apps. Like control() it
@@ -190,11 +192,15 @@ export async function addApp(agent: string, source: CommandSource | GitSource): 
 // redeploy triggers a git re-clone and rebuild for an existing git app.
 // Throws on 401 like control() (the fleet poll owns auth); all other failures
 // surface as {ok:false,error} so callers never get an unhandled rejection.
-export async function redeploy(agent: string, name: string): Promise<{ ok: boolean; error?: string }> {
+export async function redeploy(
+  agent: string,
+  name: string,
+  credential?: string,
+): Promise<{ ok: boolean; error?: string }> {
   const res = await fetch("/api/apps/redeploy", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ agent, name }),
+    body: JSON.stringify({ agent, name, credential }),
   });
   if (res.status === 401) throw new Error("error 401");
   try {
@@ -202,4 +208,42 @@ export async function redeploy(agent: string, name: string): Promise<{ ok: boole
   } catch {
     return { ok: false, error: `error ${res.status}` };
   }
+}
+
+export interface CredentialMeta {
+  name: string;
+  type: string;
+  username: string;
+  created_at: number;
+}
+
+export async function listCredentials(): Promise<CredentialMeta[]> {
+  const r = await fetch("/api/credentials");
+  if (r.status !== 200) return [];
+  return (await r.json()) as CredentialMeta[];
+}
+
+export async function createCredential(
+  name: string,
+  username: string,
+  token: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const r = await fetch("/api/credentials", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, username, token }),
+  });
+  if (r.status === 201 || r.status === 200) return { ok: true };
+  try {
+    const j = await r.json();
+    return { ok: false, error: (j.error as string) ?? `error ${r.status}` };
+  } catch {
+    return { ok: false, error: `error ${r.status}` };
+  }
+}
+
+export async function deleteCredential(name: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await fetch(`/api/credentials/${encodeURIComponent(name)}`, { method: "DELETE" });
+  if (r.status === 204) return { ok: true };
+  return { ok: false, error: `error ${r.status}` };
 }

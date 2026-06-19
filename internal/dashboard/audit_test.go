@@ -22,7 +22,7 @@ func postLogin(t *testing.T, c *http.Client, base, jsonBody string) {
 
 func TestLoginRecordsSuccessAndInvalid(t *testing.T) {
 	auditPath := filepath.Join(t.TempDir(), "login-audit.log")
-	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", auditPath)
+	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", auditPath, nil)
 	srv := httptest.NewServer(h.mux)
 	defer srv.Close()
 	c := srv.Client()
@@ -50,7 +50,7 @@ func TestLoginRecordsSuccessAndInvalid(t *testing.T) {
 
 func TestLoginRecordsRateLimited(t *testing.T) {
 	auditPath := filepath.Join(t.TempDir(), "login-audit.log")
-	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", auditPath)
+	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", auditPath, nil)
 	srv := httptest.NewServer(h.mux)
 	defer srv.Close()
 	c := srv.Client()

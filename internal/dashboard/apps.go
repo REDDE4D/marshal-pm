@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -29,17 +30,18 @@ type commandSource struct {
 // gitSource is the "git" variant of an app-creation source. Name and repo are
 // required; the rest fall through to agent defaults.
 type gitSource struct {
-	Type      string            `json:"type"`
-	Name      string            `json:"name"`
-	Cmd       string            `json:"cmd"`
-	Args      []string          `json:"args"`
-	Instances int32             `json:"instances"`
-	Env       map[string]string `json:"env"`
-	Restart   string            `json:"restart"`
-	Repo      string            `json:"repo"`
-	Ref       string            `json:"ref"`
-	Build     string            `json:"build"`
-	Subdir    string            `json:"subdir"`
+	Type       string            `json:"type"`
+	Name       string            `json:"name"`
+	Cmd        string            `json:"cmd"`
+	Args       []string          `json:"args"`
+	Instances  int32             `json:"instances"`
+	Env        map[string]string `json:"env"`
+	Restart    string            `json:"restart"`
+	Repo       string            `json:"repo"`
+	Ref        string            `json:"ref"`
+	Build      string            `json:"build"`
+	Subdir     string            `json:"subdir"`
+	Credential string            `json:"credential"` // M22: credstore name to resolve on deploy
 }
 
 type addAppRequest struct {
@@ -48,8 +50,9 @@ type addAppRequest struct {
 }
 
 type redeployRequest struct {
-	Agent string `json:"agent"`
-	Name  string `json:"name"`
+	Agent      string `json:"agent"`
+	Name       string `json:"name"`
+	Credential string `json:"credential"` // M22: credstore name to resolve on redeploy
 }
 
 // apps serves POST /api/apps: creates and launches a new app on one agent via
@@ -96,7 +99,12 @@ func (h *handler) apps(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "name and repo required", http.StatusBadRequest)
 			return
 		}
-		op, name = deployOp(g), g.Name
+		cred, cerr := h.resolveCredential(g.Credential)
+		if cerr != nil {
+			http.Error(w, cerr.Error(), http.StatusBadRequest)
+			return
+		}
+		op, name = deployOp(g, cred), g.Name
 	default:
 		http.Error(w, "unsupported source type", http.StatusBadRequest)
 		return
@@ -116,7 +124,12 @@ func (h *handler) redeploy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "agent and name required", http.StatusBadRequest)
 		return
 	}
-	op := &pb.ControlOp{Op: &pb.ControlOp_Redeploy{Redeploy: &pb.RedeployRequest{Target: body.Name}}}
+	cred, cerr := h.resolveCredential(body.Credential)
+	if cerr != nil {
+		http.Error(w, cerr.Error(), http.StatusBadRequest)
+		return
+	}
+	op := &pb.ControlOp{Op: &pb.ControlOp_Redeploy{Redeploy: &pb.RedeployRequest{Target: body.Name, Credential: cred}}}
 	h.dispatchApp(w, r, body.Agent, body.Name, op, "redeploy")
 }
 
@@ -158,7 +171,8 @@ func startOp(s commandSource) *pb.ControlOp {
 }
 
 // deployOp builds a ControlOp_Deploy carrying one AppSpec with a GitSource.
-func deployOp(g gitSource) *pb.ControlOp {
+// cred is the resolved secret to attach to the op (may be nil for unauthenticated repos).
+func deployOp(g gitSource, cred *pb.GitCredential) *pb.ControlOp {
 	spec := &pb.AppSpec{
 		Name:      g.Name,
 		Cmd:       g.Cmd,
@@ -166,7 +180,26 @@ func deployOp(g gitSource) *pb.ControlOp {
 		Instances: g.Instances,
 		Env:       g.Env,
 		Restart:   g.Restart,
-		Source:    &pb.GitSource{Repo: g.Repo, Ref: g.Ref, Build: g.Build, Subdir: g.Subdir},
+		Source:    &pb.GitSource{Repo: g.Repo, Ref: g.Ref, Build: g.Build, Subdir: g.Subdir, Credential: g.Credential},
 	}
-	return &pb.ControlOp{Op: &pb.ControlOp_Deploy{Deploy: &pb.DeployRequest{App: spec}}}
+	return &pb.ControlOp{Op: &pb.ControlOp_Deploy{Deploy: &pb.DeployRequest{App: spec, Credential: cred}}}
+}
+
+// resolveCredential turns a credential name into the secret to attach. Empty
+// name → (nil, nil) = no managed credential.
+func (h *handler) resolveCredential(name string) (*pb.GitCredential, error) {
+	if name == "" {
+		return nil, nil
+	}
+	if h.creds == nil {
+		return nil, fmt.Errorf("credentials unavailable")
+	}
+	user, tok, ok, err := h.creds.Get(name)
+	if err != nil {
+		return nil, fmt.Errorf("credential %q: %v", name, err)
+	}
+	if !ok {
+		return nil, fmt.Errorf("unknown credential %q", name)
+	}
+	return &pb.GitCredential{Username: user, Token: tok}, nil
 }

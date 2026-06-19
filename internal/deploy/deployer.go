@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -19,8 +20,9 @@ const (
 )
 
 // Runner executes a command in dir, streaming combined output to stdout/stderr.
+// env, when non-nil, is appended to the inherited environment.
 type Runner interface {
-	Run(ctx context.Context, dir string, stdout, stderr io.Writer, name string, args ...string) error
+	Run(ctx context.Context, dir string, env []string, stdout, stderr io.Writer, name string, args ...string) error
 }
 
 // Host is the agent surface the deployer drives after a successful build.
@@ -30,6 +32,13 @@ type Host interface {
 	Launch(app config.App) error                 // mgr.Add + persist (the start chain)
 	Restart(name string) error                   // restart in place (picks up new binary)
 	Writers(label string) (stdout, stderr io.Writer)
+}
+
+// Credential is an HTTPS git credential pushed per-deploy (M22). Empty Token
+// means "no managed credential" — use the host's own git auth.
+type Credential struct {
+	Username string
+	Token    string
 }
 
 type state struct {
@@ -100,7 +109,7 @@ func (d *Deployer) Forget(name string) bool {
 // Start validates a git deploy and launches it in the background. The returned
 // error rejects the request synchronously (duplicate name, empty repo); a nil
 // return means "accepted" — progress is reported via Snapshots.
-func (d *Deployer) Start(app config.App) error {
+func (d *Deployer) Start(app config.App, cred Credential) error {
 	if app.Source == nil || app.Source.Repo == "" {
 		return fmt.Errorf("git source requires a repo")
 	}
@@ -118,14 +127,14 @@ func (d *Deployer) Start(app config.App) error {
 	d.wg.Add(1)
 	go func() {
 		defer d.wg.Done()
-		d.runDeploy(app, false)
+		d.runDeploy(app, cred, false)
 	}()
 	return nil
 }
 
 // Redeploy fetches the latest commit for an existing git app, rebuilds, and
 // restarts it in place. If the rebuild fails the running app is left untouched.
-func (d *Deployer) Redeploy(name string) error {
+func (d *Deployer) Redeploy(name string, cred Credential) error {
 	src, ok := d.host.Source(name)
 	if !ok || src.Repo == "" {
 		return fmt.Errorf("app %q is not git-sourced", name)
@@ -142,21 +151,21 @@ func (d *Deployer) Redeploy(name string) error {
 	d.wg.Add(1)
 	go func() {
 		defer d.wg.Done()
-		d.runDeploy(app, true)
+		d.runDeploy(app, cred, true)
 	}()
 	return nil
 }
 
 // runDeploy performs clone (or fetch when redeploy)+build, then launches or
 // restarts. On any failure it leaves a failed state for the dashboard.
-func (d *Deployer) runDeploy(app config.App, redeploy bool) {
+func (d *Deployer) runDeploy(app config.App, cred Credential, redeploy bool) {
 	ctx := context.Background()
 	dir := d.dir(app.Name)
 	stdout, stderr := d.host.Writers(app.Name + "#0")
 	src := *app.Source
 
 	d.setState(app.Name, phaseCloning, "")
-	if err := d.fetch(ctx, dir, src, redeploy, stdout, stderr); err != nil {
+	if err := d.fetch(ctx, dir, src, cred, redeploy, stdout, stderr); err != nil {
 		d.setState(app.Name, phaseFailed, summarize("clone", err))
 		return
 	}
@@ -171,7 +180,8 @@ func (d *Deployer) runDeploy(app config.App, redeploy bool) {
 		build = DetectBuild(buildDir)
 	}
 	if build != "" {
-		if err := d.runner.Run(ctx, buildDir, stdout, stderr, "sh", "-c", build); err != nil {
+		// Build step gets nil env — no credential during build.
+		if err := d.runner.Run(ctx, buildDir, nil, stdout, stderr, "sh", "-c", build); err != nil {
 			d.setState(app.Name, phaseFailed, summarize("build", err))
 			return
 		}
@@ -196,17 +206,29 @@ func (d *Deployer) runDeploy(app config.App, redeploy bool) {
 }
 
 // fetch clones into dir for a fresh deploy, or fetches+resets for a redeploy.
-func (d *Deployer) fetch(ctx context.Context, dir string, src config.GitSource, redeploy bool, stdout, stderr io.Writer) error {
+func (d *Deployer) fetch(ctx context.Context, dir string, src config.GitSource, cred Credential, redeploy bool, stdout, stderr io.Writer) error {
+	env, cleanup, err := d.gitCredEnv(cred)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	credActive := cred.Token != ""
+
 	if !redeploy {
 		_ = os.RemoveAll(dir)
 		if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 			return err
 		}
-		if err := d.runner.Run(ctx, "", stdout, stderr, "git", "clone", src.Repo, dir); err != nil {
+		cloneURL := src.Repo
+		if credActive {
+			cloneURL = withUsername(src.Repo, cred.Username)
+		}
+		if err := d.runner.Run(ctx, "", env, stdout, stderr, "git", gitArgs(credActive, "clone", cloneURL, dir)...); err != nil {
 			return err
 		}
 		if src.Ref != "" {
-			return d.runner.Run(ctx, dir, stdout, stderr, "git", "checkout", src.Ref)
+			return d.runner.Run(ctx, dir, env, stdout, stderr, "git", gitArgs(credActive, "checkout", src.Ref)...)
 		}
 		return nil
 	}
@@ -214,10 +236,60 @@ func (d *Deployer) fetch(ctx context.Context, dir string, src config.GitSource, 
 	if ref == "" {
 		ref = "HEAD"
 	}
-	if err := d.runner.Run(ctx, dir, stdout, stderr, "git", "fetch", "origin", ref); err != nil {
+	if err := d.runner.Run(ctx, dir, env, stdout, stderr, "git", gitArgs(credActive, "fetch", "origin", ref)...); err != nil {
 		return err
 	}
-	return d.runner.Run(ctx, dir, stdout, stderr, "git", "reset", "--hard", "FETCH_HEAD")
+	return d.runner.Run(ctx, dir, env, stdout, stderr, "git", gitArgs(credActive, "reset", "--hard", "FETCH_HEAD")...)
+}
+
+// gitCredEnv writes a throwaway GIT_ASKPASS helper and returns the env that
+// makes git read the token from the environment (never argv/URL). cleanup
+// removes the helper. With no token it returns (nil, noop, nil).
+func (d *Deployer) gitCredEnv(cred Credential) (env []string, cleanup func(), err error) {
+	if cred.Token == "" {
+		return nil, func() {}, nil
+	}
+	tmp, err := os.MkdirTemp("", "marshal-askpass-")
+	if err != nil {
+		return nil, func() {}, err
+	}
+	script := filepath.Join(tmp, "askpass.sh")
+	// $1 contains git's prompt text; "Username" → user, else → token.
+	body := "#!/bin/sh\ncase \"$1\" in *Username*) printf '%s' \"$MARSHAL_GIT_USER\";; *) printf '%s' \"$MARSHAL_GIT_TOKEN\";; esac\n"
+	if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
+		_ = os.RemoveAll(tmp)
+		return nil, func() {}, err
+	}
+	env = []string{
+		"GIT_ASKPASS=" + script,
+		"MARSHAL_GIT_USER=" + cred.Username,
+		"MARSHAL_GIT_TOKEN=" + cred.Token,
+		"GIT_TERMINAL_PROMPT=0",
+	}
+	return env, func() { _ = os.RemoveAll(tmp) }, nil
+}
+
+// withUsername injects a (non-secret) username into an https URL's authority.
+func withUsername(raw, user string) string {
+	if user == "" {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return raw
+	}
+	u.User = url.User(user)
+	return u.String()
+}
+
+// gitArgs prepends an inline "disable credential helpers" config when a
+// managed credential is active, so the GIT_ASKPASS token is authoritative and
+// no inherited helper (osxkeychain/libsecret/store) caches or replays it.
+func gitArgs(credActive bool, args ...string) []string {
+	if credActive {
+		return append([]string{"-c", "credential.helper="}, args...)
+	}
+	return args
 }
 
 func summarize(stage string, err error) string { return stage + " failed: " + err.Error() }

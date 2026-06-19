@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,8 +11,18 @@ import (
 	"testing"
 	"time"
 
+	"marshal/internal/credstore"
 	"marshal/internal/pb"
 )
+
+// authedRequest builds a request with a user already injected into the context,
+// so tests can call handler methods directly without going through requireSession.
+func authedRequest(t *testing.T, method, target, body string) *http.Request {
+	t.Helper()
+	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	return req.WithContext(context.WithValue(req.Context(), userKey, "admin"))
+}
 
 func postApps(t *testing.T, c *http.Client, base string, cookie *http.Cookie, body string) *http.Response {
 	t.Helper()
@@ -210,5 +221,47 @@ func TestRedeploySendsRedeployOp(t *testing.T) {
 	rop, ok := fc.gotOp.GetOp().(*pb.ControlOp_Redeploy)
 	if !ok || rop.Redeploy.GetTarget() != "web" {
 		t.Fatalf("expected redeploy of web, got %+v", fc.gotOp.GetOp())
+	}
+}
+
+func TestDeployAttachesResolvedCredential(t *testing.T) {
+	cs, err := credstore.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cs.Put("gh-ci", "octocat", "ghp_SECRET"); err != nil {
+		t.Fatal(err)
+	}
+	fc := &fakeController{res: &pb.ControlResult{Ok: true}}
+	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fc, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", "", cs)
+
+	body := `{"agent":"a1","source":{"type":"git","name":"priv","repo":"https://x/y.git","credential":"gh-ci"}}`
+	rec := httptest.NewRecorder()
+	req := authedRequest(t, "POST", "/api/apps", body)
+	h.apps(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d; want 200: %s", rec.Code, rec.Body.String())
+	}
+	dep := fc.gotOp.GetDeploy()
+	if dep == nil || dep.GetCredential().GetToken() != "ghp_SECRET" {
+		t.Fatalf("token not resolved+attached: %+v", fc.gotOp)
+	}
+	if dep.GetApp().GetSource().GetCredential() != "gh-ci" {
+		t.Fatalf("credential name not set on GitSource: %+v", dep.GetApp().GetSource())
+	}
+}
+
+func TestDeployUnknownCredential(t *testing.T) {
+	cs, err := credstore.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, &fakeController{}, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", "", cs)
+	body := `{"agent":"a1","source":{"type":"git","name":"priv","repo":"https://x/y.git","credential":"nope"}}`
+	rec := httptest.NewRecorder()
+	h.apps(rec, authedRequest(t, "POST", "/api/apps", body))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("want 400 for unknown credential, got %d", rec.Code)
 	}
 }

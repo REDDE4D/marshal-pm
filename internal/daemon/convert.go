@@ -50,10 +50,11 @@ func appSpecToConfig(s *pb.AppSpec) (config.App, error) {
 	}
 	if gs := s.GetSource(); gs != nil {
 		app.Source = &config.GitSource{
-			Repo:   gs.GetRepo(),
-			Ref:    gs.GetRef(),
-			Build:  gs.GetBuild(),
-			Subdir: gs.GetSubdir(),
+			Repo:       gs.GetRepo(),
+			Ref:        gs.GetRef(),
+			Build:      gs.GetBuild(),
+			Subdir:     gs.GetSubdir(),
+			Credential: gs.GetCredential(),
 		}
 	}
 	cfg := config.Config{Apps: []config.App{app}}
@@ -80,6 +81,7 @@ func snapshotToProc(s manager.InstanceSnapshot, cpu float64, mem uint64) *pb.Pro
 		Cpu:        cpu,
 		Mem:        int64(mem),
 		Source:     s.Source,
+		Credential: s.Credential,
 	}
 }
 

@@ -144,6 +144,18 @@ button { font-family: var(--mono); cursor: pointer; }
 .pstate.state-failed { color: var(--danger); }
 .pcard-failed-detail { font-size: 10.5px; color: var(--danger); margin: 6px 0 2px; word-break: break-word; opacity: 0.85; }
 
+/* credentials view */
+.cred-section { max-width: 600px; }
+.cred-head { font-weight: 700; font-size: 16px; color: #F2F3F7; margin-bottom: 1rem; }
+.cred-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 1.5rem; }
+.cred-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.cred-row-info { display: flex; flex-direction: column; gap: 3px; }
+.cred-name { font-weight: 500; font-size: 14px; color: #F2F3F7; }
+.cred-meta { font-size: 10.5px; color: var(--faint); }
+.cred-form { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 1.1rem 1.25rem; display: flex; flex-direction: column; gap: 0.65rem; margin-top: 0.5rem; }
+.cred-form-title { font-weight: 600; font-size: 13px; color: #F2F3F7; margin-bottom: 0.2rem; }
+.cred-form-foot { display: flex; justify-content: flex-end; margin-top: 0.2rem; }
+
 /* git deploy: redeploy button */
 .btn-redeploy { color: var(--cyan); border-color: #1A3A3A; }
 .btn-redeploy:hover:not(:disabled) { background: #0F2525; border-color: var(--cyan); }
