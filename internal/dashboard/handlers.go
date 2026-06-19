@@ -69,6 +69,7 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 	mux.HandleFunc("GET /api/logs", h.requireSession(h.logs))
 	mux.HandleFunc("GET /api/logstats", h.requireSession(h.logstats))
 	mux.HandleFunc("POST /api/control", h.requireSession(h.control))
+	mux.HandleFunc("POST /api/apps", h.requireSession(h.apps))
 	mux.HandleFunc("/", h.spa)
 	h.mux = mux
 	return h
