@@ -247,3 +247,28 @@ export async function deleteCredential(name: string): Promise<{ ok: boolean; err
   if (r.status === 204) return { ok: true };
   return { ok: false, error: `error ${r.status}` };
 }
+
+export type DirEntry = { name: string; is_dir: boolean; size: number; mod_unix: number; mode: number };
+export type DirListing = { path: string; entries: DirEntry[] };
+export type FileContent = { path: string; content: string; size: number; truncated: boolean; binary: boolean };
+
+export async function listDir(agent: string, app: string, path: string): Promise<DirListing> {
+  const q = new URLSearchParams({ path });
+  const r = await fetch(`/api/fleet/${encodeURIComponent(agent)}/apps/${encodeURIComponent(app)}/dir?${q}`);
+  if (r.status === 401) throw new Error("unauthorized");
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `dir failed (${r.status})`);
+  return r.json();
+}
+
+export async function readFile(agent: string, app: string, path: string): Promise<FileContent> {
+  const q = new URLSearchParams({ path });
+  const r = await fetch(`/api/fleet/${encodeURIComponent(agent)}/apps/${encodeURIComponent(app)}/file?${q}`);
+  if (r.status === 401) throw new Error("unauthorized");
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `file failed (${r.status})`);
+  return r.json();
+}
+
+export function fileDownloadURL(agent: string, app: string, path: string): string {
+  const q = new URLSearchParams({ path });
+  return `/api/fleet/${encodeURIComponent(agent)}/apps/${encodeURIComponent(app)}/file?${q}`;
+}

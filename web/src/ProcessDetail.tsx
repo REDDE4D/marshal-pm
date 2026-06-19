@@ -5,6 +5,7 @@ import { LogView } from "./LogView";
 import { ControlButtons } from "./ControlButtons";
 import { Logo } from "./Logo";
 import { navigate } from "./router";
+import { FileBrowser } from "./FileBrowser";
 
 const WINDOWS = [
   { label: "15m", ms: 15 * 60 * 1000 },
@@ -25,7 +26,7 @@ function uptime(ms: number): string {
 function mib(b: number): string { return b <= 0 ? "—" : `${(b / 1048576).toFixed(1)}`; }
 
 export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: string; onLogout: () => void }) {
-  const [p, setP] = useState<{ state: string; pid: number; uptime_ms: number; restarts: number; cpu: number; mem: number } | null>(null);
+  const [p, setP] = useState<{ state: string; pid: number; uptime_ms: number; restarts: number; cpu: number; mem: number; source?: "command" | "git" } | null>(null);
   const [connected, setConnected] = useState(false);
   const [errCount, setErrCount] = useState(0);
   const [windowMs, setWindowMs] = useState(WINDOWS[0].ms);
@@ -130,6 +131,13 @@ export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: 
           <div><div className="chart-cap">memory mb</div><MetricChart buckets={detail} metric="mem" /></div>
         </div>
       </div>
+
+      {p?.source === "git" && (
+        <div className="card">
+          <div className="card-head"><span className="lbl">files</span></div>
+          <FileBrowser agent={agent} app={proc} />
+        </div>
+      )}
 
       <div className="card">
         <div className="log-controls">
