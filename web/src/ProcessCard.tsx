@@ -38,7 +38,7 @@ export function ProcessCard({ agent, proc, connected, cpuSeries, memSeries, erro
   function handleRedeploy(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    redeploy(agent, proc.name).catch(() => {});
+    redeploy(agent, proc.name, proc.credential).catch(() => {});
   }
 
   function handleDismiss(e: React.MouseEvent) {

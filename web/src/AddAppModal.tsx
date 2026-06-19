@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
-import { Agent, CommandSource, GitSource, addApp } from "./api";
+import { useState, useEffect, type FormEvent } from "react";
+import { Agent, CommandSource, GitSource, CredentialMeta, addApp, listCredentials } from "./api";
 
 type EnvRow = { key: string; value: string };
 
@@ -29,8 +29,12 @@ export function AddAppModal({
   const [restart, setRestart] = useState("always");
   const [maxRestarts, setMaxRestarts] = useState("");
   const [killTimeout, setKillTimeout] = useState("");
+  const [creds, setCreds] = useState<CredentialMeta[]>([]);
+  const [credential, setCredential] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => { listCredentials().then(setCreds); }, []);
 
   const canSubmit =
     agent !== "" &&
@@ -58,6 +62,7 @@ export function AddAppModal({
       if (ref.trim()) gs.ref = ref.trim();
       if (build.trim()) gs.build = build.trim();
       if (subdir.trim()) gs.subdir = subdir.trim();
+      if (credential) gs.credential = credential;
       source = gs;
     } else {
       const cs: CommandSource = { type: "command", name: name.trim(), cmd: cmd.trim() };
@@ -145,6 +150,17 @@ export function AddAppModal({
           <label className="field">
             build command
             <input value={build} onChange={(e) => setBuild(e.target.value)} placeholder="auto-detect" />
+          </label>
+        )}
+        {sourceType === "git" && (
+          <label className="field">
+            credential
+            <select value={credential} onChange={(e) => setCredential(e.target.value)}>
+              <option value="">None (public repo / host auth)</option>
+              {creds.map((c) => (
+                <option key={c.name} value={c.name}>{c.name} ({c.username})</option>
+              ))}
+            </select>
           </label>
         )}
 

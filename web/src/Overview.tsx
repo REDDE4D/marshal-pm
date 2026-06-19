@@ -65,6 +65,7 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
         <Logo />
         <div className="topbar-actions">
           <button className="btn" onClick={() => setShowAdd(true)}>+ add app</button>
+          <button className="btn" onClick={() => { window.location.hash = "#/credentials"; }}>credentials</button>
           <button className="btn" onClick={async () => { await logout(); onLogout(); }}>sign out</button>
         </div>
       </div>
