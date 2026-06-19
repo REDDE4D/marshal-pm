@@ -37,12 +37,14 @@ type handler struct {
 	files       fs.FS
 	static      http.Handler
 	mux         http.Handler
+	creds       Credentials
 }
 
 // newHandler builds a *handler (with its mux) for the given session lifetime.
 // sessionsPath persists sessions to disk; "" keeps them in-memory.
 // auditPath enables the login audit log; "" disables it.
-func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration, sessionsPath, auditPath string) *handler {
+// creds may be nil, which disables credential endpoints (they return 503).
+func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration, sessionsPath, auditPath string, creds Credentials) *handler {
 	files := staticFS()
 	var al *audit.Log
 	if auditPath != "" {
@@ -59,6 +61,7 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 		audit:       al,
 		files:       files,
 		static:      http.FileServer(http.FS(files)),
+		creds:       creds,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/login", h.login)
@@ -71,6 +74,9 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 	mux.HandleFunc("POST /api/control", h.requireSession(h.control))
 	mux.HandleFunc("POST /api/apps", h.requireSession(h.apps))
 	mux.HandleFunc("POST /api/apps/redeploy", h.requireSession(h.redeploy))
+	mux.HandleFunc("GET /api/credentials", h.requireSession(h.listCredentials))
+	mux.HandleFunc("POST /api/credentials", h.requireSession(h.createCredential))
+	mux.HandleFunc("DELETE /api/credentials/{name}", h.requireSession(h.deleteCredential))
 	mux.HandleFunc("/", h.spa)
 	h.mux = mux
 	return h
@@ -78,8 +84,9 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 
 // NewHandler builds the dashboard HTTP handler with the given session lifetime.
 // The returned http.Handler is safe to use with httptest servers in unit tests.
+// Credentials are disabled (nil) — use newHandler directly if you need them.
 func NewHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration) http.Handler {
-	return newHandler(lister, metrics, logs, controller, auth, ttl, "", "").mux
+	return newHandler(lister, metrics, logs, controller, auth, ttl, "", "", nil).mux
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

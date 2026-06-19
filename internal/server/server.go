@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"marshal/internal/credstore"
 	"marshal/internal/dashboard"
 	"marshal/internal/logstore"
 	"marshal/internal/metricstore"
@@ -373,8 +374,16 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 		}
 		sessionsPath := filepath.Join(dataDir, "sessions.json")
 		auditPath := filepath.Join(dataDir, "login-audit.log")
+		creds, cerr := credstore.Open(dataDir)
+		if cerr != nil {
+			log.Printf("server: credentials disabled: %v", cerr)
+		}
+		var cw dashboard.Credentials
+		if cerr == nil {
+			cw = creds
+		}
 		go func() {
-			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath, auditPath); err != nil {
+			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath, auditPath, cw); err != nil {
 				log.Printf("dashboard: %v", err)
 			}
 		}()

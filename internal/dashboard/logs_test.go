@@ -105,7 +105,7 @@ func (r *recordingLogs) ErrorCounts(string, int64) (map[string]int64, error) { r
 
 func TestLogsThreadsQueryFilter(t *testing.T) {
 	rl := &recordingLogs{}
-	h := newHandler(fakeLister{}, &fakeMetrics{}, rl, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", "")
+	h := newHandler(fakeLister{}, &fakeMetrics{}, rl, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", "", nil)
 	req := httptest.NewRequest("GET", "/api/logs?agent=dev-1&selector=web&q=boom", nil)
 	rec := httptest.NewRecorder()
 	h.logs(rec, req)
@@ -126,7 +126,7 @@ func (s statLogs) ErrorCounts(string, int64) (map[string]int64, error) { return 
 
 func TestLogStatsEndpoint(t *testing.T) {
 	sl := statLogs{counts: map[string]int64{"web#0": 4, "api#0": 1}}
-	h := newHandler(fakeLister{}, &fakeMetrics{}, sl, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", "")
+	h := newHandler(fakeLister{}, &fakeMetrics{}, sl, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", "", nil)
 	req := httptest.NewRequest("GET", "/api/logstats?agent=dev-1", nil)
 	rec := httptest.NewRecorder()
 	h.logstats(rec, req)
