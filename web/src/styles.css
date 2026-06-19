@@ -115,3 +115,23 @@ button { font-family: var(--mono); cursor: pointer; }
 .logline.err .logtext { color: var(--danger); }
 .jump { position: absolute; right: 12px; bottom: 12px; font-size: 10px; }
 .sparkline { display: block; }
+
+.topbar-actions { display: flex; gap: 8px; align-items: center; }
+.btn.primary { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }
+.btn.primary:hover:not(:disabled) { background: var(--cyan); }
+.btn.primary:disabled { background: var(--border); color: var(--faint); border-color: var(--border); cursor: default; }
+
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: flex-start; justify-content: center; padding: 4rem 1rem; z-index: 50; overflow-y: auto; }
+.modal { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 1.25rem 1.4rem; width: 420px; max-width: 100%; display: flex; flex-direction: column; gap: 0.7rem; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; }
+.modal-title { font-weight: 700; font-size: 16px; color: #F2F3F7; }
+.field { display: flex; flex-direction: column; font-size: 11px; color: var(--dim); gap: 0.3rem; }
+.field input, .field select { font-family: var(--mono); background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 0.45rem 0.55rem; font-size: 0.85rem; }
+.field input:focus, .field select:focus { outline: none; border-color: var(--cyan); }
+.field .hint { color: var(--faint); font-size: 11px; font-style: italic; }
+.adv-toggle { align-self: flex-start; font-family: var(--mono); font-size: 11px; color: var(--dim); background: transparent; border: 0; padding: 2px 0; }
+.adv { display: flex; flex-direction: column; gap: 0.7rem; border-left: 1px solid var(--border-soft); padding-left: 0.7rem; }
+.env-row { display: flex; gap: 6px; align-items: center; }
+.env-row input { flex: 1 1 auto; }
+.modal-error { color: var(--danger); font-size: 0.8rem; word-break: break-word; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 0.3rem; }
