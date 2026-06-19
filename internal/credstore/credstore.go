@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -184,7 +185,9 @@ func (s *Store) Delete(name string) bool {
 	_, ok := s.data[name]
 	if ok {
 		delete(s.data, name)
-		_ = s.flushLocked()
+		if err := s.flushLocked(); err != nil {
+			log.Printf("credstore: persist after delete %q: %v", name, err)
+		}
 	}
 	return ok
 }
@@ -194,7 +197,18 @@ func (s *Store) flushLocked() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.path, b, 0o600)
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
+		return err
+	}
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, 0o600); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, s.path)
 }
 
 // nowUnix is the creation timestamp source, in its own func for test seams.

@@ -99,6 +99,19 @@ func TestBadName(t *testing.T) {
 	}
 }
 
+func TestCredentialsFileMode(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := Open(dir)
+	_ = s.Put("gh-ci", "octocat", "ghp_x")
+	fi, err := os.Stat(filepath.Join(dir, "credentials.json"))
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if fi.Mode().Perm() != 0o600 {
+		t.Fatalf("credentials.json mode = %v, want 0600", fi.Mode().Perm())
+	}
+}
+
 // containsPlaintext reports whether b contains needle as a raw substring.
 func containsPlaintext(b []byte, needle string) bool {
 	return len(needle) > 0 && bytesContains(b, []byte(needle))
