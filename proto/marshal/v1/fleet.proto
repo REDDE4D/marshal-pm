@@ -103,6 +103,26 @@ message GitCredential {
   string token    = 2;
 }
 
+// M23 — read-only file browser for deployed apps.
+message ListDirRequest  { string app = 1; string path = 2; } // path: relative to clone root; "" = root
+message ReadFileRequest { string app = 1; string path = 2; }
+
+message DirEntry {
+  string name     = 1;
+  bool   is_dir   = 2;
+  int64  size     = 3;
+  int64  mod_unix = 4;
+  uint32 mode     = 5; // unix perm bits, for display
+}
+message DirListing  { string path = 1; repeated DirEntry entries = 2; }
+message FileContent {
+  string path      = 1;
+  bytes  content   = 2;
+  int64  size      = 3; // true on-disk size (may exceed len(content) when truncated/binary)
+  bool   truncated = 4; // content is a head, capped at maxFileBytes
+  bool   binary    = 5; // NUL-byte sniff: not rendered as text
+}
+
 message DeployRequest {
   AppSpec       app        = 1;
   GitCredential credential = 2; // M22: secret attached per-op, never persisted on the agent
@@ -123,6 +143,8 @@ message ControlOp {
     StartRequest start   = 4; // reuses AppSpec from daemon.proto
     DeployRequest   deploy   = 5; // M21
     RedeployRequest redeploy = 6; // M21
+    ListDirRequest  list_dir  = 7; // M23
+    ReadFileRequest read_file = 8; // M23
   }
 }
 
@@ -130,6 +152,8 @@ message ControlResult {
   bool              ok    = 1;
   string            error = 2; // set when ok == false
   repeated ProcInfo procs = 3; // affected instances on success
+  DirListing  dir  = 4; // M23, set on list_dir success
+  FileContent file = 5; // M23, set on read_file success
 }
 
 message Command       { uint64 request_id = 1; ControlOp     op     = 2; } // server -> agent
