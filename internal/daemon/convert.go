@@ -79,6 +79,7 @@ func snapshotToProc(s manager.InstanceSnapshot, cpu float64, mem uint64) *pb.Pro
 		Restarts:   int32(s.Restarts),
 		Cpu:        cpu,
 		Mem:        int64(mem),
+		Source:     s.Source,
 	}
 }
 

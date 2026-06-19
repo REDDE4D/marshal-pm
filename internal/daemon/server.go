@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -12,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"marshal/internal/config"
+	"marshal/internal/deploy"
 	"marshal/internal/fleet"
 	"marshal/internal/fleetauth"
 	"marshal/internal/logs"
@@ -38,6 +41,16 @@ type Server struct {
 	mdb              *metricstore.Store // metric history
 	kill             func()             // triggers daemon shutdown (set by Run)
 	logPolicyDefault logs.Policy        // effective default log policy (from WithLogRetention)
+	deployer         *deploy.Deployer
+}
+
+// launchApp admits one already-converted app into the manager and sets its log
+// policy. Shared by doStart and the deployer's Launch.
+func (s *Server) launchApp(app config.App) ([]manager.InstanceSnapshot, error) {
+	if s.logs != nil {
+		s.logs.SetPolicy(app.Name, logPolicy(app, s.logPolicyDefault))
+	}
+	return s.mgr.Add(app)
 }
 
 // doStart admits and launches one or more apps from wire specs.
@@ -49,16 +62,65 @@ func (s *Server) doStart(specs []*pb.AppSpec) ([]manager.InstanceSnapshot, error
 		if err != nil {
 			return nil, fmt.Errorf("%w", err)
 		}
-		if s.logs != nil {
-			s.logs.SetPolicy(app.Name, logPolicy(app, s.logPolicyDefault))
-		}
-		snaps, err := s.mgr.Add(app)
+		snaps, err := s.launchApp(app)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, snaps...)
 	}
 	return out, nil
+}
+
+// --- deploy.Host ---
+
+func (s *Server) Exists(name string) bool {
+	for _, sp := range s.mgr.Specs() {
+		if sp.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) Source(name string) (config.GitSource, bool) {
+	for _, sp := range s.mgr.Specs() {
+		if sp.Name == name && sp.Source != nil {
+			return *sp.Source, true
+		}
+	}
+	return config.GitSource{}, false
+}
+
+func (s *Server) Launch(app config.App) error {
+	if _, err := s.launchApp(app); err != nil {
+		return err
+	}
+	if s.store != nil {
+		_ = s.store.Save(s.mgr.Specs())
+	}
+	return nil
+}
+
+func (s *Server) Writers(label string) (io.Writer, io.Writer) {
+	if s.logs == nil {
+		return io.Discard, io.Discard
+	}
+	return s.logs.WriterPair(label)
+}
+
+// deployHost is a thin adapter that exposes *Server as a deploy.Host.
+// It is needed because *Server already has a Restart method with a different
+// signature (the gRPC DaemonServer.Restart), so we cannot implement
+// deploy.Host.Restart directly on *Server.
+type deployHost struct{ s *Server }
+
+func (h deployHost) Exists(name string) bool                     { return h.s.Exists(name) }
+func (h deployHost) Source(name string) (config.GitSource, bool) { return h.s.Source(name) }
+func (h deployHost) Launch(app config.App) error                 { return h.s.Launch(app) }
+func (h deployHost) Writers(label string) (io.Writer, io.Writer) { return h.s.Writers(label) }
+func (h deployHost) Restart(name string) error {
+	_, err := h.s.mgr.Restart(name)
+	return err
 }
 
 // Start admits and launches one or more apps.
@@ -246,6 +308,7 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 
 	gs := grpc.NewServer()
 	srv := &Server{mgr: mgr, store: st, logs: reg, metrics: sampler, mdb: mdb, logPolicyDefault: cfg.logRetention}
+	srv.deployer = deploy.New(deployHost{srv}, deploy.ExecRunner{}, st.DeploysDir())
 	var once sync.Once
 	stopped := make(chan struct{})
 	srv.kill = func() { once.Do(func() { close(stopped) }) }
@@ -270,7 +333,7 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 			log.Printf("fleet: disabled, bad TLS config: %v", tErr)
 		} else {
 			fc := fleet.New(sc.Address, name, version.String(),
-				fleetSnapshot(mgr, sampler),
+				srv.fleetSnapshot(),
 				fleet.WithTLS(tlsCfg),
 				fleet.WithAuth(fleetTok, sc.Token, st.SaveFleetToken),
 				fleet.WithMetrics(metricsSince(mdb)),

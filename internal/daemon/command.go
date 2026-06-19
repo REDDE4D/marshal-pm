@@ -35,9 +35,32 @@ func (s *Server) handleFleetCommand(cmd *pb.Command) *pb.ControlResult {
 
 	case *pb.ControlOp_Delete:
 		snaps, err = s.mgr.Delete(v.Delete.GetTarget())
+		forgot := false
+		if s.deployer != nil {
+			forgot = s.deployer.Forget(v.Delete.GetTarget())
+		}
+		if err != nil && forgot {
+			err = nil // the target was a failed/in-flight deploy, now cleared
+		}
 		if err == nil && s.store != nil {
 			_ = s.store.Save(s.mgr.Specs())
 		}
+
+	case *pb.ControlOp_Deploy:
+		app, cerr := appSpecToConfig(v.Deploy.GetApp())
+		if cerr != nil {
+			return &pb.ControlResult{Ok: false, Error: cerr.Error()}
+		}
+		if derr := s.deployer.Start(app); derr != nil {
+			return &pb.ControlResult{Ok: false, Error: derr.Error()}
+		}
+		return &pb.ControlResult{Ok: true}
+
+	case *pb.ControlOp_Redeploy:
+		if derr := s.deployer.Redeploy(v.Redeploy.GetTarget()); derr != nil {
+			return &pb.ControlResult{Ok: false, Error: derr.Error()}
+		}
+		return &pb.ControlResult{Ok: true}
 
 	default:
 		return &pb.ControlResult{Ok: false, Error: fmt.Sprintf("unknown op type %T", op.GetOp())}

@@ -265,6 +265,23 @@ func echoApp(name string) config.App {
 	}
 }
 
+func TestListReportsGitSource(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := New(ctx)
+	_, err := m.Add(config.App{Name: "g", Cmd: "sleep", Args: []string{"60"}, Instances: 1,
+		Source: &config.GitSource{Repo: "r"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.StopAll()
+	for _, s := range m.List() {
+		if s.Name == "g" && s.Source != "git" {
+			t.Fatalf("want source=git, got %q", s.Source)
+		}
+	}
+}
+
 func TestWithLogsCapturesOutputAndRemovesOnDelete(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
