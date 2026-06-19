@@ -3,6 +3,7 @@ import { Agent, AgentMetrics, getFleet, getLogStats, getMetrics, logout } from "
 import { SummaryCards } from "./SummaryCards";
 import { ProcessCard } from "./ProcessCard";
 import { Logo } from "./Logo";
+import { AddAppModal } from "./AddAppModal";
 
 type Series = Record<string, Record<string, { cpu: number[]; mem: number[] }>>;
 
@@ -10,6 +11,7 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [metrics, setMetrics] = useState<Series>({});
   const [errors, setErrors] = useState<Record<string, Record<string, number>>>({});
+  const [showAdd, setShowAdd] = useState(false);
 
   useEffect(() => {
     let stop = false;
@@ -59,7 +61,20 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
 
   return (
     <div className="app">
-      <div className="topbar"><Logo /><button className="btn" onClick={async () => { await logout(); onLogout(); }}>sign out</button></div>
+      <div className="topbar">
+        <Logo />
+        <div className="topbar-actions">
+          <button className="btn" onClick={() => setShowAdd(true)}>+ add app</button>
+          <button className="btn" onClick={async () => { await logout(); onLogout(); }}>sign out</button>
+        </div>
+      </div>
+      {showAdd && (
+        <AddAppModal
+          agents={agents}
+          onClose={() => setShowAdd(false)}
+          onAdded={() => {}}
+        />
+      )}
       <SummaryCards agents={agents} />
       {agents.length === 0 && <p className="empty">no agents connected.</p>}
       {agents.map((a) => (

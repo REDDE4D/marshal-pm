@@ -135,3 +135,36 @@ export async function control(
     return { ok: false, error: `error ${r.status}` };
   }
 }
+
+// CommandSource mirrors the backend "command" app source (maps 1:1 to AppSpec).
+// Only name and cmd are required; omitted fields use backend defaults.
+export type CommandSource = {
+  type: "command";
+  name: string;
+  cmd: string;
+  args?: string[];
+  cwd?: string;
+  instances?: number;
+  env?: Record<string, string>;
+  restart?: string;
+  max_restarts?: number;
+  kill_timeout?: string;
+};
+
+// addApp creates a new app on an agent via POST /api/apps. Like control() it
+// never throws — server errors surface as {ok:false,error}, so a failed add
+// cannot trigger a logout (only the fleet poll owns auth).
+export async function addApp(agent: string, source: CommandSource): Promise<ControlResult> {
+  const r = await fetch("/api/apps", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent, source }),
+  });
+  if (r.status === 200) return (await r.json()) as ControlResult;
+  try {
+    const j = await r.json();
+    return { ok: false, error: (j.error as string) ?? `error ${r.status}` };
+  } catch {
+    return { ok: false, error: `error ${r.status}` };
+  }
+}
