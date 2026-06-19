@@ -162,3 +162,15 @@ button { font-family: var(--mono); cursor: pointer; }
 /* git deploy: dismiss failed-deploy card */
 .btn-dismiss { color: var(--danger); border-color: #3A1A1A; }
 .btn-dismiss:hover:not(:disabled) { background: #250F0F; border-color: var(--danger); }
+
+.filebrowser { display: flex; flex-direction: column; gap: 8px; }
+.fb-note { font-size: 11px; color: var(--dim); }
+.fb-err { color: var(--danger, #e66); font-size: 12px; }
+.fb-crumb a { cursor: pointer; }
+.fb-body { display: grid; grid-template-columns: 260px 1fr; gap: 12px; min-height: 240px; }
+.fb-list { list-style: none; margin: 0; padding: 0; max-height: 420px; overflow: auto; border-right: 1px solid var(--line, #333); }
+.fb-row { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px; cursor: pointer; font-size: 13px; }
+.fb-row:hover { background: var(--hover, #222); }
+.fb-size { color: var(--dim); font-variant-numeric: tabular-nums; }
+.fb-view { overflow: auto; }
+.fb-empty { color: var(--dim); font-size: 13px; padding: 12px; }

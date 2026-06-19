@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"marshal/internal/deploy"
@@ -174,5 +176,46 @@ func TestHandleFleetCommandDeployRejectsNoRepo(t *testing.T) {
 	}})
 	if res.GetOk() {
 		t.Fatal("deploy with empty repo should be rejected")
+	}
+}
+
+func TestHandleFleetCommand_ListDirAndReadFile(t *testing.T) {
+	deployRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(deployRoot, "app1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(deployRoot, "app1", "main.go"), []byte("package main"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{
+		mgr:      manager.New(context.Background()),
+		deployer: deploy.New(nil, nil, deployRoot),
+	}
+	defer s.mgr.StopAll()
+
+	// list_dir
+	listOp := &pb.ControlOp{Op: &pb.ControlOp_ListDir{ListDir: &pb.ListDirRequest{App: "app1", Path: ""}}}
+	res := s.handleFleetCommand(&pb.Command{Op: listOp})
+	if !res.GetOk() || len(res.GetDir().GetEntries()) != 1 || res.GetDir().GetEntries()[0].GetName() != "main.go" {
+		t.Fatalf("list_dir: ok=%v entries=%v", res.GetOk(), res.GetDir().GetEntries())
+	}
+
+	// read_file
+	readOp := &pb.ControlOp{Op: &pb.ControlOp_ReadFile{ReadFile: &pb.ReadFileRequest{App: "app1", Path: "main.go"}}}
+	res = s.handleFleetCommand(&pb.Command{Op: readOp})
+	if !res.GetOk() || string(res.GetFile().GetContent()) != "package main" {
+		t.Fatalf("read_file: ok=%v content=%q", res.GetOk(), res.GetFile().GetContent())
+	}
+
+	// unknown app
+	badOp := &pb.ControlOp{Op: &pb.ControlOp_ListDir{ListDir: &pb.ListDirRequest{App: "ghost", Path: ""}}}
+	if res := s.handleFleetCommand(&pb.Command{Op: badOp}); res.GetOk() {
+		t.Fatalf("list_dir on unknown app should fail")
+	}
+
+	// path escape
+	escOp := &pb.ControlOp{Op: &pb.ControlOp_ReadFile{ReadFile: &pb.ReadFileRequest{App: "app1", Path: "../../etc/passwd"}}}
+	if res := s.handleFleetCommand(&pb.Command{Op: escOp}); res.GetOk() {
+		t.Fatalf("read_file escape should fail")
 	}
 }

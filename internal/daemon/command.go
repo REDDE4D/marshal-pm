@@ -73,6 +73,34 @@ func (s *Server) handleFleetCommand(cmd *pb.Command) *pb.ControlResult {
 		}
 		return &pb.ControlResult{Ok: true}
 
+	case *pb.ControlOp_ListDir:
+		if s.deployer == nil {
+			return &pb.ControlResult{Ok: false, Error: "deploy not supported"}
+		}
+		root, ok := s.deployer.Root(v.ListDir.GetApp())
+		if !ok {
+			return &pb.ControlResult{Ok: false, Error: "not a git deployment"}
+		}
+		listing, lerr := deploy.ListDir(root, v.ListDir.GetPath())
+		if lerr != nil {
+			return &pb.ControlResult{Ok: false, Error: lerr.Error()}
+		}
+		return &pb.ControlResult{Ok: true, Dir: listing}
+
+	case *pb.ControlOp_ReadFile:
+		if s.deployer == nil {
+			return &pb.ControlResult{Ok: false, Error: "deploy not supported"}
+		}
+		root, ok := s.deployer.Root(v.ReadFile.GetApp())
+		if !ok {
+			return &pb.ControlResult{Ok: false, Error: "not a git deployment"}
+		}
+		fc, ferr := deploy.ReadFile(root, v.ReadFile.GetPath())
+		if ferr != nil {
+			return &pb.ControlResult{Ok: false, Error: ferr.Error()}
+		}
+		return &pb.ControlResult{Ok: true, File: fc}
+
 	default:
 		return &pb.ControlResult{Ok: false, Error: fmt.Sprintf("unknown op type %T", op.GetOp())}
 	}
