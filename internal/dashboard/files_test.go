@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -104,9 +105,10 @@ func TestReadFileEndpoint_RawMode(t *testing.T) {
 	if !strings.Contains(cd, "attachment") || !strings.Contains(cd, `filename="`) {
 		t.Errorf("Content-Disposition = %q, want attachment with filename", cd)
 	}
-	body := make([]byte, 8)
-	n, _ := resp.Body.Read(body)
-	body = body[:n]
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("reading body: %v", err)
+	}
 	if string(body) != string(rawBytes) {
 		t.Errorf("body = %v, want %v", body, rawBytes)
 	}

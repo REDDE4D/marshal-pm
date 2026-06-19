@@ -81,9 +81,9 @@ func (h *handler) readFileFiles(w http.ResponseWriter, r *http.Request) {
 		if base == "" || base == "." || base == "/" {
 			base = "download"
 		}
-		// Strip double-quotes, newlines, carriage-returns to prevent header injection.
+		// Strip double-quotes, all ASCII control characters, and DEL to prevent header injection.
 		base = strings.Map(func(c rune) rune {
-			if c == '"' || c == '\n' || c == '\r' {
+			if c == '"' || c < 0x20 || c == 0x7F {
 				return -1
 			}
 			return c
