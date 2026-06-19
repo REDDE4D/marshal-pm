@@ -165,6 +165,61 @@ type buildErr struct{}
 
 func (*buildErr) Error() string { return "exit status 1" }
 
+func TestRedeployFetchesRebuildsRestarts(t *testing.T) {
+	root := t.TempDir()
+	host := newFakeHost()
+	host.existing["web"] = true
+	host.sources["web"] = config.GitSource{Repo: "https://example/r.git", Ref: "main", Build: "go build ./..."}
+	runner := &fakeRunner{}
+	d := New(host, runner, root)
+
+	if err := d.Redeploy("web"); err != nil {
+		t.Fatalf("Redeploy: %v", err)
+	}
+	d.wait()
+
+	cmds := runner.cmds()
+	if len(cmds) != 3 || cmds[0][1] != "fetch" || cmds[1][1] != "reset" || cmds[2][0] != "sh" {
+		t.Fatalf("unexpected redeploy cmds: %v", cmds)
+	}
+	if len(host.restarted) != 1 || host.restarted[0] != "web" {
+		t.Fatalf("expected a restart of web, got %v", host.restarted)
+	}
+	if len(d.Snapshots()) != 0 {
+		t.Fatal("successful redeploy should clear state")
+	}
+}
+
+func TestRedeployBuildFailureDoesNotRestart(t *testing.T) {
+	root := t.TempDir()
+	host := newFakeHost()
+	host.existing["web"] = true
+	host.sources["web"] = config.GitSource{Repo: "https://example/r.git", Build: "go build ./..."}
+	// cmds: fetch(0), reset(1), build(2) -> fail build.
+	runner := &fakeRunner{errAt: map[int]error{2: errBuild()}}
+	d := New(host, runner, root)
+
+	if err := d.Redeploy("web"); err != nil {
+		t.Fatalf("Redeploy: %v", err)
+	}
+	d.wait()
+
+	if len(host.restarted) != 0 {
+		t.Fatal("failed rebuild must not restart the running app")
+	}
+	snaps := d.Snapshots()
+	if len(snaps) != 1 || snaps[0].GetState() != phaseFailed {
+		t.Fatalf("expected failed state, got %+v", snaps)
+	}
+}
+
+func TestRedeployRejectsNonGitApp(t *testing.T) {
+	d := New(newFakeHost(), &fakeRunner{}, t.TempDir())
+	if err := d.Redeploy("nope"); err == nil {
+		t.Fatal("expected error when app has no git source")
+	}
+}
+
 func TestSnapshotsAndForget(t *testing.T) {
 	root := t.TempDir()
 	d := New(newFakeHost(), &fakeRunner{}, root)

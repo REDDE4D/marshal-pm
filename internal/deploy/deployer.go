@@ -123,6 +123,30 @@ func (d *Deployer) Start(app config.App) error {
 	return nil
 }
 
+// Redeploy fetches the latest commit for an existing git app, rebuilds, and
+// restarts it in place. If the rebuild fails the running app is left untouched.
+func (d *Deployer) Redeploy(name string) error {
+	src, ok := d.host.Source(name)
+	if !ok || src.Repo == "" {
+		return fmt.Errorf("app %q is not git-sourced", name)
+	}
+	d.mu.Lock()
+	if _, busy := d.states[name]; busy {
+		d.mu.Unlock()
+		return fmt.Errorf("app %q is already deploying", name)
+	}
+	d.states[name] = state{phase: phaseBuilding}
+	d.mu.Unlock()
+
+	app := config.App{Name: name, Source: &src}
+	d.wg.Add(1)
+	go func() {
+		defer d.wg.Done()
+		d.runDeploy(app, true)
+	}()
+	return nil
+}
+
 // runDeploy performs clone (or fetch when redeploy)+build, then launches or
 // restarts. On any failure it leaves a failed state for the dashboard.
 func (d *Deployer) runDeploy(app config.App, redeploy bool) {
