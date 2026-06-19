@@ -11,19 +11,25 @@ import (
 	"marshal/internal/config"
 )
 
+// fakeCall records one invocation of fakeRunner.Run.
+type fakeCall struct {
+	cmd []string
+	env []string
+}
+
 // fakeRunner records the commands it is asked to run and returns a scripted
 // error for the Nth call.
 type fakeRunner struct {
 	mu    sync.Mutex
-	calls [][]string
+	calls []fakeCall
 	errAt map[int]error // call index (0-based) -> error to return
 }
 
-func (f *fakeRunner) Run(_ context.Context, dir string, stdout, stderr io.Writer, name string, args ...string) error {
+func (f *fakeRunner) Run(_ context.Context, dir string, env []string, stdout, stderr io.Writer, name string, args ...string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	idx := len(f.calls)
-	f.calls = append(f.calls, append([]string{name}, args...))
+	f.calls = append(f.calls, fakeCall{cmd: append([]string{name}, args...), env: env})
 	if f.errAt != nil {
 		if err, ok := f.errAt[idx]; ok {
 			return err
@@ -35,7 +41,11 @@ func (f *fakeRunner) Run(_ context.Context, dir string, stdout, stderr io.Writer
 func (f *fakeRunner) cmds() [][]string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.calls
+	out := make([][]string, len(f.calls))
+	for i, c := range f.calls {
+		out[i] = c.cmd
+	}
+	return out
 }
 
 // fakeHost records launches/restarts and answers existence/source queries.

@@ -19,8 +19,9 @@ const (
 )
 
 // Runner executes a command in dir, streaming combined output to stdout/stderr.
+// env, when non-nil, is appended to the inherited environment.
 type Runner interface {
-	Run(ctx context.Context, dir string, stdout, stderr io.Writer, name string, args ...string) error
+	Run(ctx context.Context, dir string, env []string, stdout, stderr io.Writer, name string, args ...string) error
 }
 
 // Host is the agent surface the deployer drives after a successful build.
@@ -171,7 +172,7 @@ func (d *Deployer) runDeploy(app config.App, redeploy bool) {
 		build = DetectBuild(buildDir)
 	}
 	if build != "" {
-		if err := d.runner.Run(ctx, buildDir, stdout, stderr, "sh", "-c", build); err != nil {
+		if err := d.runner.Run(ctx, buildDir, nil, stdout, stderr, "sh", "-c", build); err != nil {
 			d.setState(app.Name, phaseFailed, summarize("build", err))
 			return
 		}
@@ -202,11 +203,11 @@ func (d *Deployer) fetch(ctx context.Context, dir string, src config.GitSource, 
 		if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 			return err
 		}
-		if err := d.runner.Run(ctx, "", stdout, stderr, "git", "clone", src.Repo, dir); err != nil {
+		if err := d.runner.Run(ctx, "", nil, stdout, stderr, "git", "clone", src.Repo, dir); err != nil {
 			return err
 		}
 		if src.Ref != "" {
-			return d.runner.Run(ctx, dir, stdout, stderr, "git", "checkout", src.Ref)
+			return d.runner.Run(ctx, dir, nil, stdout, stderr, "git", "checkout", src.Ref)
 		}
 		return nil
 	}
@@ -214,10 +215,10 @@ func (d *Deployer) fetch(ctx context.Context, dir string, src config.GitSource, 
 	if ref == "" {
 		ref = "HEAD"
 	}
-	if err := d.runner.Run(ctx, dir, stdout, stderr, "git", "fetch", "origin", ref); err != nil {
+	if err := d.runner.Run(ctx, dir, nil, stdout, stderr, "git", "fetch", "origin", ref); err != nil {
 		return err
 	}
-	return d.runner.Run(ctx, dir, stdout, stderr, "git", "reset", "--hard", "FETCH_HEAD")
+	return d.runner.Run(ctx, dir, nil, stdout, stderr, "git", "reset", "--hard", "FETCH_HEAD")
 }
 
 func summarize(stage string, err error) string { return stage + " failed: " + err.Error() }
