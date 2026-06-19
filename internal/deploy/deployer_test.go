@@ -373,6 +373,28 @@ func TestCloneDisablesCredentialHelperWhenManaged(t *testing.T) {
 	}
 }
 
+func TestDeployerRoot(t *testing.T) {
+	deployRoot := t.TempDir()
+	d := New(nil, nil, deployRoot)
+
+	// Unknown app: no dir on disk.
+	if _, ok := d.Root("ghost"); ok {
+		t.Errorf("Root(ghost) ok=true, want false")
+	}
+	// Make a deployment dir.
+	if err := os.MkdirAll(filepath.Join(deployRoot, "app1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := d.Root("app1")
+	if !ok || got != filepath.Join(deployRoot, "app1") {
+		t.Errorf("Root(app1) = (%q,%v), want (%q,true)", got, ok, filepath.Join(deployRoot, "app1"))
+	}
+	// Name with a separator must be rejected (no traversal via app name).
+	if _, ok := d.Root("../etc"); ok {
+		t.Errorf("Root(../etc) ok=true, want false")
+	}
+}
+
 func TestSnapshotsAndForget(t *testing.T) {
 	root := t.TempDir()
 	d := New(newFakeHost(), &fakeRunner{}, root)

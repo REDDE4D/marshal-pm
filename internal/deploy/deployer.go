@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"marshal/internal/config"
@@ -104,6 +105,20 @@ func (d *Deployer) Forget(name string) bool {
 	d.mu.Unlock()
 	_ = os.RemoveAll(d.dir(name))
 	return had
+}
+
+// Root returns the clone directory of a known deployment and true. A deployment
+// is "known" when its dir exists under deployRoot. Names containing a path
+// separator are rejected outright. Returns ("", false) otherwise.
+func (d *Deployer) Root(name string) (string, bool) {
+	if name == "" || strings.ContainsRune(name, filepath.Separator) {
+		return "", false
+	}
+	dir := d.dir(name)
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		return "", false
+	}
+	return dir, true
 }
 
 // Start validates a git deploy and launches it in the background. The returned
