@@ -147,3 +147,6 @@ button { font-family: var(--mono); cursor: pointer; }
 /* git deploy: redeploy button */
 .btn-redeploy { color: var(--cyan); border-color: #1A3A3A; }
 .btn-redeploy:hover:not(:disabled) { background: #0F2525; border-color: var(--cyan); }
+/* git deploy: dismiss failed-deploy card */
+.btn-dismiss { color: var(--danger); border-color: #3A1A1A; }
+.btn-dismiss:hover:not(:disabled) { background: #250F0F; border-color: var(--danger); }

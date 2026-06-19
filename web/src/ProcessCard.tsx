@@ -1,4 +1,4 @@
-import { Proc, redeploy } from "./api";
+import { Proc, control, redeploy } from "./api";
 import { Sparkline } from "./Sparkline";
 import { ControlButtons } from "./ControlButtons";
 import { navigate, procHref } from "./router";
@@ -41,6 +41,12 @@ export function ProcessCard({ agent, proc, connected, cpuSeries, memSeries, erro
     redeploy(agent, proc.name).catch(() => {});
   }
 
+  function handleDismiss(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    control(agent, proc.name, "delete").catch(() => {});
+  }
+
   return (
     <a className={`pcard ${state === "errored" || state === "failed" ? "errored" : ""}`} href={procHref(agent, proc.name)}
        onClick={(e) => { e.preventDefault(); navigate(procHref(agent, proc.name)); }}>
@@ -59,12 +65,20 @@ export function ProcessCard({ agent, proc, connected, cpuSeries, memSeries, erro
           )}
         </div>
         <div className="ctl" onClick={(e) => e.stopPropagation()}>
-          {proc.source === "git" && state === "online" && (
-            <button className="btn-redeploy ctl-btn" onClick={handleRedeploy}>
-              ↺ redeploy
+          {isFailed ? (
+            <button className="btn-dismiss ctl-btn" onClick={handleDismiss}>
+              ✕ dismiss
             </button>
+          ) : (
+            <>
+              {proc.source === "git" && state === "online" && (
+                <button className="btn-redeploy ctl-btn" onClick={handleRedeploy}>
+                  ↺ redeploy
+                </button>
+              )}
+              <ControlButtons agent={agent} proc={proc.name} state={state} connected={connected} />
+            </>
           )}
-          <ControlButtons agent={agent} proc={proc.name} state={state} connected={connected} />
         </div>
       </div>
       {isFailed && proc.detail && (

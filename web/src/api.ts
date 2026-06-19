@@ -116,13 +116,13 @@ export async function getLogStats(agent: string): Promise<Record<string, number>
 
 export type ControlResult = { ok: boolean; error?: string };
 
-// control posts a Restart/Stop and surfaces server errors as values — it never
-// throws, so a failed control call cannot trigger a logout (only the fleet poll
-// owns auth). 200 -> the agent's result; 400/502 -> {ok:false,error}.
+// control posts a Restart/Stop/Delete and surfaces server errors as values — it
+// never throws, so a failed control call cannot trigger a logout (only the fleet
+// poll owns auth). 200 -> the agent's result; 400/502 -> {ok:false,error}.
 export async function control(
   agent: string,
   selector: string,
-  action: "restart" | "stop",
+  action: "restart" | "stop" | "delete",
 ): Promise<ControlResult> {
   const r = await fetch("/api/control", {
     method: "POST",
@@ -188,7 +188,8 @@ export async function addApp(agent: string, source: CommandSource | GitSource): 
 }
 
 // redeploy triggers a git re-clone and rebuild for an existing git app.
-// Like control() it never throws — errors surface as {ok:false,error}.
+// Throws on 401 like control() (the fleet poll owns auth); all other failures
+// surface as {ok:false,error} so callers never get an unhandled rejection.
 export async function redeploy(agent: string, name: string): Promise<{ ok: boolean; error?: string }> {
   const res = await fetch("/api/apps/redeploy", {
     method: "POST",
@@ -196,5 +197,9 @@ export async function redeploy(agent: string, name: string): Promise<{ ok: boole
     body: JSON.stringify({ agent, name }),
   });
   if (res.status === 401) throw new Error("error 401");
-  return res.json();
+  try {
+    return (await res.json()) as { ok: boolean; error?: string };
+  } catch {
+    return { ok: false, error: `error ${res.status}` };
+  }
 }
