@@ -242,3 +242,18 @@ func TestValidateAppNames(t *testing.T) {
 		}
 	}
 }
+
+func TestGitSourceCredentialRoundTrip(t *testing.T) {
+	src := GitSource{Repo: "https://x/y.git", Credential: "gh-ci"}
+	b, err := json.Marshal(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got GitSource
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Credential != "gh-ci" {
+		t.Fatalf("credential lost: %q", got.Credential)
+	}
+}
