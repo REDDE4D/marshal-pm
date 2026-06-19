@@ -178,12 +178,13 @@ func (d *Deployer) fetch(ctx context.Context, dir string, src config.GitSource, 
 		if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 			return err
 		}
-		args := []string{"clone"}
-		if src.Ref != "" {
-			args = append(args, "--branch", src.Ref)
+		if err := d.runner.Run(ctx, "", stdout, stderr, "git", "clone", src.Repo, dir); err != nil {
+			return err
 		}
-		args = append(args, src.Repo, dir)
-		return d.runner.Run(ctx, "", stdout, stderr, "git", args...)
+		if src.Ref != "" {
+			return d.runner.Run(ctx, dir, stdout, stderr, "git", "checkout", src.Ref)
+		}
+		return nil
 	}
 	if err := d.runner.Run(ctx, dir, stdout, stderr, "git", "fetch", "origin"); err != nil {
 		return err
