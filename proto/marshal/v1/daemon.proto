@@ -27,6 +27,16 @@ message Ack {
   string message = 2;
 }
 
+// GitSource describes deploying an app from a git repository. It mirrors
+// config.GitSource. Only repo is required; ref empty → default branch,
+// build empty → auto-detected, subdir empty → repo root.
+message GitSource {
+  string repo   = 1;
+  string ref    = 2;
+  string build  = 3;
+  string subdir = 4;
+}
+
 // AppSpec mirrors config.App. kill_timeout is a Go duration string ("5s").
 message AppSpec {
   string name = 1;
@@ -39,6 +49,7 @@ message AppSpec {
   int32 max_restarts = 8;
   string kill_timeout = 9;
   optional LogRetention logs = 10; // M6 per-app retention override
+  optional GitSource source = 11; // M21 git deploy; nil for command apps
 }
 
 message StartRequest { repeated AppSpec apps = 1; }
@@ -57,6 +68,8 @@ message ProcInfo {
   int32 restarts = 7;
   double cpu = 8; // M3
   int64 mem = 9;  // M3
+  string source = 10; // M21 "command" | "git" — drives the redeploy button
+  string detail = 11; // M21 status summary for synthetic deploy entries
 }
 
 message ProcList { repeated ProcInfo procs = 1; }

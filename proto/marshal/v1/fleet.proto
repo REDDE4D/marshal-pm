@@ -98,6 +98,9 @@ message FleetMetricsHistoryRequest {
   int64  bucket_ms  = 4;
 }
 
+message DeployRequest   { AppSpec app    = 1; } // M21 git source rides on the AppSpec
+message RedeployRequest { string  target = 1; } // M21 app name
+
 // M9 — control-plane command surface, shared by the down-stream Command and the
 // CLI's unary FleetControl so the op/result shapes have one definition.
 message ControlOp {
@@ -106,6 +109,8 @@ message ControlOp {
     Selector     restart = 2;
     Selector     delete  = 3;
     StartRequest start   = 4; // reuses AppSpec from daemon.proto
+    DeployRequest   deploy   = 5; // M21
+    RedeployRequest redeploy = 6; // M21
   }
 }
 
