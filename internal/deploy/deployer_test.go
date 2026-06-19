@@ -314,6 +314,65 @@ func TestNoCredentialNoAskpass(t *testing.T) {
 	}
 }
 
+// argvHasSeq reports whether args contains a immediately followed by b.
+func argvHasSeq(args []string, a, b string) bool {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == a && args[i+1] == b {
+			return true
+		}
+	}
+	return false
+}
+
+func TestCloneDisablesCredentialHelperWhenManaged(t *testing.T) {
+	fr := &fakeRunner{}
+	host := newFakeHost()
+	d := New(host, fr, t.TempDir())
+
+	// With a managed credential: clone args must disable credential helpers.
+	app := config.App{Name: "priv2", Source: &config.GitSource{Repo: "https://github.com/me/priv2.git"}}
+	if err := d.Start(app, Credential{Username: "octocat", Token: "ghp_x"}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	d.wait()
+
+	clone := fr.find("clone")
+	if clone == nil {
+		t.Fatal("no clone call recorded")
+	}
+	// Must have -c credential.helper= (consecutive args).
+	if !argvHasSeq(clone.cmd, "-c", "credential.helper=") {
+		t.Fatalf("managed clone did not disable credential helpers: %v", clone.cmd)
+	}
+	// Username-only URL still present.
+	if !argvHas(clone.cmd, "https://octocat@github.com/me/priv2.git") {
+		t.Fatalf("username-in-URL missing from managed clone: %v", clone.cmd)
+	}
+	// Token must not appear in argv.
+	for _, a := range clone.cmd {
+		if strings.Contains(a, "ghp_x") {
+			t.Fatalf("token leaked into argv: %v", clone.cmd)
+		}
+	}
+
+	// Without a managed credential: clone args must NOT disable credential helpers.
+	fr2 := &fakeRunner{}
+	d2 := New(newFakeHost(), fr2, t.TempDir())
+	app2 := config.App{Name: "pub2", Source: &config.GitSource{Repo: "https://github.com/me/pub2.git"}}
+	if err := d2.Start(app2, Credential{}); err != nil {
+		t.Fatalf("Start (no-cred): %v", err)
+	}
+	d2.wait()
+
+	clone2 := fr2.find("clone")
+	if clone2 == nil {
+		t.Fatal("no clone call recorded (no-cred)")
+	}
+	if argvHas(clone2.cmd, "credential.helper=") {
+		t.Fatalf("no-cred clone should not disable credential helpers: %v", clone2.cmd)
+	}
+}
+
 func TestSnapshotsAndForget(t *testing.T) {
 	root := t.TempDir()
 	d := New(newFakeHost(), &fakeRunner{}, root)

@@ -213,20 +213,22 @@ func (d *Deployer) fetch(ctx context.Context, dir string, src config.GitSource, 
 	}
 	defer cleanup()
 
+	credActive := cred.Token != ""
+
 	if !redeploy {
 		_ = os.RemoveAll(dir)
 		if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 			return err
 		}
 		cloneURL := src.Repo
-		if cred.Token != "" {
+		if credActive {
 			cloneURL = withUsername(src.Repo, cred.Username)
 		}
-		if err := d.runner.Run(ctx, "", env, stdout, stderr, "git", "clone", cloneURL, dir); err != nil {
+		if err := d.runner.Run(ctx, "", env, stdout, stderr, "git", gitArgs(credActive, "clone", cloneURL, dir)...); err != nil {
 			return err
 		}
 		if src.Ref != "" {
-			return d.runner.Run(ctx, dir, env, stdout, stderr, "git", "checkout", src.Ref)
+			return d.runner.Run(ctx, dir, env, stdout, stderr, "git", gitArgs(credActive, "checkout", src.Ref)...)
 		}
 		return nil
 	}
@@ -234,10 +236,10 @@ func (d *Deployer) fetch(ctx context.Context, dir string, src config.GitSource, 
 	if ref == "" {
 		ref = "HEAD"
 	}
-	if err := d.runner.Run(ctx, dir, env, stdout, stderr, "git", "fetch", "origin", ref); err != nil {
+	if err := d.runner.Run(ctx, dir, env, stdout, stderr, "git", gitArgs(credActive, "fetch", "origin", ref)...); err != nil {
 		return err
 	}
-	return d.runner.Run(ctx, dir, env, stdout, stderr, "git", "reset", "--hard", "FETCH_HEAD")
+	return d.runner.Run(ctx, dir, env, stdout, stderr, "git", gitArgs(credActive, "reset", "--hard", "FETCH_HEAD")...)
 }
 
 // gitCredEnv writes a throwaway GIT_ASKPASS helper and returns the env that
@@ -278,6 +280,16 @@ func withUsername(raw, user string) string {
 	}
 	u.User = url.User(user)
 	return u.String()
+}
+
+// gitArgs prepends an inline "disable credential helpers" config when a
+// managed credential is active, so the GIT_ASKPASS token is authoritative and
+// no inherited helper (osxkeychain/libsecret/store) caches or replays it.
+func gitArgs(credActive bool, args ...string) []string {
+	if credActive {
+		return append([]string{"-c", "credential.helper="}, args...)
+	}
+	return args
 }
 
 func summarize(stage string, err error) string { return stage + " failed: " + err.Error() }
