@@ -50,6 +50,9 @@ func (s *Store) MetricsDBPath() string { return filepath.Join(s.base, "metrics.d
 // EnsureLogsDir creates the logs directory (0700) if it does not exist.
 func (s *Store) EnsureLogsDir() error { return os.MkdirAll(s.LogsDir(), 0o700) }
 
+// DeploysDir is where git checkouts live (one subdir per app).
+func (s *Store) DeploysDir() string { return filepath.Join(s.base, "deploys") }
+
 func (s *Store) dumpPath() string { return filepath.Join(s.base, "dump.json") }
 
 func (s *Store) serverPath() string { return filepath.Join(s.base, "fleet.json") }

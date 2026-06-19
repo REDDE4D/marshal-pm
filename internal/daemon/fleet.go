@@ -3,27 +3,32 @@ package daemon
 import (
 	"marshal/internal/fleet"
 	"marshal/internal/logs"
-	"marshal/internal/manager"
-	"marshal/internal/metrics"
 	"marshal/internal/metricstore"
 	"marshal/internal/pb"
 )
 
 // fleetSnapshot returns a SnapshotFunc over the manager's current instances,
 // merging the sampler's latest cpu/mem (zero until the first sample tick).
-func fleetSnapshot(m *manager.Manager, smp *metrics.Sampler) fleet.SnapshotFunc {
+// It also appends synthetic deployer entries (in-flight / failed deploys).
+func (s *Server) fleetSnapshot() fleet.SnapshotFunc {
 	return func() []*pb.ProcInfo {
-		snaps := m.List()
+		snaps := s.mgr.List()
 		out := make([]*pb.ProcInfo, 0, len(snaps))
-		for _, s := range snaps {
+		for _, sn := range snaps {
 			var cpu float64
 			var mem uint64
-			if smp != nil {
-				if sm, ok := smp.Get(s.Label); ok {
+			if s.metrics != nil {
+				if sm, ok := s.metrics.Get(sn.Label); ok {
 					cpu, mem = sm.Cpu, sm.Mem
 				}
 			}
-			out = append(out, snapshotToProc(s, cpu, mem))
+			out = append(out, snapshotToProc(sn, cpu, mem))
+		}
+		if s.deployer != nil {
+			deploySnaps := s.deployer.Snapshots()
+			for i := range deploySnaps {
+				out = append(out, &deploySnaps[i])
+			}
 		}
 		return out
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"marshal/internal/deploy"
 	"marshal/internal/manager"
 	"marshal/internal/pb"
 	"marshal/internal/store"
@@ -17,7 +18,9 @@ func newCommandTestServer(t *testing.T) *Server {
 	if err := st.EnsureDir(); err != nil {
 		t.Fatal(err)
 	}
-	return &Server{mgr: manager.New(context.Background()), store: st}
+	s := &Server{mgr: manager.New(context.Background()), store: st}
+	s.deployer = deploy.New(deployHost{s}, deploy.ExecRunner{}, t.TempDir())
+	return s
 }
 
 func sleepLongSpec(name string) *pb.AppSpec {
@@ -146,5 +149,30 @@ func TestHandleFleetCommandNilOp(t *testing.T) {
 	res := s.handleFleetCommand(&pb.Command{RequestId: 99, Op: nil})
 	if res.GetOk() {
 		t.Fatal("expected Ok=false for nil op")
+	}
+}
+
+func TestHandleFleetCommandDeployAccepts(t *testing.T) {
+	s := newCommandTestServer(t)
+	res := s.handleFleetCommand(&pb.Command{Op: &pb.ControlOp{
+		Op: &pb.ControlOp_Deploy{Deploy: &pb.DeployRequest{App: &pb.AppSpec{
+			Name: "web", Cmd: "./server", Instances: 1,
+			Source: &pb.GitSource{Repo: "https://example/r.git"},
+		}}},
+	}})
+	if !res.GetOk() {
+		t.Fatalf("deploy should be accepted, got error %q", res.GetError())
+	}
+}
+
+func TestHandleFleetCommandDeployRejectsNoRepo(t *testing.T) {
+	s := newCommandTestServer(t)
+	res := s.handleFleetCommand(&pb.Command{Op: &pb.ControlOp{
+		Op: &pb.ControlOp_Deploy{Deploy: &pb.DeployRequest{App: &pb.AppSpec{
+			Name: "web", Cmd: "./server", Source: &pb.GitSource{},
+		}}},
+	}})
+	if res.GetOk() {
+		t.Fatal("deploy with empty repo should be rejected")
 	}
 }

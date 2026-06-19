@@ -224,3 +224,21 @@ func TestServerWithFingerprintParses(t *testing.T) {
 		t.Fatalf("fingerprint = %q", cfg.Server.Fingerprint)
 	}
 }
+
+func TestValidateAppNames(t *testing.T) {
+	invalid := []string{"../escape", "..", "-bad", ".hidden", "has space", "has/slash"}
+	for _, name := range invalid {
+		_, err := Parse([]byte("apps:\n  - name: " + `"` + name + `"` + "\n    cmd: ./x\n"))
+		if err == nil {
+			t.Errorf("expected error for invalid app name %q", name)
+		}
+	}
+	// valid names
+	valid := []string{"web-1.2", "api", "my-app", "v1", "app_1", "A1"}
+	for _, name := range valid {
+		_, err := Parse([]byte("apps:\n  - name: " + name + "\n    cmd: ./x\n"))
+		if err != nil {
+			t.Errorf("unexpected error for valid app name %q: %v", name, err)
+		}
+	}
+}

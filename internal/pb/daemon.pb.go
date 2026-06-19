@@ -159,6 +159,77 @@ func (x *Ack) GetMessage() string {
 	return ""
 }
 
+// GitSource describes deploying an app from a git repository. It mirrors
+// config.GitSource. Only repo is required; ref empty → default branch,
+// build empty → auto-detected, subdir empty → repo root.
+type GitSource struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Repo          string                 `protobuf:"bytes,1,opt,name=repo,proto3" json:"repo,omitempty"`
+	Ref           string                 `protobuf:"bytes,2,opt,name=ref,proto3" json:"ref,omitempty"`
+	Build         string                 `protobuf:"bytes,3,opt,name=build,proto3" json:"build,omitempty"`
+	Subdir        string                 `protobuf:"bytes,4,opt,name=subdir,proto3" json:"subdir,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitSource) Reset() {
+	*x = GitSource{}
+	mi := &file_marshal_v1_daemon_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitSource) ProtoMessage() {}
+
+func (x *GitSource) ProtoReflect() protoreflect.Message {
+	mi := &file_marshal_v1_daemon_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitSource.ProtoReflect.Descriptor instead.
+func (*GitSource) Descriptor() ([]byte, []int) {
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *GitSource) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *GitSource) GetRef() string {
+	if x != nil {
+		return x.Ref
+	}
+	return ""
+}
+
+func (x *GitSource) GetBuild() string {
+	if x != nil {
+		return x.Build
+	}
+	return ""
+}
+
+func (x *GitSource) GetSubdir() string {
+	if x != nil {
+		return x.Subdir
+	}
+	return ""
+}
+
 // AppSpec mirrors config.App. kill_timeout is a Go duration string ("5s").
 type AppSpec struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -171,14 +242,15 @@ type AppSpec struct {
 	Restart       string                 `protobuf:"bytes,7,opt,name=restart,proto3" json:"restart,omitempty"` // always | on-failure | no
 	MaxRestarts   int32                  `protobuf:"varint,8,opt,name=max_restarts,json=maxRestarts,proto3" json:"max_restarts,omitempty"`
 	KillTimeout   string                 `protobuf:"bytes,9,opt,name=kill_timeout,json=killTimeout,proto3" json:"kill_timeout,omitempty"`
-	Logs          *LogRetention          `protobuf:"bytes,10,opt,name=logs,proto3,oneof" json:"logs,omitempty"` // M6 per-app retention override
+	Logs          *LogRetention          `protobuf:"bytes,10,opt,name=logs,proto3,oneof" json:"logs,omitempty"`     // M6 per-app retention override
+	Source        *GitSource             `protobuf:"bytes,11,opt,name=source,proto3,oneof" json:"source,omitempty"` // M21 git deploy; nil for command apps
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AppSpec) Reset() {
 	*x = AppSpec{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[2]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -190,7 +262,7 @@ func (x *AppSpec) String() string {
 func (*AppSpec) ProtoMessage() {}
 
 func (x *AppSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[2]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -203,7 +275,7 @@ func (x *AppSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppSpec.ProtoReflect.Descriptor instead.
 func (*AppSpec) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{2}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *AppSpec) GetName() string {
@@ -276,6 +348,13 @@ func (x *AppSpec) GetLogs() *LogRetention {
 	return nil
 }
 
+func (x *AppSpec) GetSource() *GitSource {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
 type StartRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Apps          []*AppSpec             `protobuf:"bytes,1,rep,name=apps,proto3" json:"apps,omitempty"`
@@ -285,7 +364,7 @@ type StartRequest struct {
 
 func (x *StartRequest) Reset() {
 	*x = StartRequest{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[3]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -297,7 +376,7 @@ func (x *StartRequest) String() string {
 func (*StartRequest) ProtoMessage() {}
 
 func (x *StartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[3]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -310,7 +389,7 @@ func (x *StartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartRequest.ProtoReflect.Descriptor instead.
 func (*StartRequest) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{3}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *StartRequest) GetApps() []*AppSpec {
@@ -330,7 +409,7 @@ type Selector struct {
 
 func (x *Selector) Reset() {
 	*x = Selector{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[4]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -342,7 +421,7 @@ func (x *Selector) String() string {
 func (*Selector) ProtoMessage() {}
 
 func (x *Selector) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[4]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -355,7 +434,7 @@ func (x *Selector) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Selector.ProtoReflect.Descriptor instead.
 func (*Selector) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{4}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Selector) GetTarget() string {
@@ -375,15 +454,17 @@ type ProcInfo struct {
 	Pid           int32                  `protobuf:"varint,5,opt,name=pid,proto3" json:"pid,omitempty"`
 	UptimeMs      int64                  `protobuf:"varint,6,opt,name=uptime_ms,json=uptimeMs,proto3" json:"uptime_ms,omitempty"`
 	Restarts      int32                  `protobuf:"varint,7,opt,name=restarts,proto3" json:"restarts,omitempty"`
-	Cpu           float64                `protobuf:"fixed64,8,opt,name=cpu,proto3" json:"cpu,omitempty"` // M3
-	Mem           int64                  `protobuf:"varint,9,opt,name=mem,proto3" json:"mem,omitempty"`  // M3
+	Cpu           float64                `protobuf:"fixed64,8,opt,name=cpu,proto3" json:"cpu,omitempty"`      // M3
+	Mem           int64                  `protobuf:"varint,9,opt,name=mem,proto3" json:"mem,omitempty"`       // M3
+	Source        string                 `protobuf:"bytes,10,opt,name=source,proto3" json:"source,omitempty"` // M21 "command" | "git" — drives the redeploy button
+	Detail        string                 `protobuf:"bytes,11,opt,name=detail,proto3" json:"detail,omitempty"` // M21 status summary for synthetic deploy entries
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ProcInfo) Reset() {
 	*x = ProcInfo{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[5]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -395,7 +476,7 @@ func (x *ProcInfo) String() string {
 func (*ProcInfo) ProtoMessage() {}
 
 func (x *ProcInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[5]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -408,7 +489,7 @@ func (x *ProcInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcInfo.ProtoReflect.Descriptor instead.
 func (*ProcInfo) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{5}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ProcInfo) GetId() int32 {
@@ -474,6 +555,20 @@ func (x *ProcInfo) GetMem() int64 {
 	return 0
 }
 
+func (x *ProcInfo) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *ProcInfo) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
 type ProcList struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Procs         []*ProcInfo            `protobuf:"bytes,1,rep,name=procs,proto3" json:"procs,omitempty"`
@@ -483,7 +578,7 @@ type ProcList struct {
 
 func (x *ProcList) Reset() {
 	*x = ProcList{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[6]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -495,7 +590,7 @@ func (x *ProcList) String() string {
 func (*ProcList) ProtoMessage() {}
 
 func (x *ProcList) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[6]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -508,7 +603,7 @@ func (x *ProcList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcList.ProtoReflect.Descriptor instead.
 func (*ProcList) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{6}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ProcList) GetProcs() []*ProcInfo {
@@ -531,7 +626,7 @@ type LogRequest struct {
 
 func (x *LogRequest) Reset() {
 	*x = LogRequest{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[7]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -543,7 +638,7 @@ func (x *LogRequest) String() string {
 func (*LogRequest) ProtoMessage() {}
 
 func (x *LogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[7]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -556,7 +651,7 @@ func (x *LogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogRequest.ProtoReflect.Descriptor instead.
 func (*LogRequest) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{7}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *LogRequest) GetTarget() string {
@@ -600,7 +695,7 @@ type LogRetention struct {
 
 func (x *LogRetention) Reset() {
 	*x = LogRetention{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[8]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -612,7 +707,7 @@ func (x *LogRetention) String() string {
 func (*LogRetention) ProtoMessage() {}
 
 func (x *LogRetention) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[8]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -625,7 +720,7 @@ func (x *LogRetention) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogRetention.ProtoReflect.Descriptor instead.
 func (*LogRetention) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{8}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *LogRetention) GetMaxSizeMb() int32 {
@@ -668,7 +763,7 @@ type LogLine struct {
 
 func (x *LogLine) Reset() {
 	*x = LogLine{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[9]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -680,7 +775,7 @@ func (x *LogLine) String() string {
 func (*LogLine) ProtoMessage() {}
 
 func (x *LogLine) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[9]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -693,7 +788,7 @@ func (x *LogLine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogLine.ProtoReflect.Descriptor instead.
 func (*LogLine) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{9}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *LogLine) GetName() string {
@@ -736,7 +831,7 @@ type MetricsHistoryRequest struct {
 
 func (x *MetricsHistoryRequest) Reset() {
 	*x = MetricsHistoryRequest{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[10]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -748,7 +843,7 @@ func (x *MetricsHistoryRequest) String() string {
 func (*MetricsHistoryRequest) ProtoMessage() {}
 
 func (x *MetricsHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[10]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -761,7 +856,7 @@ func (x *MetricsHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MetricsHistoryRequest.ProtoReflect.Descriptor instead.
 func (*MetricsHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{10}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *MetricsHistoryRequest) GetSelector() string {
@@ -798,7 +893,7 @@ type MetricBucket struct {
 
 func (x *MetricBucket) Reset() {
 	*x = MetricBucket{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[11]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -810,7 +905,7 @@ func (x *MetricBucket) String() string {
 func (*MetricBucket) ProtoMessage() {}
 
 func (x *MetricBucket) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[11]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -823,7 +918,7 @@ func (x *MetricBucket) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MetricBucket.ProtoReflect.Descriptor instead.
 func (*MetricBucket) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{11}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *MetricBucket) GetTsMs() int64 {
@@ -870,7 +965,7 @@ type MetricsHistoryResponse struct {
 
 func (x *MetricsHistoryResponse) Reset() {
 	*x = MetricsHistoryResponse{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[12]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -882,7 +977,7 @@ func (x *MetricsHistoryResponse) String() string {
 func (*MetricsHistoryResponse) ProtoMessage() {}
 
 func (x *MetricsHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[12]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -895,7 +990,7 @@ func (x *MetricsHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MetricsHistoryResponse.ProtoReflect.Descriptor instead.
 func (*MetricsHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{12}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *MetricsHistoryResponse) GetBuckets() []*MetricBucket {
@@ -914,7 +1009,12 @@ const file_marshal_v1_daemon_proto_rawDesc = "" +
 	"\x05Empty\"/\n" +
 	"\x03Ack\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xf7\x02\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"_\n" +
+	"\tGitSource\x12\x12\n" +
+	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x10\n" +
+	"\x03ref\x18\x02 \x01(\tR\x03ref\x12\x14\n" +
+	"\x05build\x18\x03 \x01(\tR\x05build\x12\x16\n" +
+	"\x06subdir\x18\x04 \x01(\tR\x06subdir\"\xb6\x03\n" +
 	"\aAppSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03cmd\x18\x02 \x01(\tR\x03cmd\x12\x12\n" +
@@ -926,15 +1026,17 @@ const file_marshal_v1_daemon_proto_rawDesc = "" +
 	"\fmax_restarts\x18\b \x01(\x05R\vmaxRestarts\x12!\n" +
 	"\fkill_timeout\x18\t \x01(\tR\vkillTimeout\x121\n" +
 	"\x04logs\x18\n" +
-	" \x01(\v2\x18.marshal.v1.LogRetentionH\x00R\x04logs\x88\x01\x01\x1a6\n" +
+	" \x01(\v2\x18.marshal.v1.LogRetentionH\x00R\x04logs\x88\x01\x01\x122\n" +
+	"\x06source\x18\v \x01(\v2\x15.marshal.v1.GitSourceH\x01R\x06source\x88\x01\x01\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\a\n" +
-	"\x05_logs\"7\n" +
+	"\x05_logsB\t\n" +
+	"\a_source\"7\n" +
 	"\fStartRequest\x12'\n" +
 	"\x04apps\x18\x01 \x03(\v2\x13.marshal.v1.AppSpecR\x04apps\"\"\n" +
 	"\bSelector\x12\x16\n" +
-	"\x06target\x18\x01 \x01(\tR\x06target\"\xd4\x01\n" +
+	"\x06target\x18\x01 \x01(\tR\x06target\"\x84\x02\n" +
 	"\bProcInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1f\n" +
@@ -945,7 +1047,10 @@ const file_marshal_v1_daemon_proto_rawDesc = "" +
 	"\tuptime_ms\x18\x06 \x01(\x03R\buptimeMs\x12\x1a\n" +
 	"\brestarts\x18\a \x01(\x05R\brestarts\x12\x10\n" +
 	"\x03cpu\x18\b \x01(\x01R\x03cpu\x12\x10\n" +
-	"\x03mem\x18\t \x01(\x03R\x03mem\"6\n" +
+	"\x03mem\x18\t \x01(\x03R\x03mem\x12\x16\n" +
+	"\x06source\x18\n" +
+	" \x01(\tR\x06source\x12\x16\n" +
+	"\x06detail\x18\v \x01(\tR\x06detail\"6\n" +
 	"\bProcList\x12*\n" +
 	"\x05procs\x18\x01 \x03(\v2\x14.marshal.v1.ProcInfoR\x05procs\"\x81\x01\n" +
 	"\n" +
@@ -1013,58 +1118,60 @@ func file_marshal_v1_daemon_proto_rawDescGZIP() []byte {
 }
 
 var file_marshal_v1_daemon_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_marshal_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_marshal_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_marshal_v1_daemon_proto_goTypes = []any{
 	(LogStream)(0),                 // 0: marshal.v1.LogStream
 	(*Empty)(nil),                  // 1: marshal.v1.Empty
 	(*Ack)(nil),                    // 2: marshal.v1.Ack
-	(*AppSpec)(nil),                // 3: marshal.v1.AppSpec
-	(*StartRequest)(nil),           // 4: marshal.v1.StartRequest
-	(*Selector)(nil),               // 5: marshal.v1.Selector
-	(*ProcInfo)(nil),               // 6: marshal.v1.ProcInfo
-	(*ProcList)(nil),               // 7: marshal.v1.ProcList
-	(*LogRequest)(nil),             // 8: marshal.v1.LogRequest
-	(*LogRetention)(nil),           // 9: marshal.v1.LogRetention
-	(*LogLine)(nil),                // 10: marshal.v1.LogLine
-	(*MetricsHistoryRequest)(nil),  // 11: marshal.v1.MetricsHistoryRequest
-	(*MetricBucket)(nil),           // 12: marshal.v1.MetricBucket
-	(*MetricsHistoryResponse)(nil), // 13: marshal.v1.MetricsHistoryResponse
-	nil,                            // 14: marshal.v1.AppSpec.EnvEntry
+	(*GitSource)(nil),              // 3: marshal.v1.GitSource
+	(*AppSpec)(nil),                // 4: marshal.v1.AppSpec
+	(*StartRequest)(nil),           // 5: marshal.v1.StartRequest
+	(*Selector)(nil),               // 6: marshal.v1.Selector
+	(*ProcInfo)(nil),               // 7: marshal.v1.ProcInfo
+	(*ProcList)(nil),               // 8: marshal.v1.ProcList
+	(*LogRequest)(nil),             // 9: marshal.v1.LogRequest
+	(*LogRetention)(nil),           // 10: marshal.v1.LogRetention
+	(*LogLine)(nil),                // 11: marshal.v1.LogLine
+	(*MetricsHistoryRequest)(nil),  // 12: marshal.v1.MetricsHistoryRequest
+	(*MetricBucket)(nil),           // 13: marshal.v1.MetricBucket
+	(*MetricsHistoryResponse)(nil), // 14: marshal.v1.MetricsHistoryResponse
+	nil,                            // 15: marshal.v1.AppSpec.EnvEntry
 }
 var file_marshal_v1_daemon_proto_depIdxs = []int32{
-	14, // 0: marshal.v1.AppSpec.env:type_name -> marshal.v1.AppSpec.EnvEntry
-	9,  // 1: marshal.v1.AppSpec.logs:type_name -> marshal.v1.LogRetention
-	3,  // 2: marshal.v1.StartRequest.apps:type_name -> marshal.v1.AppSpec
-	6,  // 3: marshal.v1.ProcList.procs:type_name -> marshal.v1.ProcInfo
-	0,  // 4: marshal.v1.LogRequest.stream:type_name -> marshal.v1.LogStream
-	12, // 5: marshal.v1.MetricsHistoryResponse.buckets:type_name -> marshal.v1.MetricBucket
-	4,  // 6: marshal.v1.Daemon.Start:input_type -> marshal.v1.StartRequest
-	5,  // 7: marshal.v1.Daemon.Stop:input_type -> marshal.v1.Selector
-	5,  // 8: marshal.v1.Daemon.Restart:input_type -> marshal.v1.Selector
-	5,  // 9: marshal.v1.Daemon.Delete:input_type -> marshal.v1.Selector
-	1,  // 10: marshal.v1.Daemon.List:input_type -> marshal.v1.Empty
-	5,  // 11: marshal.v1.Daemon.Describe:input_type -> marshal.v1.Selector
-	1,  // 12: marshal.v1.Daemon.Save:input_type -> marshal.v1.Empty
-	1,  // 13: marshal.v1.Daemon.Resurrect:input_type -> marshal.v1.Empty
-	1,  // 14: marshal.v1.Daemon.Kill:input_type -> marshal.v1.Empty
-	8,  // 15: marshal.v1.Daemon.Logs:input_type -> marshal.v1.LogRequest
-	11, // 16: marshal.v1.Daemon.MetricsHistory:input_type -> marshal.v1.MetricsHistoryRequest
-	7,  // 17: marshal.v1.Daemon.Start:output_type -> marshal.v1.ProcList
-	7,  // 18: marshal.v1.Daemon.Stop:output_type -> marshal.v1.ProcList
-	7,  // 19: marshal.v1.Daemon.Restart:output_type -> marshal.v1.ProcList
-	7,  // 20: marshal.v1.Daemon.Delete:output_type -> marshal.v1.ProcList
-	7,  // 21: marshal.v1.Daemon.List:output_type -> marshal.v1.ProcList
-	7,  // 22: marshal.v1.Daemon.Describe:output_type -> marshal.v1.ProcList
-	2,  // 23: marshal.v1.Daemon.Save:output_type -> marshal.v1.Ack
-	7,  // 24: marshal.v1.Daemon.Resurrect:output_type -> marshal.v1.ProcList
-	2,  // 25: marshal.v1.Daemon.Kill:output_type -> marshal.v1.Ack
-	10, // 26: marshal.v1.Daemon.Logs:output_type -> marshal.v1.LogLine
-	13, // 27: marshal.v1.Daemon.MetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
-	17, // [17:28] is the sub-list for method output_type
-	6,  // [6:17] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	15, // 0: marshal.v1.AppSpec.env:type_name -> marshal.v1.AppSpec.EnvEntry
+	10, // 1: marshal.v1.AppSpec.logs:type_name -> marshal.v1.LogRetention
+	3,  // 2: marshal.v1.AppSpec.source:type_name -> marshal.v1.GitSource
+	4,  // 3: marshal.v1.StartRequest.apps:type_name -> marshal.v1.AppSpec
+	7,  // 4: marshal.v1.ProcList.procs:type_name -> marshal.v1.ProcInfo
+	0,  // 5: marshal.v1.LogRequest.stream:type_name -> marshal.v1.LogStream
+	13, // 6: marshal.v1.MetricsHistoryResponse.buckets:type_name -> marshal.v1.MetricBucket
+	5,  // 7: marshal.v1.Daemon.Start:input_type -> marshal.v1.StartRequest
+	6,  // 8: marshal.v1.Daemon.Stop:input_type -> marshal.v1.Selector
+	6,  // 9: marshal.v1.Daemon.Restart:input_type -> marshal.v1.Selector
+	6,  // 10: marshal.v1.Daemon.Delete:input_type -> marshal.v1.Selector
+	1,  // 11: marshal.v1.Daemon.List:input_type -> marshal.v1.Empty
+	6,  // 12: marshal.v1.Daemon.Describe:input_type -> marshal.v1.Selector
+	1,  // 13: marshal.v1.Daemon.Save:input_type -> marshal.v1.Empty
+	1,  // 14: marshal.v1.Daemon.Resurrect:input_type -> marshal.v1.Empty
+	1,  // 15: marshal.v1.Daemon.Kill:input_type -> marshal.v1.Empty
+	9,  // 16: marshal.v1.Daemon.Logs:input_type -> marshal.v1.LogRequest
+	12, // 17: marshal.v1.Daemon.MetricsHistory:input_type -> marshal.v1.MetricsHistoryRequest
+	8,  // 18: marshal.v1.Daemon.Start:output_type -> marshal.v1.ProcList
+	8,  // 19: marshal.v1.Daemon.Stop:output_type -> marshal.v1.ProcList
+	8,  // 20: marshal.v1.Daemon.Restart:output_type -> marshal.v1.ProcList
+	8,  // 21: marshal.v1.Daemon.Delete:output_type -> marshal.v1.ProcList
+	8,  // 22: marshal.v1.Daemon.List:output_type -> marshal.v1.ProcList
+	8,  // 23: marshal.v1.Daemon.Describe:output_type -> marshal.v1.ProcList
+	2,  // 24: marshal.v1.Daemon.Save:output_type -> marshal.v1.Ack
+	8,  // 25: marshal.v1.Daemon.Resurrect:output_type -> marshal.v1.ProcList
+	2,  // 26: marshal.v1.Daemon.Kill:output_type -> marshal.v1.Ack
+	11, // 27: marshal.v1.Daemon.Logs:output_type -> marshal.v1.LogLine
+	14, // 28: marshal.v1.Daemon.MetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
+	18, // [18:29] is the sub-list for method output_type
+	7,  // [7:18] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_marshal_v1_daemon_proto_init() }
@@ -1072,15 +1179,15 @@ func file_marshal_v1_daemon_proto_init() {
 	if File_marshal_v1_daemon_proto != nil {
 		return
 	}
-	file_marshal_v1_daemon_proto_msgTypes[2].OneofWrappers = []any{}
-	file_marshal_v1_daemon_proto_msgTypes[8].OneofWrappers = []any{}
+	file_marshal_v1_daemon_proto_msgTypes[3].OneofWrappers = []any{}
+	file_marshal_v1_daemon_proto_msgTypes[9].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_marshal_v1_daemon_proto_rawDesc), len(file_marshal_v1_daemon_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   14,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

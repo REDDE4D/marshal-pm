@@ -91,9 +91,25 @@ func TestControlBadAction(t *testing.T) {
 	defer srv.Close()
 	c := srv.Client()
 	cookie := loginCookie(t, c, srv.URL)
-	resp := postControl(t, c, srv.URL, cookie, `{"agent":"dev-1","selector":"web","action":"delete"}`)
+	resp := postControl(t, c, srv.URL, cookie, `{"agent":"dev-1","selector":"web","action":"unknown"}`)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("bad action = %d; want 400", resp.StatusCode)
+	}
+}
+
+func TestControlDeleteForwardsDeleteOp(t *testing.T) {
+	fc := &fakeController{res: &pb.ControlResult{Ok: true}}
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fc, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	defer srv.Close()
+	c := srv.Client()
+	cookie := loginCookie(t, c, srv.URL)
+
+	resp := postControl(t, c, srv.URL, cookie, `{"agent":"dev-1","selector":"web","action":"delete"}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("delete = %d; want 200", resp.StatusCode)
+	}
+	if fc.gotOp.GetDelete().GetTarget() != "web" {
+		t.Fatalf("forwarded op=%+v; want delete web", fc.gotOp)
 	}
 }
 

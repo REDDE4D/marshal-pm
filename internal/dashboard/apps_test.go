@@ -3,6 +3,7 @@ package dashboard
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -79,6 +80,30 @@ func TestAddAppUnsupportedSource(t *testing.T) {
 	}
 }
 
+func TestAddAppUnsupportedSourceType(t *testing.T) {
+	fc := &fakeController{}
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fc, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	defer srv.Close()
+	c := srv.Client()
+	cookie := loginCookie(t, c, srv.URL)
+	// "svn" is not a known source type — hits the default branch of the type switch.
+	resp := postApps(t, c, srv.URL, cookie, `{"agent":"dev-1","source":{"type":"svn","name":"web","cmd":"./svn-run"}}`)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unsupported source type = %d; want 400", resp.StatusCode)
+	}
+	body := resp.Body
+	defer body.Close()
+	var raw []byte
+	raw, _ = io.ReadAll(body)
+	if !strings.Contains(string(raw), "unsupported source type") {
+		t.Fatalf("expected 'unsupported source type' in body, got: %q", string(raw))
+	}
+	// Controller should NOT have been called for an unsupported type.
+	if fc.gotAgent != "" {
+		t.Fatalf("controller should not have been called for unsupported type, got agent=%q", fc.gotAgent)
+	}
+}
+
 func TestAddAppMissingFields(t *testing.T) {
 	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, &fakeController{}, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
 	defer srv.Close()
@@ -122,5 +147,68 @@ func TestAddAppTransportErrorIs502(t *testing.T) {
 	resp := postApps(t, c, srv.URL, cookie, `{"agent":"dev-1","source":{"type":"command","name":"web","cmd":"/bin/true"}}`)
 	if resp.StatusCode != http.StatusBadGateway {
 		t.Fatalf("transport error = %d; want 502", resp.StatusCode)
+	}
+}
+
+func postRedeploy(t *testing.T, c *http.Client, base string, cookie *http.Cookie, body string) *http.Response {
+	t.Helper()
+	req, _ := http.NewRequest("POST", base+"/api/apps/redeploy", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if cookie != nil {
+		req.AddCookie(cookie)
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
+}
+
+func TestAppsGitSourceSendsDeployOp(t *testing.T) {
+	fc := &fakeController{res: &pb.ControlResult{Ok: true}}
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fc, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	defer srv.Close()
+	c := srv.Client()
+	cookie := loginCookie(t, c, srv.URL)
+	body := `{"agent":"dev-1","source":{"type":"git","name":"web","cmd":"./server","repo":"https://example/r.git","ref":"main","build":"go build -o server ."}}`
+	resp := postApps(t, c, srv.URL, cookie, body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d; want 200", resp.StatusCode)
+	}
+	dep, ok := fc.gotOp.GetOp().(*pb.ControlOp_Deploy)
+	if !ok {
+		t.Fatalf("expected ControlOp_Deploy, got %T", fc.gotOp.GetOp())
+	}
+	if dep.Deploy.GetApp().GetSource().GetRepo() != "https://example/r.git" {
+		t.Fatalf("repo not forwarded: %+v", dep.Deploy.GetApp().GetSource())
+	}
+}
+
+func TestAppsGitSourceRequiresRepo(t *testing.T) {
+	fc := &fakeController{res: &pb.ControlResult{Ok: true}}
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fc, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	defer srv.Close()
+	c := srv.Client()
+	cookie := loginCookie(t, c, srv.URL)
+	body := `{"agent":"dev-1","source":{"type":"git","name":"web","cmd":"./server"}}`
+	resp := postApps(t, c, srv.URL, cookie, body)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestRedeploySendsRedeployOp(t *testing.T) {
+	fc := &fakeController{res: &pb.ControlResult{Ok: true}}
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fc, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	defer srv.Close()
+	c := srv.Client()
+	cookie := loginCookie(t, c, srv.URL)
+	resp := postRedeploy(t, c, srv.URL, cookie, `{"agent":"dev-1","name":"web"}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d; want 200", resp.StatusCode)
+	}
+	rop, ok := fc.gotOp.GetOp().(*pb.ControlOp_Redeploy)
+	if !ok || rop.Redeploy.GetTarget() != "web" {
+		t.Fatalf("expected redeploy of web, got %+v", fc.gotOp.GetOp())
 	}
 }

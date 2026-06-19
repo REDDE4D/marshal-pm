@@ -17,6 +17,9 @@ func TestFleetView(t *testing.T) {
 		LastSeenUnix: 42,
 		Procs: []*pb.ProcInfo{{
 			Name: "ticker", State: "running", Pid: 99, UptimeMs: 1000, Restarts: 2, Cpu: 1.5, Mem: 2048,
+			Source: "command",
+		}, {
+			Name: "gitapp", State: "failed", Source: "git", Detail: "build failed: exit status 1",
 		}},
 	}}}
 	v := fleetView(f)
@@ -26,12 +29,21 @@ func TestFleetView(t *testing.T) {
 	if v[0].Name != "dev-1" || !v[0].Connected || v[0].LastSeen != 42 {
 		t.Fatalf("agent view = %+v", v[0])
 	}
-	if len(v[0].Procs) != 1 {
-		t.Fatalf("len procs = %d; want 1", len(v[0].Procs))
+	if len(v[0].Procs) != 2 {
+		t.Fatalf("len procs = %d; want 2", len(v[0].Procs))
 	}
 	p := v[0].Procs[0]
 	if p.Name != "ticker" || p.State != "running" || p.PID != 99 || p.Restarts != 2 {
 		t.Fatalf("proc view = %+v", p)
+	}
+	if p.Source != "command" {
+		t.Fatalf("command proc Source = %q; want command", p.Source)
+	}
+	// M21: git source + deploy detail must survive serialization (drives the
+	// redeploy button and the failed-card reason in the dashboard).
+	g := v[0].Procs[1]
+	if g.Source != "git" || g.State != "failed" || g.Detail != "build failed: exit status 1" {
+		t.Fatalf("git proc view = %+v; want source=git state=failed detail set", g)
 	}
 }
 

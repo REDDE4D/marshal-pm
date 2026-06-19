@@ -4,11 +4,16 @@ package config
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 
 	"gopkg.in/yaml.v3"
 )
+
+// validAppName matches safe app names: must start with an alphanumeric character
+// and contain only alphanumerics, dots, underscores, and hyphens.
+var validAppName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 // RestartMode controls when an exited process is restarted.
 type RestartMode string
@@ -85,6 +90,15 @@ type App struct {
 	MaxRestarts int               `yaml:"max_restarts" json:"max_restarts"`
 	KillTimeout Duration          `yaml:"kill_timeout" json:"kill_timeout"`
 	Logs        *LogRetention     `yaml:"logs" json:"logs,omitempty"`
+	Source      *GitSource        `yaml:"source" json:"source,omitempty"` // M21 git deploy
+}
+
+// GitSource describes deploying an app from a git repository (M21).
+type GitSource struct {
+	Repo   string `yaml:"repo" json:"repo"`
+	Ref    string `yaml:"ref" json:"ref,omitempty"`
+	Build  string `yaml:"build" json:"build,omitempty"`
+	Subdir string `yaml:"subdir" json:"subdir,omitempty"`
 }
 
 // Config is the top-level marshal.yaml document.
@@ -157,6 +171,9 @@ func (c *Config) validate() error {
 	for _, a := range c.Apps {
 		if a.Name == "" {
 			return fmt.Errorf("app with cmd %q has no name", a.Cmd)
+		}
+		if a.Name == "." || a.Name == ".." || !validAppName.MatchString(a.Name) {
+			return fmt.Errorf("invalid app name %q: must match [A-Za-z0-9._-] and start alphanumeric", a.Name)
 		}
 		if seen[a.Name] {
 			return fmt.Errorf("duplicate app name %q", a.Name)

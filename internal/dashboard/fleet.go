@@ -16,6 +16,8 @@ type procView struct {
 	Restarts int32   `json:"restarts"`
 	CPU      float64 `json:"cpu"`
 	Mem      int64   `json:"mem"`
+	Source   string  `json:"source"` // "command" | "git" — drives the redeploy button (M21)
+	Detail   string  `json:"detail"` // status summary for in-flight/failed deploys (M21)
 }
 
 type agentView struct {
@@ -40,6 +42,8 @@ func fleetView(l FleetLister) []agentView {
 				Restarts: p.GetRestarts(),
 				CPU:      p.GetCpu(),
 				Mem:      p.GetMem(),
+				Source:   p.GetSource(),
+				Detail:   p.GetDetail(),
 			})
 		}
 		out = append(out, agentView{

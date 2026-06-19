@@ -48,6 +48,14 @@ func appSpecToConfig(s *pb.AppSpec) (config.App, error) {
 			app.Logs.Compress = &v
 		}
 	}
+	if gs := s.GetSource(); gs != nil {
+		app.Source = &config.GitSource{
+			Repo:   gs.GetRepo(),
+			Ref:    gs.GetRef(),
+			Build:  gs.GetBuild(),
+			Subdir: gs.GetSubdir(),
+		}
+	}
 	cfg := config.Config{Apps: []config.App{app}}
 	if err := cfg.Prepare(); err != nil {
 		return config.App{}, err
@@ -71,6 +79,7 @@ func snapshotToProc(s manager.InstanceSnapshot, cpu float64, mem uint64) *pb.Pro
 		Restarts:   int32(s.Restarts),
 		Cpu:        cpu,
 		Mem:        int64(mem),
+		Source:     s.Source,
 	}
 }
 
