@@ -269,6 +269,6 @@ export async function readFile(agent: string, app: string, path: string): Promis
 }
 
 export function fileDownloadURL(agent: string, app: string, path: string): string {
-  const q = new URLSearchParams({ path });
+  const q = new URLSearchParams({ path, raw: "1" });
   return `/api/fleet/${encodeURIComponent(agent)}/apps/${encodeURIComponent(app)}/file?${q}`;
 }

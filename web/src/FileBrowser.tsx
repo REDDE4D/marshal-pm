@@ -77,7 +77,7 @@ export function FileBrowser({ agent, app }: { agent: string; app: string }) {
           )}
           {open && !open.binary && (
             <>
-              {open.truncated && <div className="fb-note">Showing first 1 MiB of {open.size} B. <a href={fileDownloadURL(agent, app, open.path)} download>Download full</a></div>}
+              {open.truncated && <div className="fb-note">Showing first 1 MiB of {open.size} B. <a href={fileDownloadURL(agent, app, open.path)} download>Download first 1 MiB</a></div>}
               <CodeMirror value={open.content} editable={false} readOnly extensions={langFor(open.path)} theme="dark" />
             </>
           )}

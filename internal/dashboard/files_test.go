@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,5 +74,40 @@ func TestReadFileEndpoint_OpRejected(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestReadFileEndpoint_RawMode(t *testing.T) {
+	rawBytes := []byte{0x00, 0x01, 0x02, 0xFF}
+	c := &fakeFilesController{res: &pb.ControlResult{
+		Ok:   true,
+		File: &pb.FileContent{Path: "img/logo.png", Content: rawBytes, Size: 4, Binary: true},
+	}}
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, c, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	defer srv.Close()
+
+	cookie := loginCookie(t, srv.Client(), srv.URL)
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/fleet/dev-1/apps/app1/file?path=img/logo.png&raw=1", nil)
+	req.AddCookie(cookie)
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/octet-stream" {
+		t.Errorf("Content-Type = %q, want application/octet-stream", ct)
+	}
+	cd := resp.Header.Get("Content-Disposition")
+	if !strings.Contains(cd, "attachment") || !strings.Contains(cd, `filename="`) {
+		t.Errorf("Content-Disposition = %q, want attachment with filename", cd)
+	}
+	body := make([]byte, 8)
+	n, _ := resp.Body.Read(body)
+	body = body[:n]
+	if string(body) != string(rawBytes) {
+		t.Errorf("body = %v, want %v", body, rawBytes)
 	}
 }

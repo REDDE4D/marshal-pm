@@ -32,11 +32,11 @@ func confine(root, rel string) (string, error) {
 	// containment against the *real* root.
 	realRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("deploy root unavailable")
 	}
 	realFull, err := filepath.EvalSymlinks(full)
 	if err != nil {
-		return "", err // includes "does not exist"
+		return "", fmt.Errorf("not found")
 	}
 	if realFull != realRoot && !strings.HasPrefix(realFull, realRoot+string(filepath.Separator)) {
 		return "", fmt.Errorf("path escapes deploy root via symlink")
@@ -85,7 +85,7 @@ func ListDir(root, rel string) (*pb.DirListing, error) {
 
 // ReadFile returns the head (up to maxFileBytes) of the file at rel under root.
 // Directories are rejected. Binary files (NUL byte in the first sniffBytes) are
-// flagged and their content is omitted.
+// flagged via Binary=true; content is always returned for consumers that need raw bytes.
 func ReadFile(root, rel string) (*pb.FileContent, error) {
 	full, err := confine(root, rel)
 	if err != nil {
@@ -117,13 +117,9 @@ func ReadFile(root, rel string) (*pb.FileContent, error) {
 	}
 	binary := bytes.IndexByte(buf[:sniff], 0) >= 0
 
-	content := buf
-	if binary {
-		content = nil
-	}
 	return &pb.FileContent{
 		Path:      rel,
-		Content:   content,
+		Content:   buf,
 		Size:      info.Size(),
 		Truncated: info.Size() > int64(n),
 		Binary:    binary,

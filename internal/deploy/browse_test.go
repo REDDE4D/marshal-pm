@@ -58,6 +58,51 @@ func TestConfine(t *testing.T) {
 	}
 }
 
+func TestConfineSymlinkedRoot(t *testing.T) {
+	// A symlinked root must still permit legitimate sub/file.txt access.
+	real := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(real, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(real, "sub", "file.txt"), []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Create a symlink that points at the real root.
+	symRoot := filepath.Join(t.TempDir(), "symroot")
+	if err := os.Symlink(real, symRoot); err != nil {
+		t.Fatal(err)
+	}
+	got, err := confine(symRoot, "sub/file.txt")
+	if err != nil {
+		t.Fatalf("confine via symlinked root: unexpected error: %v", err)
+	}
+	if !strings.HasSuffix(got, "sub/file.txt") {
+		t.Errorf("confine via symlinked root = %q, want suffix sub/file.txt", got)
+	}
+}
+
+func TestConfineSiblingPrefix(t *testing.T) {
+	// /tmproot and /tmprootother — the sibling must be rejected.
+	parent := t.TempDir()
+	root := filepath.Join(parent, "root")
+	sibling := filepath.Join(parent, "rootother")
+	for _, d := range []string{root, sibling} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(sibling, "secret"), []byte("nope"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A symlink inside root pointing at the sibling dir.
+	if err := os.Symlink(sibling, filepath.Join(root, "escape")); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := confine(root, "escape/secret"); err == nil {
+		t.Errorf("confine to sibling-prefix dir = %q, want error", got)
+	}
+}
+
 func TestListDirOrdersDirsFirst(t *testing.T) {
 	root := t.TempDir()
 	mustMkdir(t, filepath.Join(root, "zdir"))
@@ -99,15 +144,19 @@ func TestReadFileText(t *testing.T) {
 
 func TestReadFileBinary(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "b.bin"), []byte{0x00, 0x01, 0x02}, 0o644); err != nil {
+	data := []byte{0x00, 0x01, 0x02}
+	if err := os.WriteFile(filepath.Join(root, "b.bin"), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	fc, err := ReadFile(root, "b.bin")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !fc.GetBinary() || len(fc.GetContent()) != 0 {
-		t.Errorf("got binary=%v len(content)=%d, want binary=true content empty", fc.GetBinary(), len(fc.GetContent()))
+	if !fc.GetBinary() {
+		t.Errorf("got binary=%v, want binary=true", fc.GetBinary())
+	}
+	if string(fc.GetContent()) != string(data) {
+		t.Errorf("got content=%v, want %v", fc.GetContent(), data)
 	}
 }
 

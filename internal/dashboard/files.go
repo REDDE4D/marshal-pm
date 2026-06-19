@@ -3,6 +3,8 @@ package dashboard
 import (
 	"context"
 	"net/http"
+	"path"
+	"strings"
 
 	"marshal/internal/pb"
 )
@@ -53,7 +55,9 @@ func (h *handler) listDirFiles(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// readFileFiles serves GET /api/fleet/{agent}/apps/{app}/file?path=<rel>.
+// readFileFiles serves GET /api/fleet/{agent}/apps/{app}/file?path=<rel>[&raw=1].
+// When raw=1, responds with raw bytes as an attachment (application/octet-stream).
+// Otherwise returns a JSON fileContentDTO; binary content is omitted from the DTO.
 func (h *handler) readFileFiles(w http.ResponseWriter, r *http.Request) {
 	agent := r.PathValue("agent")
 	app := r.PathValue("app")
@@ -69,8 +73,38 @@ func (h *handler) readFileFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := res.GetFile()
+
+	if r.URL.Query().Get("raw") == "1" {
+		// Raw download: serve bytes as an attachment.
+		base := path.Base(f.GetPath())
+		// Sanitize: reject empty, ".", "/" results from path.Base; strip unsafe chars.
+		if base == "" || base == "." || base == "/" {
+			base = "download"
+		}
+		// Strip double-quotes, newlines, carriage-returns to prevent header injection.
+		base = strings.Map(func(c rune) rune {
+			if c == '"' || c == '\n' || c == '\r' {
+				return -1
+			}
+			return c
+		}, base)
+		if base == "" {
+			base = "download"
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="`+base+`"`)
+		w.WriteHeader(http.StatusOK)
+		w.Write(f.GetContent()) //nolint:errcheck
+		return
+	}
+
+	// JSON view: omit binary bytes from the DTO (the client can't display them).
+	content := string(f.GetContent())
+	if f.GetBinary() {
+		content = ""
+	}
 	writeJSON(w, http.StatusOK, fileContentDTO{
-		Path: f.GetPath(), Content: string(f.GetContent()), Size: f.GetSize(),
+		Path: f.GetPath(), Content: content, Size: f.GetSize(),
 		Truncated: f.GetTruncated(), Binary: f.GetBinary(),
 	})
 }
