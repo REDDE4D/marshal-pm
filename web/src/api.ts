@@ -6,6 +6,8 @@ export type Proc = {
   restarts: number;
   cpu: number;
   mem: number;
+  source?: "command" | "git";
+  detail?: string;
 };
 
 export type Agent = {
@@ -151,10 +153,26 @@ export type CommandSource = {
   kill_timeout?: string;
 };
 
+// GitSource mirrors the backend "git" app source. repo and cmd are required;
+// all other fields are optional and use backend defaults.
+export interface GitSource {
+  type: "git";
+  name: string;
+  cmd: string;
+  args?: string[];
+  instances?: number;
+  env?: Record<string, string>;
+  restart?: string;
+  repo: string;
+  ref?: string;
+  build?: string;
+  subdir?: string;
+}
+
 // addApp creates a new app on an agent via POST /api/apps. Like control() it
 // never throws — server errors surface as {ok:false,error}, so a failed add
 // cannot trigger a logout (only the fleet poll owns auth).
-export async function addApp(agent: string, source: CommandSource): Promise<ControlResult> {
+export async function addApp(agent: string, source: CommandSource | GitSource): Promise<ControlResult> {
   const r = await fetch("/api/apps", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -167,4 +185,16 @@ export async function addApp(agent: string, source: CommandSource): Promise<Cont
   } catch {
     return { ok: false, error: `error ${r.status}` };
   }
+}
+
+// redeploy triggers a git re-clone and rebuild for an existing git app.
+// Like control() it never throws — errors surface as {ok:false,error}.
+export async function redeploy(agent: string, name: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch("/api/apps/redeploy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent, name }),
+  });
+  if (res.status === 401) throw new Error("error 401");
+  return res.json();
 }
