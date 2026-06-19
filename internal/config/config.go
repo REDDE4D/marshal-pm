@@ -85,6 +85,15 @@ type App struct {
 	MaxRestarts int               `yaml:"max_restarts" json:"max_restarts"`
 	KillTimeout Duration          `yaml:"kill_timeout" json:"kill_timeout"`
 	Logs        *LogRetention     `yaml:"logs" json:"logs,omitempty"`
+	Source      *GitSource        `yaml:"source" json:"source,omitempty"` // M21 git deploy
+}
+
+// GitSource describes deploying an app from a git repository (M21).
+type GitSource struct {
+	Repo   string `yaml:"repo" json:"repo"`
+	Ref    string `yaml:"ref" json:"ref,omitempty"`
+	Build  string `yaml:"build" json:"build,omitempty"`
+	Subdir string `yaml:"subdir" json:"subdir,omitempty"`
 }
 
 // Config is the top-level marshal.yaml document.

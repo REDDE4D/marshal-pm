@@ -6,6 +6,24 @@ import (
 	"marshal/internal/pb"
 )
 
+func TestAppSpecToConfigCopiesGitSource(t *testing.T) {
+	spec := &pb.AppSpec{
+		Name: "web", Cmd: "./server", Instances: 1,
+		Source: &pb.GitSource{Repo: "https://example/r.git", Ref: "main", Build: "go build -o server .", Subdir: "cmd"},
+	}
+	app, err := appSpecToConfig(spec)
+	if err != nil {
+		t.Fatalf("appSpecToConfig: %v", err)
+	}
+	if app.Source == nil {
+		t.Fatal("Source not copied")
+	}
+	if app.Source.Repo != "https://example/r.git" || app.Source.Ref != "main" ||
+		app.Source.Build != "go build -o server ." || app.Source.Subdir != "cmd" {
+		t.Fatalf("Source mismatch: %+v", app.Source)
+	}
+}
+
 func TestAppSpecToConfigReadsLogs(t *testing.T) {
 	sz := int32(50)
 	age := int32(0)
