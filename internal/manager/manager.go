@@ -22,6 +22,7 @@ type InstanceSnapshot struct {
 	InstanceID int    // 0..instances-1
 	Label      string // "name#idx"
 	Source     string // "command" | "git" (M21), derived from the app spec
+	Credential string // M22 credstore name, from the app spec's GitSource
 	supervisor.Snapshot
 }
 
@@ -301,8 +302,10 @@ func stopInstances(insts []*managedInstance) {
 
 func snapshotApp(a *managedApp) []InstanceSnapshot {
 	src := "command"
+	cred := ""
 	if a.spec.Source != nil {
 		src = "git"
+		cred = a.spec.Source.Credential
 	}
 	out := make([]InstanceSnapshot, 0, len(a.insts))
 	for _, in := range a.insts {
@@ -312,6 +315,7 @@ func snapshotApp(a *managedApp) []InstanceSnapshot {
 			InstanceID: in.instanceID,
 			Label:      in.label,
 			Source:     src,
+			Credential: cred,
 			Snapshot:   in.inst.Snapshot(),
 		})
 	}

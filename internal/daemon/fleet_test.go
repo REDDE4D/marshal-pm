@@ -4,8 +4,20 @@ import (
 	"testing"
 
 	"marshal/internal/logs"
+	"marshal/internal/manager"
 	"marshal/internal/metricstore"
 )
+
+func TestSnapshotToProcCredential(t *testing.T) {
+	p := snapshotToProc(manager.InstanceSnapshot{
+		Name:       "priv",
+		Source:     "git",
+		Credential: "gh-ci",
+	}, 0, 0)
+	if p.GetCredential() != "gh-ci" {
+		t.Fatalf("credential not stamped: %q", p.GetCredential())
+	}
+}
 
 func TestLogsSinceShipsNewRingLines(t *testing.T) {
 	reg := logs.NewRegistry(t.TempDir())
