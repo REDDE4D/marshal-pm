@@ -2,6 +2,26 @@ package pb
 
 import "testing"
 
+func TestGitCredentialWire(t *testing.T) {
+	d := &DeployRequest{
+		App:        &AppSpec{Name: "x", Source: &GitSource{Repo: "r", Credential: "gh-ci"}},
+		Credential: &GitCredential{Username: "octocat", Token: "ghp_x"},
+	}
+	if d.GetApp().GetSource().GetCredential() != "gh-ci" {
+		t.Fatalf("GitSource.Credential not wired")
+	}
+	if d.GetCredential().GetToken() != "ghp_x" {
+		t.Fatalf("DeployRequest.Credential not wired")
+	}
+	rd := &RedeployRequest{Target: "x", Credential: &GitCredential{Token: "ghp_y"}}
+	if rd.GetCredential().GetToken() != "ghp_y" {
+		t.Fatalf("RedeployRequest.Credential not wired")
+	}
+	if (&ProcInfo{Credential: "gh-ci"}).GetCredential() != "gh-ci" {
+		t.Fatalf("ProcInfo.Credential not wired")
+	}
+}
+
 func TestGitSourceAndDeployOpsGenerated(t *testing.T) {
 	spec := &AppSpec{Name: "x", Cmd: "c", Source: &GitSource{Repo: "r", Ref: "main", Build: "go build", Subdir: "sub"}}
 	if spec.GetSource().GetRepo() != "r" || spec.GetSource().GetSubdir() != "sub" {

@@ -98,8 +98,20 @@ message FleetMetricsHistoryRequest {
   int64  bucket_ms  = 4;
 }
 
-message DeployRequest   { AppSpec app    = 1; } // M21 git source rides on the AppSpec
-message RedeployRequest { string  target = 1; } // M21 app name
+message GitCredential {
+  string username = 1;
+  string token    = 2;
+}
+
+message DeployRequest {
+  AppSpec       app        = 1;
+  GitCredential credential = 2; // M22: secret attached per-op, never persisted on the agent
+}
+
+message RedeployRequest {
+  string        target     = 1; // M21 app name
+  GitCredential credential = 2; // M22
+}
 
 // M9 — control-plane command surface, shared by the down-stream Command and the
 // CLI's unary FleetControl so the op/result shapes have one definition.

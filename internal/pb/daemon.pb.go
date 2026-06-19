@@ -168,6 +168,7 @@ type GitSource struct {
 	Ref           string                 `protobuf:"bytes,2,opt,name=ref,proto3" json:"ref,omitempty"`
 	Build         string                 `protobuf:"bytes,3,opt,name=build,proto3" json:"build,omitempty"`
 	Subdir        string                 `protobuf:"bytes,4,opt,name=subdir,proto3" json:"subdir,omitempty"`
+	Credential    string                 `protobuf:"bytes,5,opt,name=credential,proto3" json:"credential,omitempty"` // M22: credstore name (non-secret), persisted for redeploy
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -226,6 +227,13 @@ func (x *GitSource) GetBuild() string {
 func (x *GitSource) GetSubdir() string {
 	if x != nil {
 		return x.Subdir
+	}
+	return ""
+}
+
+func (x *GitSource) GetCredential() string {
+	if x != nil {
+		return x.Credential
 	}
 	return ""
 }
@@ -454,10 +462,11 @@ type ProcInfo struct {
 	Pid           int32                  `protobuf:"varint,5,opt,name=pid,proto3" json:"pid,omitempty"`
 	UptimeMs      int64                  `protobuf:"varint,6,opt,name=uptime_ms,json=uptimeMs,proto3" json:"uptime_ms,omitempty"`
 	Restarts      int32                  `protobuf:"varint,7,opt,name=restarts,proto3" json:"restarts,omitempty"`
-	Cpu           float64                `protobuf:"fixed64,8,opt,name=cpu,proto3" json:"cpu,omitempty"`      // M3
-	Mem           int64                  `protobuf:"varint,9,opt,name=mem,proto3" json:"mem,omitempty"`       // M3
-	Source        string                 `protobuf:"bytes,10,opt,name=source,proto3" json:"source,omitempty"` // M21 "command" | "git" — drives the redeploy button
-	Detail        string                 `protobuf:"bytes,11,opt,name=detail,proto3" json:"detail,omitempty"` // M21 status summary for synthetic deploy entries
+	Cpu           float64                `protobuf:"fixed64,8,opt,name=cpu,proto3" json:"cpu,omitempty"`              // M3
+	Mem           int64                  `protobuf:"varint,9,opt,name=mem,proto3" json:"mem,omitempty"`               // M3
+	Source        string                 `protobuf:"bytes,10,opt,name=source,proto3" json:"source,omitempty"`         // M21 "command" | "git" — drives the redeploy button
+	Detail        string                 `protobuf:"bytes,11,opt,name=detail,proto3" json:"detail,omitempty"`         // M21 status summary for synthetic deploy entries
+	Credential    string                 `protobuf:"bytes,12,opt,name=credential,proto3" json:"credential,omitempty"` // M22: credential name (non-secret) → drives redeploy resolution
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -565,6 +574,13 @@ func (x *ProcInfo) GetSource() string {
 func (x *ProcInfo) GetDetail() string {
 	if x != nil {
 		return x.Detail
+	}
+	return ""
+}
+
+func (x *ProcInfo) GetCredential() string {
+	if x != nil {
+		return x.Credential
 	}
 	return ""
 }
@@ -1009,12 +1025,15 @@ const file_marshal_v1_daemon_proto_rawDesc = "" +
 	"\x05Empty\"/\n" +
 	"\x03Ack\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"_\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x7f\n" +
 	"\tGitSource\x12\x12\n" +
 	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x10\n" +
 	"\x03ref\x18\x02 \x01(\tR\x03ref\x12\x14\n" +
 	"\x05build\x18\x03 \x01(\tR\x05build\x12\x16\n" +
-	"\x06subdir\x18\x04 \x01(\tR\x06subdir\"\xb6\x03\n" +
+	"\x06subdir\x18\x04 \x01(\tR\x06subdir\x12\x1e\n" +
+	"\n" +
+	"credential\x18\x05 \x01(\tR\n" +
+	"credential\"\xb6\x03\n" +
 	"\aAppSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03cmd\x18\x02 \x01(\tR\x03cmd\x12\x12\n" +
@@ -1036,7 +1055,7 @@ const file_marshal_v1_daemon_proto_rawDesc = "" +
 	"\fStartRequest\x12'\n" +
 	"\x04apps\x18\x01 \x03(\v2\x13.marshal.v1.AppSpecR\x04apps\"\"\n" +
 	"\bSelector\x12\x16\n" +
-	"\x06target\x18\x01 \x01(\tR\x06target\"\x84\x02\n" +
+	"\x06target\x18\x01 \x01(\tR\x06target\"\xa4\x02\n" +
 	"\bProcInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1f\n" +
@@ -1050,7 +1069,10 @@ const file_marshal_v1_daemon_proto_rawDesc = "" +
 	"\x03mem\x18\t \x01(\x03R\x03mem\x12\x16\n" +
 	"\x06source\x18\n" +
 	" \x01(\tR\x06source\x12\x16\n" +
-	"\x06detail\x18\v \x01(\tR\x06detail\"6\n" +
+	"\x06detail\x18\v \x01(\tR\x06detail\x12\x1e\n" +
+	"\n" +
+	"credential\x18\f \x01(\tR\n" +
+	"credential\"6\n" +
 	"\bProcList\x12*\n" +
 	"\x05procs\x18\x01 \x03(\v2\x14.marshal.v1.ProcInfoR\x05procs\"\x81\x01\n" +
 	"\n" +
