@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -45,6 +46,7 @@ type Deployer struct {
 
 	mu     sync.Mutex
 	states map[string]state
+	wg     sync.WaitGroup // tracks in-flight deploy goroutines (test sync)
 }
 
 // New builds a Deployer. deployRoot is the directory under which each app's
@@ -94,3 +96,106 @@ func (d *Deployer) Forget(name string) bool {
 	_ = os.RemoveAll(d.dir(name))
 	return had
 }
+
+// Start validates a git deploy and launches it in the background. The returned
+// error rejects the request synchronously (duplicate name, empty repo); a nil
+// return means "accepted" — progress is reported via Snapshots.
+func (d *Deployer) Start(app config.App) error {
+	if app.Source == nil || app.Source.Repo == "" {
+		return fmt.Errorf("git source requires a repo")
+	}
+	if d.host.Exists(app.Name) {
+		return fmt.Errorf("app %q already exists", app.Name)
+	}
+	d.mu.Lock()
+	if _, busy := d.states[app.Name]; busy {
+		d.mu.Unlock()
+		return fmt.Errorf("app %q already exists", app.Name)
+	}
+	d.states[app.Name] = state{phase: phaseCloning}
+	d.mu.Unlock()
+
+	d.wg.Add(1)
+	go func() {
+		defer d.wg.Done()
+		d.runDeploy(app, false)
+	}()
+	return nil
+}
+
+// runDeploy performs clone (or fetch when redeploy)+build, then launches or
+// restarts. On any failure it leaves a failed state for the dashboard.
+func (d *Deployer) runDeploy(app config.App, redeploy bool) {
+	ctx := context.Background()
+	dir := d.dir(app.Name)
+	stdout, stderr := d.host.Writers(app.Name + "#0")
+	src := *app.Source
+
+	d.setState(app.Name, phaseCloning, "")
+	if err := d.fetch(ctx, dir, src, redeploy, stdout, stderr); err != nil {
+		d.setState(app.Name, phaseFailed, summarize("clone", err))
+		return
+	}
+
+	d.setState(app.Name, phaseBuilding, "")
+	buildDir := dir
+	if src.Subdir != "" {
+		buildDir = filepath.Join(dir, src.Subdir)
+	}
+	build := src.Build
+	if build == "" {
+		build = DetectBuild(buildDir)
+	}
+	if build != "" {
+		if err := d.runner.Run(ctx, buildDir, stdout, stderr, "sh", "-c", build); err != nil {
+			d.setState(app.Name, phaseFailed, summarize("build", err))
+			return
+		}
+	}
+
+	if redeploy {
+		if err := d.host.Restart(app.Name); err != nil {
+			d.setState(app.Name, phaseFailed, summarize("restart", err))
+			return
+		}
+		d.clearState(app.Name)
+		return
+	}
+
+	launch := app
+	launch.Cwd = buildDir
+	if err := d.host.Launch(launch); err != nil {
+		d.setState(app.Name, phaseFailed, summarize("launch", err))
+		return
+	}
+	d.clearState(app.Name)
+}
+
+// fetch clones into dir for a fresh deploy, or fetches+resets for a redeploy.
+func (d *Deployer) fetch(ctx context.Context, dir string, src config.GitSource, redeploy bool, stdout, stderr io.Writer) error {
+	if !redeploy {
+		_ = os.RemoveAll(dir)
+		if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+			return err
+		}
+		args := []string{"clone"}
+		if src.Ref != "" {
+			args = append(args, "--branch", src.Ref)
+		}
+		args = append(args, src.Repo, dir)
+		return d.runner.Run(ctx, "", stdout, stderr, "git", args...)
+	}
+	if err := d.runner.Run(ctx, dir, stdout, stderr, "git", "fetch", "origin"); err != nil {
+		return err
+	}
+	ref := src.Ref
+	if ref == "" {
+		ref = "HEAD"
+	}
+	return d.runner.Run(ctx, dir, stdout, stderr, "git", "reset", "--hard", "origin/"+ref)
+}
+
+func summarize(stage string, err error) string { return stage + " failed: " + err.Error() }
+
+// wait blocks until all in-flight deploy goroutines finish. Tests only.
+func (d *Deployer) wait() { d.wg.Wait() }

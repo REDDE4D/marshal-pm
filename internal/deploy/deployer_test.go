@@ -76,6 +76,93 @@ func (h *fakeHost) Restart(name string) error {
 }
 func (h *fakeHost) Writers(string) (io.Writer, io.Writer) { return io.Discard, io.Discard }
 
+func gitApp(name string) config.App {
+	return config.App{
+		Name: name, Cmd: "./server", Instances: 1,
+		Source: &config.GitSource{Repo: "https://example/r.git", Ref: "main", Build: "go build -o server ."},
+	}
+}
+
+func TestStartClonesBuildsAndLaunches(t *testing.T) {
+	root := t.TempDir()
+	host := newFakeHost()
+	runner := &fakeRunner{}
+	d := New(host, runner, root)
+
+	app := gitApp("web")
+	app.Source.Build = "go build -o server ."
+	if err := d.Start(app); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	d.wait()
+
+	cmds := runner.cmds()
+	if len(cmds) != 2 {
+		t.Fatalf("want clone+build (2 cmds), got %d: %v", len(cmds), cmds)
+	}
+	if cmds[0][0] != "git" || cmds[0][1] != "clone" {
+		t.Fatalf("first cmd not git clone: %v", cmds[0])
+	}
+	if cmds[1][0] != "sh" || cmds[1][1] != "-c" || cmds[1][2] != "go build -o server ." {
+		t.Fatalf("second cmd not the build: %v", cmds[1])
+	}
+	if len(host.launched) != 1 {
+		t.Fatalf("expected one launch, got %d", len(host.launched))
+	}
+	got := host.launched[0]
+	if got.Cwd != filepath.Join(root, "web") {
+		t.Fatalf("cwd not set to checkout: %q", got.Cwd)
+	}
+	if got.Source == nil {
+		t.Fatal("launched app lost its Source")
+	}
+	if len(d.Snapshots()) != 0 {
+		t.Fatal("successful deploy should clear its state")
+	}
+}
+
+func TestStartBuildFailureLeavesFailedState(t *testing.T) {
+	root := t.TempDir()
+	host := newFakeHost()
+	runner := &fakeRunner{errAt: map[int]error{1: errBuild()}} // build (2nd call) fails
+	d := New(host, runner, root)
+
+	if err := d.Start(gitApp("web")); err != nil {
+		t.Fatalf("Start should accept: %v", err)
+	}
+	d.wait()
+
+	if len(host.launched) != 0 {
+		t.Fatal("failed build must not launch the app")
+	}
+	snaps := d.Snapshots()
+	if len(snaps) != 1 || snaps[0].GetState() != phaseFailed {
+		t.Fatalf("expected one failed snapshot, got %+v", snaps)
+	}
+}
+
+func TestStartRejectsEmptyRepoAndDuplicate(t *testing.T) {
+	root := t.TempDir()
+	host := newFakeHost()
+	d := New(host, &fakeRunner{}, root)
+
+	bad := gitApp("web")
+	bad.Source.Repo = ""
+	if err := d.Start(bad); err == nil {
+		t.Fatal("expected error for empty repo")
+	}
+	host.existing["web"] = true
+	if err := d.Start(gitApp("web")); err == nil {
+		t.Fatal("expected error for duplicate name")
+	}
+}
+
+func errBuild() error { return &buildErr{} }
+
+type buildErr struct{}
+
+func (*buildErr) Error() string { return "exit status 1" }
+
 func TestSnapshotsAndForget(t *testing.T) {
 	root := t.TempDir()
 	d := New(newFakeHost(), &fakeRunner{}, root)
