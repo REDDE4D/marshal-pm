@@ -210,14 +210,14 @@ func (d *Deployer) fetch(ctx context.Context, dir string, src config.GitSource, 
 		}
 		return nil
 	}
-	if err := d.runner.Run(ctx, dir, stdout, stderr, "git", "fetch", "origin"); err != nil {
-		return err
-	}
 	ref := src.Ref
 	if ref == "" {
 		ref = "HEAD"
 	}
-	return d.runner.Run(ctx, dir, stdout, stderr, "git", "reset", "--hard", "origin/"+ref)
+	if err := d.runner.Run(ctx, dir, stdout, stderr, "git", "fetch", "origin", ref); err != nil {
+		return err
+	}
+	return d.runner.Run(ctx, dir, stdout, stderr, "git", "reset", "--hard", "FETCH_HEAD")
 }
 
 func summarize(stage string, err error) string { return stage + " failed: " + err.Error() }

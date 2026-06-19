@@ -47,6 +47,9 @@ func (s *Server) handleFleetCommand(cmd *pb.Command) *pb.ControlResult {
 		}
 
 	case *pb.ControlOp_Deploy:
+		if s.deployer == nil {
+			return &pb.ControlResult{Ok: false, Error: "deploy not supported"}
+		}
 		app, cerr := appSpecToConfig(v.Deploy.GetApp())
 		if cerr != nil {
 			return &pb.ControlResult{Ok: false, Error: cerr.Error()}
@@ -57,6 +60,9 @@ func (s *Server) handleFleetCommand(cmd *pb.Command) *pb.ControlResult {
 		return &pb.ControlResult{Ok: true}
 
 	case *pb.ControlOp_Redeploy:
+		if s.deployer == nil {
+			return &pb.ControlResult{Ok: false, Error: "deploy not supported"}
+		}
 		if derr := s.deployer.Redeploy(v.Redeploy.GetTarget()); derr != nil {
 			return &pb.ControlResult{Ok: false, Error: derr.Error()}
 		}

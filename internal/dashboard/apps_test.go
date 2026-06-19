@@ -3,6 +3,7 @@ package dashboard
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -76,6 +77,30 @@ func TestAddAppUnsupportedSource(t *testing.T) {
 	resp := postApps(t, c, srv.URL, cookie, `{"agent":"dev-1","source":{"type":"git","name":"web","cmd":"x"}}`)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("git source = %d; want 400", resp.StatusCode)
+	}
+}
+
+func TestAddAppUnsupportedSourceType(t *testing.T) {
+	fc := &fakeController{}
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fc, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	defer srv.Close()
+	c := srv.Client()
+	cookie := loginCookie(t, c, srv.URL)
+	// "svn" is not a known source type — hits the default branch of the type switch.
+	resp := postApps(t, c, srv.URL, cookie, `{"agent":"dev-1","source":{"type":"svn","name":"web","cmd":"./svn-run"}}`)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unsupported source type = %d; want 400", resp.StatusCode)
+	}
+	body := resp.Body
+	defer body.Close()
+	var raw []byte
+	raw, _ = io.ReadAll(body)
+	if !strings.Contains(string(raw), "unsupported source type") {
+		t.Fatalf("expected 'unsupported source type' in body, got: %q", string(raw))
+	}
+	// Controller should NOT have been called for an unsupported type.
+	if fc.gotAgent != "" {
+		t.Fatalf("controller should not have been called for unsupported type, got agent=%q", fc.gotAgent)
 	}
 }
 

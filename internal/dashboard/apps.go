@@ -101,7 +101,7 @@ func (h *handler) apps(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unsupported source type", http.StatusBadRequest)
 		return
 	}
-	h.dispatchApp(w, r, body.Agent, name, op)
+	h.dispatchApp(w, r, body.Agent, name, op, "add app")
 }
 
 // redeploy serves POST /api/apps/redeploy: triggers a re-deploy of a
@@ -117,22 +117,23 @@ func (h *handler) redeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	op := &pb.ControlOp{Op: &pb.ControlOp_Redeploy{Redeploy: &pb.RedeployRequest{Target: body.Name}}}
-	h.dispatchApp(w, r, body.Agent, body.Name, op)
+	h.dispatchApp(w, r, body.Agent, body.Name, op, "redeploy")
 }
 
 // dispatchApp forwards op to the named agent via h.controller.Control and
 // writes the standard 200/502 response. Both apps and redeploy share this path.
-func (h *handler) dispatchApp(w http.ResponseWriter, r *http.Request, agent, name string, op *pb.ControlOp) {
+// action is a human-readable label used in log lines (e.g. "add app" or "redeploy").
+func (h *handler) dispatchApp(w http.ResponseWriter, r *http.Request, agent, name string, op *pb.ControlOp, action string) {
 	ctx, cancel := context.WithTimeout(r.Context(), controlTimeout)
 	defer cancel()
 	res, err := h.controller.Control(ctx, agent, op)
 	user, _ := r.Context().Value(userKey).(string)
 	if err != nil {
-		log.Printf("dashboard: add app %s -> %s by %s: %v", name, agent, user, err)
+		log.Printf("dashboard: %s %s -> %s by %s: %v", action, name, agent, user, err)
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	log.Printf("dashboard: add app %s -> %s by %s: ok=%v", name, agent, user, res.GetOk())
+	log.Printf("dashboard: %s %s -> %s by %s: ok=%v", action, name, agent, user, res.GetOk())
 	if !res.GetOk() {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": res.GetError()})
 		return
