@@ -154,9 +154,11 @@ validation is implemented now.
   - validation / duplicate-name error from controller → 400 with error surfaced.
   - agent unreachable → 502.
   - unauthenticated (no session) → 401.
-- **Web** — focused `AddAppModal` component test: required-field gating, agent-dropdown
-  default (one agent) and empty (no agents) states, and the POST payload shape — consistent
-  with existing web component tests.
+- **Web** — no test runner exists in this repo (no vitest/testing-library), and the
+  frontend has been verified via the live in-browser demo throughout M15–M19. We keep that
+  pattern: correctness is enforced by TypeScript type-checking (`tsc -b` in `make ui`) plus
+  the mandated live demo below (open the modal, add a real app, confirm the new card appears
+  and the process goes online). No web test framework is added in this milestone.
 
 ## Build / verify
 
