@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -46,6 +47,20 @@ func (f *fakeRunner) cmds() [][]string {
 		out[i] = c.cmd
 	}
 	return out
+}
+
+// find returns the first recorded call whose cmd slice contains arg.
+func (f *fakeRunner) find(arg string) *fakeCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.calls {
+		for _, a := range f.calls[i].cmd {
+			if a == arg {
+				return &f.calls[i]
+			}
+		}
+	}
+	return nil
 }
 
 // fakeHost records launches/restarts and answers existence/source queries.
@@ -100,7 +115,7 @@ func TestStartClonesBuildsAndLaunches(t *testing.T) {
 	d := New(host, runner, root)
 
 	app := gitApp("web")
-	if err := d.Start(app); err != nil {
+	if err := d.Start(app, Credential{}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	d.wait()
@@ -139,7 +154,7 @@ func TestStartBuildFailureLeavesFailedState(t *testing.T) {
 	runner := &fakeRunner{errAt: map[int]error{2: errBuild()}} // build (3rd call) fails
 	d := New(host, runner, root)
 
-	if err := d.Start(gitApp("web")); err != nil {
+	if err := d.Start(gitApp("web"), Credential{}); err != nil {
 		t.Fatalf("Start should accept: %v", err)
 	}
 	d.wait()
@@ -160,11 +175,11 @@ func TestStartRejectsEmptyRepoAndDuplicate(t *testing.T) {
 
 	bad := gitApp("web")
 	bad.Source.Repo = ""
-	if err := d.Start(bad); err == nil {
+	if err := d.Start(bad, Credential{}); err == nil {
 		t.Fatal("expected error for empty repo")
 	}
 	host.existing["web"] = true
-	if err := d.Start(gitApp("web")); err == nil {
+	if err := d.Start(gitApp("web"), Credential{}); err == nil {
 		t.Fatal("expected error for duplicate name")
 	}
 }
@@ -183,7 +198,7 @@ func TestRedeployFetchesRebuildsRestarts(t *testing.T) {
 	runner := &fakeRunner{}
 	d := New(host, runner, root)
 
-	if err := d.Redeploy("web"); err != nil {
+	if err := d.Redeploy("web", Credential{}); err != nil {
 		t.Fatalf("Redeploy: %v", err)
 	}
 	d.wait()
@@ -209,7 +224,7 @@ func TestRedeployBuildFailureDoesNotRestart(t *testing.T) {
 	runner := &fakeRunner{errAt: map[int]error{2: errBuild()}}
 	d := New(host, runner, root)
 
-	if err := d.Redeploy("web"); err != nil {
+	if err := d.Redeploy("web", Credential{}); err != nil {
 		t.Fatalf("Redeploy: %v", err)
 	}
 	d.wait()
@@ -225,8 +240,77 @@ func TestRedeployBuildFailureDoesNotRestart(t *testing.T) {
 
 func TestRedeployRejectsNonGitApp(t *testing.T) {
 	d := New(newFakeHost(), &fakeRunner{}, t.TempDir())
-	if err := d.Redeploy("nope"); err == nil {
+	if err := d.Redeploy("nope", Credential{}); err == nil {
 		t.Fatal("expected error when app has no git source")
+	}
+}
+
+// envHas reports whether env contains want. "GIT_ASKPASS" matches any
+// "GIT_ASKPASS=..." entry; "K=V" matches exactly.
+func envHas(env []string, want string) bool {
+	for _, e := range env {
+		if e == want || strings.HasPrefix(e, want+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+func argvHas(args []string, want string) bool {
+	for _, a := range args {
+		if a == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestCloneUsesAskpassAndHidesToken(t *testing.T) {
+	fr := &fakeRunner{}
+	host := newFakeHost()
+	d := New(host, fr, t.TempDir())
+
+	app := config.App{Name: "priv", Source: &config.GitSource{Repo: "https://github.com/me/priv.git"}}
+	if err := d.Start(app, Credential{Username: "octocat", Token: "ghp_SECRET"}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	d.wait()
+
+	clone := fr.find("clone")
+	if clone == nil {
+		t.Fatal("no clone call recorded")
+	}
+	// Token must never appear in argv.
+	for _, a := range clone.cmd {
+		if strings.Contains(a, "ghp_SECRET") {
+			t.Fatalf("token leaked into argv: %v", clone.cmd)
+		}
+	}
+	// URL carries the username only.
+	if !argvHas(clone.cmd, "https://octocat@github.com/me/priv.git") {
+		t.Fatalf("username not embedded in clone URL: %v", clone.cmd)
+	}
+	// Credential env is present on the clone, token only in env.
+	if !envHas(clone.env, "GIT_ASKPASS") || !envHas(clone.env, "MARSHAL_GIT_TOKEN=ghp_SECRET") ||
+		!envHas(clone.env, "MARSHAL_GIT_USER=octocat") || !envHas(clone.env, "GIT_TERMINAL_PROMPT=0") {
+		t.Fatalf("credential env missing/incomplete: %v", clone.env)
+	}
+}
+
+func TestNoCredentialNoAskpass(t *testing.T) {
+	fr := &fakeRunner{}
+	d := New(newFakeHost(), fr, t.TempDir())
+	app := config.App{Name: "pub", Source: &config.GitSource{Repo: "https://github.com/me/pub.git"}}
+	if err := d.Start(app, Credential{}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	d.wait()
+	clone := fr.find("clone")
+	if envHas(clone.env, "GIT_ASKPASS") {
+		t.Fatalf("askpass set without a credential")
+	}
+	if !argvHas(clone.cmd, "https://github.com/me/pub.git") {
+		t.Fatalf("URL should be unmodified without a credential: %v", clone.cmd)
 	}
 }
 
