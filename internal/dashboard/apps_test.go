@@ -61,6 +61,7 @@ func TestSSHHostPort(t *testing.T) {
 		{"ssh://git@ssh.github.com:443/o/r.git", "ssh.github.com", "443"},
 		{"ssh://git@example.com/o/r.git", "example.com", ""},
 		{"https://github.com/o/r.git", "", ""},
+		{"ssh://git@-evil.example.com/o/r.git", "", ""}, // leading-dash host → rejected
 	}
 	for _, c := range cases {
 		h, p := sshHostPort(c.repo)
@@ -101,6 +102,26 @@ func TestResolveSSHScansAndPins(t *testing.T) {
 	}
 	if fc.setKH != "github.com ssh-ed25519 SCANNED" {
 		t.Fatal("pin was not persisted via SetKnownHosts")
+	}
+}
+
+func TestResolveSSHUnpinnedNoRepoErrors(t *testing.T) {
+	fc := &fakeCreds{
+		metas: []credstore.Meta{{Name: "dk", Type: "ssh-key"}},
+		priv:  "PRIVKEY",
+		kh:    "", // no pin, no repo URL → must error
+	}
+	h := newTestHandlerWithCreds(t, fc)
+	h.scanHost = func(string) (string, error) {
+		t.Fatal("must not scan when no repo URL given")
+		return "", nil
+	}
+	cred, err := h.resolveCredential("dk", "") // no repo URL, no scan possible
+	if err == nil {
+		t.Fatalf("expected error for unpinned ssh credential with no repo URL, got cred=%+v", cred)
+	}
+	if cred != nil {
+		t.Fatalf("expected nil credential, got %+v", cred)
 	}
 }
 

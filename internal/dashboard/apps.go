@@ -230,6 +230,9 @@ func (h *handler) resolveCredential(name, repoURL string) (*pb.GitCredential, er
 				kh = scanned
 			}
 		}
+		if kh == "" {
+			return nil, fmt.Errorf("ssh credential %q has no pinned host key yet; deploy it first to pin the host key", name)
+		}
 		return &pb.GitCredential{Username: "git", PrivateKey: priv, KnownHosts: kh, Kind: pb.CredentialKind_CRED_SSH}, nil
 	}
 
@@ -252,7 +255,11 @@ func sshHostPort(repo string) (host, port string) {
 	}
 	if strings.HasPrefix(repo, "ssh://") {
 		if u, err := url.Parse(repo); err == nil {
-			return u.Hostname(), u.Port()
+			host := u.Hostname()
+			if strings.HasPrefix(host, "-") {
+				return "", ""
+			}
+			return host, u.Port()
 		}
 		return "", ""
 	}
@@ -262,7 +269,11 @@ func sshHostPort(repo string) (host, port string) {
 		s = s[at+1:]
 	}
 	if colon := strings.Index(s, ":"); colon >= 0 {
-		return s[:colon], ""
+		host := s[:colon]
+		if strings.HasPrefix(host, "-") {
+			return "", ""
+		}
+		return host, ""
 	}
 	return "", ""
 }

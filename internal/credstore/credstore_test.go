@@ -175,6 +175,27 @@ func TestGenerateAndGetKey(t *testing.T) {
 	}
 }
 
+func TestGetRejectsSSHKeyEntry(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Generate("dk"); err != nil {
+		t.Fatal(err)
+	}
+	u, tk, ok, err := s.Get("dk")
+	if err != nil {
+		t.Fatalf("Get returned unexpected error: %v", err)
+	}
+	if ok {
+		t.Fatalf("Get returned ok=true for an ssh-key entry; want ok=false")
+	}
+	if tk != "" {
+		t.Fatalf("Get returned non-empty token %q for ssh-key entry; private key must not leak via Get", tk)
+	}
+	_ = u // username is also empty, but the critical check is ok==false and tk==""
+}
+
 func TestHTTPSEntriesStillWork(t *testing.T) {
 	s, err := Open(t.TempDir())
 	if err != nil {

@@ -202,12 +202,16 @@ func (s *Store) Put(name, username, token string) error {
 	return err
 }
 
-// Get decrypts the credential named name.
+// Get decrypts the credential named name. It only returns credentials of type
+// "https-token"; ssh-key entries are intentionally ignored (use GetKey instead).
 func (s *Store) Get(name string) (username, token string, ok bool, err error) {
 	s.mu.Lock()
 	e, present := s.data[name]
 	s.mu.Unlock()
 	if !present {
+		return "", "", false, nil
+	}
+	if e.Type != "https-token" {
 		return "", "", false, nil
 	}
 	pt, err := s.openCipher(e.Nonce, e.Cipher)
