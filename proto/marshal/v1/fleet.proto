@@ -133,6 +133,25 @@ message RedeployRequest {
   GitCredential credential = 2; // M22
 }
 
+enum CommitKind {
+  COMMIT_EDIT   = 0;
+  COMMIT_CREATE = 1;
+  COMMIT_DELETE = 2;
+  COMMIT_RENAME = 3;
+}
+
+// M24 — a single file mutation (edit/create/delete/rename) committed and pushed.
+message CommitRequest {
+  string        app        = 1;
+  CommitKind    kind       = 2;
+  string        path       = 3; // target (edit/create/delete) or rename source
+  string        new_path   = 4; // rename destination only
+  bytes         content    = 5; // edit/create only
+  string        message    = 6; // commit message (server fills a default)
+  GitCredential credential = 7; // M22 secret, attached per-op, never persisted
+}
+message CommitResult { string sha = 1; string branch = 2; }
+
 // M9 — control-plane command surface, shared by the down-stream Command and the
 // CLI's unary FleetControl so the op/result shapes have one definition.
 message ControlOp {
@@ -145,6 +164,7 @@ message ControlOp {
     RedeployRequest redeploy = 6; // M21
     ListDirRequest  list_dir  = 7; // M23
     ReadFileRequest read_file = 8; // M23
+    CommitRequest   commit    = 9; // M24
   }
 }
 
@@ -154,6 +174,7 @@ message ControlResult {
   repeated ProcInfo procs = 3; // affected instances on success
   DirListing  dir  = 4; // M23, set on list_dir success
   FileContent file = 5; // M23, set on read_file success
+  CommitResult commit = 6; // M24, set on commit success
 }
 
 message Command       { uint64 request_id = 1; ControlOp     op     = 2; } // server -> agent

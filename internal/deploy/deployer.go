@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	phaseCloning  = "cloning"
-	phaseBuilding = "building"
-	phaseFailed   = "failed"
+	phaseCloning    = "cloning"
+	phaseBuilding   = "building"
+	phaseFailed     = "failed"
+	phaseCommitting = "committing"
 )
 
 // Runner executes a command in dir, streaming combined output to stdout/stderr.
@@ -86,6 +87,9 @@ func (d *Deployer) Snapshots() []pb.ProcInfo {
 	defer d.mu.Unlock()
 	out := make([]pb.ProcInfo, 0, len(d.states))
 	for name, st := range d.states {
+		if st.phase == phaseCommitting {
+			continue
+		}
 		out = append(out, pb.ProcInfo{
 			Name:   name,
 			State:  st.phase,
@@ -169,6 +173,30 @@ func (d *Deployer) Redeploy(name string, cred Credential) error {
 		d.runDeploy(app, cred, true)
 	}()
 	return nil
+}
+
+// Commit applies one file mutation in the app's clone and pushes it to origin.
+// It refuses to run while a deploy/redeploy is in flight (and marks a transient
+// committing state so a concurrent deploy is refused too).
+func (d *Deployer) Commit(name string, kind pb.CommitKind, rel, newRel string, content []byte, message string, cred Credential) (*pb.CommitResult, error) {
+	src, ok := d.host.Source(name)
+	if !ok || src.Repo == "" {
+		return nil, fmt.Errorf("app %q is not git-sourced", name)
+	}
+	dir, ok := d.Root(name)
+	if !ok {
+		return nil, fmt.Errorf("not a git deployment")
+	}
+	d.mu.Lock()
+	if _, busy := d.states[name]; busy {
+		d.mu.Unlock()
+		return nil, fmt.Errorf("app %q is deploying", name)
+	}
+	d.states[name] = state{phase: phaseCommitting}
+	d.mu.Unlock()
+	defer d.clearState(name)
+
+	return d.mutateAndPush(dir, src, cred, kind, rel, newRel, content, message)
 }
 
 // runDeploy performs clone (or fetch when redeploy)+build, then launches or

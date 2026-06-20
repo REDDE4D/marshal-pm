@@ -2,6 +2,8 @@ package dashboard
 
 import (
 	"context"
+	"encoding/json"
+	"log"
 	"net/http"
 	"path"
 	"strings"
@@ -107,6 +109,144 @@ func (h *handler) readFileFiles(w http.ResponseWriter, r *http.Request) {
 		Path: f.GetPath(), Content: content, Size: f.GetSize(),
 		Truncated: f.GetTruncated(), Binary: f.GetBinary(),
 	})
+}
+
+const maxCommitBytes = 1 << 20 // 1 MiB content cap, matches the read cap
+
+type writeBody struct {
+	Content    string `json:"content"`
+	Message    string `json:"message"`
+	Credential string `json:"credential"`
+}
+type deleteBody struct {
+	Message    string `json:"message"`
+	Credential string `json:"credential"`
+}
+type renameBody struct {
+	From       string `json:"from"`
+	To         string `json:"to"`
+	Message    string `json:"message"`
+	Credential string `json:"credential"`
+}
+
+// writeFileFiles serves PUT /api/fleet/{agent}/apps/{app}/file?path=<rel>[&create=1].
+// With create=1 the op uses COMMIT_CREATE (path need not exist yet); otherwise
+// COMMIT_EDIT (path must already exist). Commits and pushes via the agent.
+func (h *handler) writeFileFiles(w http.ResponseWriter, r *http.Request) {
+	agent, app := r.PathValue("agent"), r.PathValue("app")
+	if agent == "" || app == "" {
+		http.Error(w, "agent and app required", http.StatusBadRequest)
+		return
+	}
+	p := r.URL.Query().Get("path")
+	if p == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path required"})
+		return
+	}
+	var body writeBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if len(body.Content) > maxCommitBytes {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file too large (max 1 MiB)"})
+		return
+	}
+	cred, cerr := h.resolveCredential(body.Credential)
+	if cerr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": cerr.Error()})
+		return
+	}
+	create := r.URL.Query().Get("create") == "1"
+	kind := pb.CommitKind_COMMIT_EDIT
+	defaultMsg := "Update " + p
+	label := "edit"
+	if create {
+		kind = pb.CommitKind_COMMIT_CREATE
+		defaultMsg = "Create " + p
+		label = "create"
+	}
+	msg := body.Message
+	if msg == "" {
+		msg = defaultMsg
+	}
+	op := &pb.ControlOp{Op: &pb.ControlOp_Commit{Commit: &pb.CommitRequest{
+		App: app, Kind: kind, Path: p,
+		Content: []byte(body.Content), Message: msg, Credential: cred,
+	}}}
+	h.commitControl(w, r, agent, app, label, op)
+}
+
+// deleteFileFiles serves DELETE /api/fleet/{agent}/apps/{app}/file?path=<rel>.
+func (h *handler) deleteFileFiles(w http.ResponseWriter, r *http.Request) {
+	agent, app := r.PathValue("agent"), r.PathValue("app")
+	if agent == "" || app == "" {
+		http.Error(w, "agent and app required", http.StatusBadRequest)
+		return
+	}
+	p := r.URL.Query().Get("path")
+	if p == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path required"})
+		return
+	}
+	var body deleteBody
+	_ = json.NewDecoder(r.Body).Decode(&body) // empty body is fine
+	cred, cerr := h.resolveCredential(body.Credential)
+	if cerr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": cerr.Error()})
+		return
+	}
+	msg := body.Message
+	if msg == "" {
+		msg = "Delete " + p
+	}
+	op := &pb.ControlOp{Op: &pb.ControlOp_Commit{Commit: &pb.CommitRequest{
+		App: app, Kind: pb.CommitKind_COMMIT_DELETE, Path: p,
+		Message: msg, Credential: cred,
+	}}}
+	h.commitControl(w, r, agent, app, "delete", op)
+}
+
+// renameFiles serves POST /api/fleet/{agent}/apps/{app}/rename.
+func (h *handler) renameFiles(w http.ResponseWriter, r *http.Request) {
+	agent, app := r.PathValue("agent"), r.PathValue("app")
+	if agent == "" || app == "" {
+		http.Error(w, "agent and app required", http.StatusBadRequest)
+		return
+	}
+	var body renameBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.From == "" || body.To == "" {
+		http.Error(w, "from and to required", http.StatusBadRequest)
+		return
+	}
+	cred, cerr := h.resolveCredential(body.Credential)
+	if cerr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": cerr.Error()})
+		return
+	}
+	msg := body.Message
+	if msg == "" {
+		msg = "Rename " + body.From + " → " + body.To
+	}
+	op := &pb.ControlOp{Op: &pb.ControlOp_Commit{Commit: &pb.CommitRequest{
+		App: app, Kind: pb.CommitKind_COMMIT_RENAME, Path: body.From, NewPath: body.To,
+		Message: msg, Credential: cred,
+	}}}
+	h.commitControl(w, r, agent, app, "rename", op)
+}
+
+// commitControl dispatches a commit op, maps errors (503/400), audit-logs the
+// outcome (never the token), and returns {sha,branch} on success.
+func (h *handler) commitControl(w http.ResponseWriter, r *http.Request, agent, app, kind string, op *pb.ControlOp) {
+	res, ok := h.fileControl(w, r, agent, op)
+	if !ok {
+		return
+	}
+	cr := res.GetCommit()
+	user, _ := r.Context().Value(userKey).(string)
+	log.Printf("dashboard: commit %s %s/%s -> %s by %s: sha=%s branch=%s",
+		kind, agent, app, op.GetCommit().GetPath(), user, cr.GetSha(), cr.GetBranch())
+	writeJSON(w, http.StatusOK, map[string]string{"sha": cr.GetSha(), "branch": cr.GetBranch()})
 }
 
 // fileControl dispatches op to the agent and handles the shared error mapping.

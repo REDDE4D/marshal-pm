@@ -40,3 +40,25 @@ func TestGitSourceAndDeployOpsGenerated(t *testing.T) {
 		t.Fatal("ControlOp_Redeploy round-trip failed")
 	}
 }
+
+func TestCommitOpWire(t *testing.T) {
+	op := &ControlOp{Op: &ControlOp_Commit{Commit: &CommitRequest{
+		App:        "app1",
+		Kind:       CommitKind_COMMIT_RENAME,
+		Path:       "a.txt",
+		NewPath:    "b.txt",
+		Content:    []byte("hi"),
+		Message:    "Rename a.txt → b.txt",
+		Credential: &GitCredential{Username: "octocat", Token: "ghp_x"},
+	}}}
+	c := op.GetCommit()
+	if c.GetApp() != "app1" || c.GetKind() != CommitKind_COMMIT_RENAME ||
+		c.GetPath() != "a.txt" || c.GetNewPath() != "b.txt" ||
+		string(c.GetContent()) != "hi" || c.GetCredential().GetToken() != "ghp_x" {
+		t.Fatalf("CommitRequest not wired: %+v", c)
+	}
+	res := &ControlResult{Ok: true, Commit: &CommitResult{Sha: "abc123", Branch: "main"}}
+	if res.GetCommit().GetSha() != "abc123" || res.GetCommit().GetBranch() != "main" {
+		t.Fatalf("CommitResult not wired: %+v", res.GetCommit())
+	}
+}
