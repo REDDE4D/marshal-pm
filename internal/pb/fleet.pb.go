@@ -21,6 +21,58 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type CommitKind int32
+
+const (
+	CommitKind_COMMIT_EDIT   CommitKind = 0
+	CommitKind_COMMIT_CREATE CommitKind = 1
+	CommitKind_COMMIT_DELETE CommitKind = 2
+	CommitKind_COMMIT_RENAME CommitKind = 3
+)
+
+// Enum value maps for CommitKind.
+var (
+	CommitKind_name = map[int32]string{
+		0: "COMMIT_EDIT",
+		1: "COMMIT_CREATE",
+		2: "COMMIT_DELETE",
+		3: "COMMIT_RENAME",
+	}
+	CommitKind_value = map[string]int32{
+		"COMMIT_EDIT":   0,
+		"COMMIT_CREATE": 1,
+		"COMMIT_DELETE": 2,
+		"COMMIT_RENAME": 3,
+	}
+)
+
+func (x CommitKind) Enum() *CommitKind {
+	p := new(CommitKind)
+	*p = x
+	return p
+}
+
+func (x CommitKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CommitKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_marshal_v1_fleet_proto_enumTypes[0].Descriptor()
+}
+
+func (CommitKind) Type() protoreflect.EnumType {
+	return &file_marshal_v1_fleet_proto_enumTypes[0]
+}
+
+func (x CommitKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CommitKind.Descriptor instead.
+func (CommitKind) EnumDescriptor() ([]byte, []int) {
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{0}
+}
+
 type AgentMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Msg:
@@ -1416,6 +1468,151 @@ func (x *RedeployRequest) GetCredential() *GitCredential {
 	return nil
 }
 
+// M24 — a single file mutation (edit/create/delete/rename) committed and pushed.
+type CommitRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	App           string                 `protobuf:"bytes,1,opt,name=app,proto3" json:"app,omitempty"`
+	Kind          CommitKind             `protobuf:"varint,2,opt,name=kind,proto3,enum=marshal.v1.CommitKind" json:"kind,omitempty"`
+	Path          string                 `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`                      // target (edit/create/delete) or rename source
+	NewPath       string                 `protobuf:"bytes,4,opt,name=new_path,json=newPath,proto3" json:"new_path,omitempty"` // rename destination only
+	Content       []byte                 `protobuf:"bytes,5,opt,name=content,proto3" json:"content,omitempty"`                // edit/create only
+	Message       string                 `protobuf:"bytes,6,opt,name=message,proto3" json:"message,omitempty"`                // commit message (server fills a default)
+	Credential    *GitCredential         `protobuf:"bytes,7,opt,name=credential,proto3" json:"credential,omitempty"`          // M22 secret, attached per-op, never persisted
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommitRequest) Reset() {
+	*x = CommitRequest{}
+	mi := &file_marshal_v1_fleet_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommitRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommitRequest) ProtoMessage() {}
+
+func (x *CommitRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_marshal_v1_fleet_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommitRequest.ProtoReflect.Descriptor instead.
+func (*CommitRequest) Descriptor() ([]byte, []int) {
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *CommitRequest) GetApp() string {
+	if x != nil {
+		return x.App
+	}
+	return ""
+}
+
+func (x *CommitRequest) GetKind() CommitKind {
+	if x != nil {
+		return x.Kind
+	}
+	return CommitKind_COMMIT_EDIT
+}
+
+func (x *CommitRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *CommitRequest) GetNewPath() string {
+	if x != nil {
+		return x.NewPath
+	}
+	return ""
+}
+
+func (x *CommitRequest) GetContent() []byte {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *CommitRequest) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *CommitRequest) GetCredential() *GitCredential {
+	if x != nil {
+		return x.Credential
+	}
+	return nil
+}
+
+type CommitResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sha           string                 `protobuf:"bytes,1,opt,name=sha,proto3" json:"sha,omitempty"`
+	Branch        string                 `protobuf:"bytes,2,opt,name=branch,proto3" json:"branch,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommitResult) Reset() {
+	*x = CommitResult{}
+	mi := &file_marshal_v1_fleet_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommitResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommitResult) ProtoMessage() {}
+
+func (x *CommitResult) ProtoReflect() protoreflect.Message {
+	mi := &file_marshal_v1_fleet_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommitResult.ProtoReflect.Descriptor instead.
+func (*CommitResult) Descriptor() ([]byte, []int) {
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *CommitResult) GetSha() string {
+	if x != nil {
+		return x.Sha
+	}
+	return ""
+}
+
+func (x *CommitResult) GetBranch() string {
+	if x != nil {
+		return x.Branch
+	}
+	return ""
+}
+
 // M9 — control-plane command surface, shared by the down-stream Command and the
 // CLI's unary FleetControl so the op/result shapes have one definition.
 type ControlOp struct {
@@ -1430,6 +1627,7 @@ type ControlOp struct {
 	//	*ControlOp_Redeploy
 	//	*ControlOp_ListDir
 	//	*ControlOp_ReadFile
+	//	*ControlOp_Commit
 	Op            isControlOp_Op `protobuf_oneof:"op"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1437,7 +1635,7 @@ type ControlOp struct {
 
 func (x *ControlOp) Reset() {
 	*x = ControlOp{}
-	mi := &file_marshal_v1_fleet_proto_msgTypes[23]
+	mi := &file_marshal_v1_fleet_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1449,7 +1647,7 @@ func (x *ControlOp) String() string {
 func (*ControlOp) ProtoMessage() {}
 
 func (x *ControlOp) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_fleet_proto_msgTypes[23]
+	mi := &file_marshal_v1_fleet_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1462,7 +1660,7 @@ func (x *ControlOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ControlOp.ProtoReflect.Descriptor instead.
 func (*ControlOp) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{23}
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ControlOp) GetOp() isControlOp_Op {
@@ -1544,6 +1742,15 @@ func (x *ControlOp) GetReadFile() *ReadFileRequest {
 	return nil
 }
 
+func (x *ControlOp) GetCommit() *CommitRequest {
+	if x != nil {
+		if x, ok := x.Op.(*ControlOp_Commit); ok {
+			return x.Commit
+		}
+	}
+	return nil
+}
+
 type isControlOp_Op interface {
 	isControlOp_Op()
 }
@@ -1580,6 +1787,10 @@ type ControlOp_ReadFile struct {
 	ReadFile *ReadFileRequest `protobuf:"bytes,8,opt,name=read_file,json=readFile,proto3,oneof"` // M23
 }
 
+type ControlOp_Commit struct {
+	Commit *CommitRequest `protobuf:"bytes,9,opt,name=commit,proto3,oneof"` // M24
+}
+
 func (*ControlOp_Stop) isControlOp_Op() {}
 
 func (*ControlOp_Restart) isControlOp_Op() {}
@@ -1596,20 +1807,23 @@ func (*ControlOp_ListDir) isControlOp_Op() {}
 
 func (*ControlOp_ReadFile) isControlOp_Op() {}
 
+func (*ControlOp_Commit) isControlOp_Op() {}
+
 type ControlResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
-	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"` // set when ok == false
-	Procs         []*ProcInfo            `protobuf:"bytes,3,rep,name=procs,proto3" json:"procs,omitempty"` // affected instances on success
-	Dir           *DirListing            `protobuf:"bytes,4,opt,name=dir,proto3" json:"dir,omitempty"`     // M23, set on list_dir success
-	File          *FileContent           `protobuf:"bytes,5,opt,name=file,proto3" json:"file,omitempty"`   // M23, set on read_file success
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`   // set when ok == false
+	Procs         []*ProcInfo            `protobuf:"bytes,3,rep,name=procs,proto3" json:"procs,omitempty"`   // affected instances on success
+	Dir           *DirListing            `protobuf:"bytes,4,opt,name=dir,proto3" json:"dir,omitempty"`       // M23, set on list_dir success
+	File          *FileContent           `protobuf:"bytes,5,opt,name=file,proto3" json:"file,omitempty"`     // M23, set on read_file success
+	Commit        *CommitResult          `protobuf:"bytes,6,opt,name=commit,proto3" json:"commit,omitempty"` // M24, set on commit success
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ControlResult) Reset() {
 	*x = ControlResult{}
-	mi := &file_marshal_v1_fleet_proto_msgTypes[24]
+	mi := &file_marshal_v1_fleet_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1621,7 +1835,7 @@ func (x *ControlResult) String() string {
 func (*ControlResult) ProtoMessage() {}
 
 func (x *ControlResult) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_fleet_proto_msgTypes[24]
+	mi := &file_marshal_v1_fleet_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1634,7 +1848,7 @@ func (x *ControlResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ControlResult.ProtoReflect.Descriptor instead.
 func (*ControlResult) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{24}
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ControlResult) GetOk() bool {
@@ -1672,6 +1886,13 @@ func (x *ControlResult) GetFile() *FileContent {
 	return nil
 }
 
+func (x *ControlResult) GetCommit() *CommitResult {
+	if x != nil {
+		return x.Commit
+	}
+	return nil
+}
+
 type Command struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RequestId     uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -1682,7 +1903,7 @@ type Command struct {
 
 func (x *Command) Reset() {
 	*x = Command{}
-	mi := &file_marshal_v1_fleet_proto_msgTypes[25]
+	mi := &file_marshal_v1_fleet_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1694,7 +1915,7 @@ func (x *Command) String() string {
 func (*Command) ProtoMessage() {}
 
 func (x *Command) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_fleet_proto_msgTypes[25]
+	mi := &file_marshal_v1_fleet_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1707,7 +1928,7 @@ func (x *Command) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Command.ProtoReflect.Descriptor instead.
 func (*Command) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{25}
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *Command) GetRequestId() uint64 {
@@ -1734,7 +1955,7 @@ type CommandResult struct {
 
 func (x *CommandResult) Reset() {
 	*x = CommandResult{}
-	mi := &file_marshal_v1_fleet_proto_msgTypes[26]
+	mi := &file_marshal_v1_fleet_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1746,7 +1967,7 @@ func (x *CommandResult) String() string {
 func (*CommandResult) ProtoMessage() {}
 
 func (x *CommandResult) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_fleet_proto_msgTypes[26]
+	mi := &file_marshal_v1_fleet_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1759,7 +1980,7 @@ func (x *CommandResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandResult.ProtoReflect.Descriptor instead.
 func (*CommandResult) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{26}
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CommandResult) GetRequestId() uint64 {
@@ -1786,7 +2007,7 @@ type FleetControlRequest struct {
 
 func (x *FleetControlRequest) Reset() {
 	*x = FleetControlRequest{}
-	mi := &file_marshal_v1_fleet_proto_msgTypes[27]
+	mi := &file_marshal_v1_fleet_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1798,7 +2019,7 @@ func (x *FleetControlRequest) String() string {
 func (*FleetControlRequest) ProtoMessage() {}
 
 func (x *FleetControlRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_fleet_proto_msgTypes[27]
+	mi := &file_marshal_v1_fleet_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1811,7 +2032,7 @@ func (x *FleetControlRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FleetControlRequest.ProtoReflect.Descriptor instead.
 func (*FleetControlRequest) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{27}
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *FleetControlRequest) GetAgentName() string {
@@ -1837,7 +2058,7 @@ type FleetControlResponse struct {
 
 func (x *FleetControlResponse) Reset() {
 	*x = FleetControlResponse{}
-	mi := &file_marshal_v1_fleet_proto_msgTypes[28]
+	mi := &file_marshal_v1_fleet_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1849,7 +2070,7 @@ func (x *FleetControlResponse) String() string {
 func (*FleetControlResponse) ProtoMessage() {}
 
 func (x *FleetControlResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_fleet_proto_msgTypes[28]
+	mi := &file_marshal_v1_fleet_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1862,7 +2083,7 @@ func (x *FleetControlResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FleetControlResponse.ProtoReflect.Descriptor instead.
 func (*FleetControlResponse) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{28}
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *FleetControlResponse) GetResult() *ControlResult {
@@ -1973,7 +2194,20 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"\x06target\x18\x01 \x01(\tR\x06target\x129\n" +
 	"\n" +
 	"credential\x18\x02 \x01(\v2\x19.marshal.v1.GitCredentialR\n" +
-	"credential\"\xb6\x03\n" +
+	"credential\"\xeb\x01\n" +
+	"\rCommitRequest\x12\x10\n" +
+	"\x03app\x18\x01 \x01(\tR\x03app\x12*\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x16.marshal.v1.CommitKindR\x04kind\x12\x12\n" +
+	"\x04path\x18\x03 \x01(\tR\x04path\x12\x19\n" +
+	"\bnew_path\x18\x04 \x01(\tR\anewPath\x12\x18\n" +
+	"\acontent\x18\x05 \x01(\fR\acontent\x12\x18\n" +
+	"\amessage\x18\x06 \x01(\tR\amessage\x129\n" +
+	"\n" +
+	"credential\x18\a \x01(\v2\x19.marshal.v1.GitCredentialR\n" +
+	"credential\"8\n" +
+	"\fCommitResult\x12\x10\n" +
+	"\x03sha\x18\x01 \x01(\tR\x03sha\x12\x16\n" +
+	"\x06branch\x18\x02 \x01(\tR\x06branch\"\xeb\x03\n" +
 	"\tControlOp\x12*\n" +
 	"\x04stop\x18\x01 \x01(\v2\x14.marshal.v1.SelectorH\x00R\x04stop\x120\n" +
 	"\arestart\x18\x02 \x01(\v2\x14.marshal.v1.SelectorH\x00R\arestart\x12.\n" +
@@ -1982,14 +2216,16 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"\x06deploy\x18\x05 \x01(\v2\x19.marshal.v1.DeployRequestH\x00R\x06deploy\x129\n" +
 	"\bredeploy\x18\x06 \x01(\v2\x1b.marshal.v1.RedeployRequestH\x00R\bredeploy\x127\n" +
 	"\blist_dir\x18\a \x01(\v2\x1a.marshal.v1.ListDirRequestH\x00R\alistDir\x12:\n" +
-	"\tread_file\x18\b \x01(\v2\x1b.marshal.v1.ReadFileRequestH\x00R\breadFileB\x04\n" +
-	"\x02op\"\xb8\x01\n" +
+	"\tread_file\x18\b \x01(\v2\x1b.marshal.v1.ReadFileRequestH\x00R\breadFile\x123\n" +
+	"\x06commit\x18\t \x01(\v2\x19.marshal.v1.CommitRequestH\x00R\x06commitB\x04\n" +
+	"\x02op\"\xea\x01\n" +
 	"\rControlResult\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12*\n" +
 	"\x05procs\x18\x03 \x03(\v2\x14.marshal.v1.ProcInfoR\x05procs\x12(\n" +
 	"\x03dir\x18\x04 \x01(\v2\x16.marshal.v1.DirListingR\x03dir\x12+\n" +
-	"\x04file\x18\x05 \x01(\v2\x17.marshal.v1.FileContentR\x04file\"O\n" +
+	"\x04file\x18\x05 \x01(\v2\x17.marshal.v1.FileContentR\x04file\x120\n" +
+	"\x06commit\x18\x06 \x01(\v2\x18.marshal.v1.CommitResultR\x06commit\"O\n" +
 	"\aCommand\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\x04R\trequestId\x12%\n" +
@@ -2003,7 +2239,13 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"agent_name\x18\x01 \x01(\tR\tagentName\x12%\n" +
 	"\x02op\x18\x02 \x01(\v2\x15.marshal.v1.ControlOpR\x02op\"I\n" +
 	"\x14FleetControlResponse\x121\n" +
-	"\x06result\x18\x01 \x01(\v2\x19.marshal.v1.ControlResultR\x06result2\xaa\x03\n" +
+	"\x06result\x18\x01 \x01(\v2\x19.marshal.v1.ControlResultR\x06result*V\n" +
+	"\n" +
+	"CommitKind\x12\x0f\n" +
+	"\vCOMMIT_EDIT\x10\x00\x12\x11\n" +
+	"\rCOMMIT_CREATE\x10\x01\x12\x11\n" +
+	"\rCOMMIT_DELETE\x10\x02\x12\x11\n" +
+	"\rCOMMIT_RENAME\x10\x032\xaa\x03\n" +
 	"\x05Fleet\x12B\n" +
 	"\aConnect\x12\x18.marshal.v1.AgentMessage\x1a\x19.marshal.v1.ServerMessage(\x010\x01\x12H\n" +
 	"\tListFleet\x12\x1c.marshal.v1.ListFleetRequest\x1a\x1d.marshal.v1.ListFleetResponse\x12a\n" +
@@ -2023,94 +2265,102 @@ func file_marshal_v1_fleet_proto_rawDescGZIP() []byte {
 	return file_marshal_v1_fleet_proto_rawDescData
 }
 
-var file_marshal_v1_fleet_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_marshal_v1_fleet_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_marshal_v1_fleet_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_marshal_v1_fleet_proto_goTypes = []any{
-	(*AgentMessage)(nil),               // 0: marshal.v1.AgentMessage
-	(*ServerMessage)(nil),              // 1: marshal.v1.ServerMessage
-	(*Hello)(nil),                      // 2: marshal.v1.Hello
-	(*HelloAck)(nil),                   // 3: marshal.v1.HelloAck
-	(*StateSnapshot)(nil),              // 4: marshal.v1.StateSnapshot
-	(*ListFleetRequest)(nil),           // 5: marshal.v1.ListFleetRequest
-	(*ListFleetResponse)(nil),          // 6: marshal.v1.ListFleetResponse
-	(*AgentState)(nil),                 // 7: marshal.v1.AgentState
-	(*MetricSample)(nil),               // 8: marshal.v1.MetricSample
-	(*MetricBatch)(nil),                // 9: marshal.v1.MetricBatch
-	(*LogShipLine)(nil),                // 10: marshal.v1.LogShipLine
-	(*LogBatch)(nil),                   // 11: marshal.v1.LogBatch
-	(*FleetLogsHistoryRequest)(nil),    // 12: marshal.v1.FleetLogsHistoryRequest
-	(*FleetLogsHistoryResponse)(nil),   // 13: marshal.v1.FleetLogsHistoryResponse
-	(*FleetMetricsHistoryRequest)(nil), // 14: marshal.v1.FleetMetricsHistoryRequest
-	(*GitCredential)(nil),              // 15: marshal.v1.GitCredential
-	(*ListDirRequest)(nil),             // 16: marshal.v1.ListDirRequest
-	(*ReadFileRequest)(nil),            // 17: marshal.v1.ReadFileRequest
-	(*DirEntry)(nil),                   // 18: marshal.v1.DirEntry
-	(*DirListing)(nil),                 // 19: marshal.v1.DirListing
-	(*FileContent)(nil),                // 20: marshal.v1.FileContent
-	(*DeployRequest)(nil),              // 21: marshal.v1.DeployRequest
-	(*RedeployRequest)(nil),            // 22: marshal.v1.RedeployRequest
-	(*ControlOp)(nil),                  // 23: marshal.v1.ControlOp
-	(*ControlResult)(nil),              // 24: marshal.v1.ControlResult
-	(*Command)(nil),                    // 25: marshal.v1.Command
-	(*CommandResult)(nil),              // 26: marshal.v1.CommandResult
-	(*FleetControlRequest)(nil),        // 27: marshal.v1.FleetControlRequest
-	(*FleetControlResponse)(nil),       // 28: marshal.v1.FleetControlResponse
-	(*ProcInfo)(nil),                   // 29: marshal.v1.ProcInfo
-	(LogStream)(0),                     // 30: marshal.v1.LogStream
-	(*LogLine)(nil),                    // 31: marshal.v1.LogLine
-	(*AppSpec)(nil),                    // 32: marshal.v1.AppSpec
-	(*Selector)(nil),                   // 33: marshal.v1.Selector
-	(*StartRequest)(nil),               // 34: marshal.v1.StartRequest
-	(*MetricsHistoryResponse)(nil),     // 35: marshal.v1.MetricsHistoryResponse
+	(CommitKind)(0),                    // 0: marshal.v1.CommitKind
+	(*AgentMessage)(nil),               // 1: marshal.v1.AgentMessage
+	(*ServerMessage)(nil),              // 2: marshal.v1.ServerMessage
+	(*Hello)(nil),                      // 3: marshal.v1.Hello
+	(*HelloAck)(nil),                   // 4: marshal.v1.HelloAck
+	(*StateSnapshot)(nil),              // 5: marshal.v1.StateSnapshot
+	(*ListFleetRequest)(nil),           // 6: marshal.v1.ListFleetRequest
+	(*ListFleetResponse)(nil),          // 7: marshal.v1.ListFleetResponse
+	(*AgentState)(nil),                 // 8: marshal.v1.AgentState
+	(*MetricSample)(nil),               // 9: marshal.v1.MetricSample
+	(*MetricBatch)(nil),                // 10: marshal.v1.MetricBatch
+	(*LogShipLine)(nil),                // 11: marshal.v1.LogShipLine
+	(*LogBatch)(nil),                   // 12: marshal.v1.LogBatch
+	(*FleetLogsHistoryRequest)(nil),    // 13: marshal.v1.FleetLogsHistoryRequest
+	(*FleetLogsHistoryResponse)(nil),   // 14: marshal.v1.FleetLogsHistoryResponse
+	(*FleetMetricsHistoryRequest)(nil), // 15: marshal.v1.FleetMetricsHistoryRequest
+	(*GitCredential)(nil),              // 16: marshal.v1.GitCredential
+	(*ListDirRequest)(nil),             // 17: marshal.v1.ListDirRequest
+	(*ReadFileRequest)(nil),            // 18: marshal.v1.ReadFileRequest
+	(*DirEntry)(nil),                   // 19: marshal.v1.DirEntry
+	(*DirListing)(nil),                 // 20: marshal.v1.DirListing
+	(*FileContent)(nil),                // 21: marshal.v1.FileContent
+	(*DeployRequest)(nil),              // 22: marshal.v1.DeployRequest
+	(*RedeployRequest)(nil),            // 23: marshal.v1.RedeployRequest
+	(*CommitRequest)(nil),              // 24: marshal.v1.CommitRequest
+	(*CommitResult)(nil),               // 25: marshal.v1.CommitResult
+	(*ControlOp)(nil),                  // 26: marshal.v1.ControlOp
+	(*ControlResult)(nil),              // 27: marshal.v1.ControlResult
+	(*Command)(nil),                    // 28: marshal.v1.Command
+	(*CommandResult)(nil),              // 29: marshal.v1.CommandResult
+	(*FleetControlRequest)(nil),        // 30: marshal.v1.FleetControlRequest
+	(*FleetControlResponse)(nil),       // 31: marshal.v1.FleetControlResponse
+	(*ProcInfo)(nil),                   // 32: marshal.v1.ProcInfo
+	(LogStream)(0),                     // 33: marshal.v1.LogStream
+	(*LogLine)(nil),                    // 34: marshal.v1.LogLine
+	(*AppSpec)(nil),                    // 35: marshal.v1.AppSpec
+	(*Selector)(nil),                   // 36: marshal.v1.Selector
+	(*StartRequest)(nil),               // 37: marshal.v1.StartRequest
+	(*MetricsHistoryResponse)(nil),     // 38: marshal.v1.MetricsHistoryResponse
 }
 var file_marshal_v1_fleet_proto_depIdxs = []int32{
-	2,  // 0: marshal.v1.AgentMessage.hello:type_name -> marshal.v1.Hello
-	4,  // 1: marshal.v1.AgentMessage.snapshot:type_name -> marshal.v1.StateSnapshot
-	9,  // 2: marshal.v1.AgentMessage.metrics:type_name -> marshal.v1.MetricBatch
-	11, // 3: marshal.v1.AgentMessage.logs:type_name -> marshal.v1.LogBatch
-	26, // 4: marshal.v1.AgentMessage.result:type_name -> marshal.v1.CommandResult
-	3,  // 5: marshal.v1.ServerMessage.hello_ack:type_name -> marshal.v1.HelloAck
-	25, // 6: marshal.v1.ServerMessage.command:type_name -> marshal.v1.Command
-	29, // 7: marshal.v1.StateSnapshot.procs:type_name -> marshal.v1.ProcInfo
-	7,  // 8: marshal.v1.ListFleetResponse.agents:type_name -> marshal.v1.AgentState
-	29, // 9: marshal.v1.AgentState.procs:type_name -> marshal.v1.ProcInfo
-	8,  // 10: marshal.v1.MetricBatch.samples:type_name -> marshal.v1.MetricSample
-	10, // 11: marshal.v1.LogBatch.lines:type_name -> marshal.v1.LogShipLine
-	30, // 12: marshal.v1.FleetLogsHistoryRequest.stream:type_name -> marshal.v1.LogStream
-	31, // 13: marshal.v1.FleetLogsHistoryResponse.lines:type_name -> marshal.v1.LogLine
-	18, // 14: marshal.v1.DirListing.entries:type_name -> marshal.v1.DirEntry
-	32, // 15: marshal.v1.DeployRequest.app:type_name -> marshal.v1.AppSpec
-	15, // 16: marshal.v1.DeployRequest.credential:type_name -> marshal.v1.GitCredential
-	15, // 17: marshal.v1.RedeployRequest.credential:type_name -> marshal.v1.GitCredential
-	33, // 18: marshal.v1.ControlOp.stop:type_name -> marshal.v1.Selector
-	33, // 19: marshal.v1.ControlOp.restart:type_name -> marshal.v1.Selector
-	33, // 20: marshal.v1.ControlOp.delete:type_name -> marshal.v1.Selector
-	34, // 21: marshal.v1.ControlOp.start:type_name -> marshal.v1.StartRequest
-	21, // 22: marshal.v1.ControlOp.deploy:type_name -> marshal.v1.DeployRequest
-	22, // 23: marshal.v1.ControlOp.redeploy:type_name -> marshal.v1.RedeployRequest
-	16, // 24: marshal.v1.ControlOp.list_dir:type_name -> marshal.v1.ListDirRequest
-	17, // 25: marshal.v1.ControlOp.read_file:type_name -> marshal.v1.ReadFileRequest
-	29, // 26: marshal.v1.ControlResult.procs:type_name -> marshal.v1.ProcInfo
-	19, // 27: marshal.v1.ControlResult.dir:type_name -> marshal.v1.DirListing
-	20, // 28: marshal.v1.ControlResult.file:type_name -> marshal.v1.FileContent
-	23, // 29: marshal.v1.Command.op:type_name -> marshal.v1.ControlOp
-	24, // 30: marshal.v1.CommandResult.result:type_name -> marshal.v1.ControlResult
-	23, // 31: marshal.v1.FleetControlRequest.op:type_name -> marshal.v1.ControlOp
-	24, // 32: marshal.v1.FleetControlResponse.result:type_name -> marshal.v1.ControlResult
-	0,  // 33: marshal.v1.Fleet.Connect:input_type -> marshal.v1.AgentMessage
-	5,  // 34: marshal.v1.Fleet.ListFleet:input_type -> marshal.v1.ListFleetRequest
-	14, // 35: marshal.v1.Fleet.FleetMetricsHistory:input_type -> marshal.v1.FleetMetricsHistoryRequest
-	12, // 36: marshal.v1.Fleet.FleetLogsHistory:input_type -> marshal.v1.FleetLogsHistoryRequest
-	27, // 37: marshal.v1.Fleet.FleetControl:input_type -> marshal.v1.FleetControlRequest
-	1,  // 38: marshal.v1.Fleet.Connect:output_type -> marshal.v1.ServerMessage
-	6,  // 39: marshal.v1.Fleet.ListFleet:output_type -> marshal.v1.ListFleetResponse
-	35, // 40: marshal.v1.Fleet.FleetMetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
-	13, // 41: marshal.v1.Fleet.FleetLogsHistory:output_type -> marshal.v1.FleetLogsHistoryResponse
-	28, // 42: marshal.v1.Fleet.FleetControl:output_type -> marshal.v1.FleetControlResponse
-	38, // [38:43] is the sub-list for method output_type
-	33, // [33:38] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	3,  // 0: marshal.v1.AgentMessage.hello:type_name -> marshal.v1.Hello
+	5,  // 1: marshal.v1.AgentMessage.snapshot:type_name -> marshal.v1.StateSnapshot
+	10, // 2: marshal.v1.AgentMessage.metrics:type_name -> marshal.v1.MetricBatch
+	12, // 3: marshal.v1.AgentMessage.logs:type_name -> marshal.v1.LogBatch
+	29, // 4: marshal.v1.AgentMessage.result:type_name -> marshal.v1.CommandResult
+	4,  // 5: marshal.v1.ServerMessage.hello_ack:type_name -> marshal.v1.HelloAck
+	28, // 6: marshal.v1.ServerMessage.command:type_name -> marshal.v1.Command
+	32, // 7: marshal.v1.StateSnapshot.procs:type_name -> marshal.v1.ProcInfo
+	8,  // 8: marshal.v1.ListFleetResponse.agents:type_name -> marshal.v1.AgentState
+	32, // 9: marshal.v1.AgentState.procs:type_name -> marshal.v1.ProcInfo
+	9,  // 10: marshal.v1.MetricBatch.samples:type_name -> marshal.v1.MetricSample
+	11, // 11: marshal.v1.LogBatch.lines:type_name -> marshal.v1.LogShipLine
+	33, // 12: marshal.v1.FleetLogsHistoryRequest.stream:type_name -> marshal.v1.LogStream
+	34, // 13: marshal.v1.FleetLogsHistoryResponse.lines:type_name -> marshal.v1.LogLine
+	19, // 14: marshal.v1.DirListing.entries:type_name -> marshal.v1.DirEntry
+	35, // 15: marshal.v1.DeployRequest.app:type_name -> marshal.v1.AppSpec
+	16, // 16: marshal.v1.DeployRequest.credential:type_name -> marshal.v1.GitCredential
+	16, // 17: marshal.v1.RedeployRequest.credential:type_name -> marshal.v1.GitCredential
+	0,  // 18: marshal.v1.CommitRequest.kind:type_name -> marshal.v1.CommitKind
+	16, // 19: marshal.v1.CommitRequest.credential:type_name -> marshal.v1.GitCredential
+	36, // 20: marshal.v1.ControlOp.stop:type_name -> marshal.v1.Selector
+	36, // 21: marshal.v1.ControlOp.restart:type_name -> marshal.v1.Selector
+	36, // 22: marshal.v1.ControlOp.delete:type_name -> marshal.v1.Selector
+	37, // 23: marshal.v1.ControlOp.start:type_name -> marshal.v1.StartRequest
+	22, // 24: marshal.v1.ControlOp.deploy:type_name -> marshal.v1.DeployRequest
+	23, // 25: marshal.v1.ControlOp.redeploy:type_name -> marshal.v1.RedeployRequest
+	17, // 26: marshal.v1.ControlOp.list_dir:type_name -> marshal.v1.ListDirRequest
+	18, // 27: marshal.v1.ControlOp.read_file:type_name -> marshal.v1.ReadFileRequest
+	24, // 28: marshal.v1.ControlOp.commit:type_name -> marshal.v1.CommitRequest
+	32, // 29: marshal.v1.ControlResult.procs:type_name -> marshal.v1.ProcInfo
+	20, // 30: marshal.v1.ControlResult.dir:type_name -> marshal.v1.DirListing
+	21, // 31: marshal.v1.ControlResult.file:type_name -> marshal.v1.FileContent
+	25, // 32: marshal.v1.ControlResult.commit:type_name -> marshal.v1.CommitResult
+	26, // 33: marshal.v1.Command.op:type_name -> marshal.v1.ControlOp
+	27, // 34: marshal.v1.CommandResult.result:type_name -> marshal.v1.ControlResult
+	26, // 35: marshal.v1.FleetControlRequest.op:type_name -> marshal.v1.ControlOp
+	27, // 36: marshal.v1.FleetControlResponse.result:type_name -> marshal.v1.ControlResult
+	1,  // 37: marshal.v1.Fleet.Connect:input_type -> marshal.v1.AgentMessage
+	6,  // 38: marshal.v1.Fleet.ListFleet:input_type -> marshal.v1.ListFleetRequest
+	15, // 39: marshal.v1.Fleet.FleetMetricsHistory:input_type -> marshal.v1.FleetMetricsHistoryRequest
+	13, // 40: marshal.v1.Fleet.FleetLogsHistory:input_type -> marshal.v1.FleetLogsHistoryRequest
+	30, // 41: marshal.v1.Fleet.FleetControl:input_type -> marshal.v1.FleetControlRequest
+	2,  // 42: marshal.v1.Fleet.Connect:output_type -> marshal.v1.ServerMessage
+	7,  // 43: marshal.v1.Fleet.ListFleet:output_type -> marshal.v1.ListFleetResponse
+	38, // 44: marshal.v1.Fleet.FleetMetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
+	14, // 45: marshal.v1.Fleet.FleetLogsHistory:output_type -> marshal.v1.FleetLogsHistoryResponse
+	31, // 46: marshal.v1.Fleet.FleetControl:output_type -> marshal.v1.FleetControlResponse
+	42, // [42:47] is the sub-list for method output_type
+	37, // [37:42] is the sub-list for method input_type
+	37, // [37:37] is the sub-list for extension type_name
+	37, // [37:37] is the sub-list for extension extendee
+	0,  // [0:37] is the sub-list for field type_name
 }
 
 func init() { file_marshal_v1_fleet_proto_init() }
@@ -2130,7 +2380,7 @@ func file_marshal_v1_fleet_proto_init() {
 		(*ServerMessage_HelloAck)(nil),
 		(*ServerMessage_Command)(nil),
 	}
-	file_marshal_v1_fleet_proto_msgTypes[23].OneofWrappers = []any{
+	file_marshal_v1_fleet_proto_msgTypes[25].OneofWrappers = []any{
 		(*ControlOp_Stop)(nil),
 		(*ControlOp_Restart)(nil),
 		(*ControlOp_Delete)(nil),
@@ -2139,19 +2389,21 @@ func file_marshal_v1_fleet_proto_init() {
 		(*ControlOp_Redeploy)(nil),
 		(*ControlOp_ListDir)(nil),
 		(*ControlOp_ReadFile)(nil),
+		(*ControlOp_Commit)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_marshal_v1_fleet_proto_rawDesc), len(file_marshal_v1_fleet_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   29,
+			NumEnums:      1,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_marshal_v1_fleet_proto_goTypes,
 		DependencyIndexes: file_marshal_v1_fleet_proto_depIdxs,
+		EnumInfos:         file_marshal_v1_fleet_proto_enumTypes,
 		MessageInfos:      file_marshal_v1_fleet_proto_msgTypes,
 	}.Build()
 	File_marshal_v1_fleet_proto = out.File
