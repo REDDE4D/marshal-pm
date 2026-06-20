@@ -98,9 +98,17 @@ message FleetMetricsHistoryRequest {
   int64  bucket_ms  = 4;
 }
 
+enum CredentialKind {
+  CRED_HTTPS = 0;
+  CRED_SSH   = 1;
+}
+
 message GitCredential {
-  string username = 1;
-  string token    = 2;
+  string         username    = 1;
+  string         token       = 2; // HTTPS only
+  string         private_key = 3; // SSH only — sealed in transit by TLS; never persisted on the agent
+  string         known_hosts = 4; // SSH only — the server-pinned host key line(s)
+  CredentialKind kind        = 5; // default CRED_HTTPS keeps M22/M24 agents working
 }
 
 // M23 — read-only file browser for deployed apps.
