@@ -276,3 +276,52 @@ func TestHandleFleetCommand_Commit(t *testing.T) {
 		t.Fatalf("nil deployer commit must fail")
 	}
 }
+
+func TestHandleFleetCommand_CommitCreate(t *testing.T) {
+	// Set up a bare remote + work clone, seeded with one commit (same pattern as
+	// TestHandleFleetCommand_Commit), then issue a COMMIT_CREATE for a brand-new
+	// path that does NOT yet exist in the working tree.
+	deployRoot := t.TempDir()
+	app := "app2"
+	work := filepath.Join(deployRoot, app)
+
+	run := func(dir string, args ...string) {
+		c := exec.Command("git", append([]string{"-c", "user.email=t@e", "-c", "user.name=t", "-c", "init.defaultBranch=main"}, args...)...)
+		c.Dir = dir
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	remote := filepath.Join(deployRoot, "remote2.git")
+	run(deployRoot, "init", "--bare", "--initial-branch=main", remote)
+	run(deployRoot, "clone", remote, work)
+	if err := os.WriteFile(filepath.Join(work, "README.md"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run(work, "add", "README.md")
+	run(work, "commit", "-m", "seed")
+	run(work, "push", "origin", "main")
+
+	h := &fakeDeployHost{sources: map[string]config.GitSource{app: {Repo: "r"}}}
+	s := &Server{mgr: manager.New(context.Background()), deployer: deploy.New(h, deploy.ExecRunner{}, deployRoot)}
+	defer s.mgr.StopAll()
+
+	// COMMIT_CREATE for a file that does not yet exist.
+	op := &pb.ControlOp{Op: &pb.ControlOp_Commit{Commit: &pb.CommitRequest{
+		App: app, Kind: pb.CommitKind_COMMIT_CREATE, Path: "newfile.txt",
+		Content: []byte("brand new\n"), Message: "Create newfile.txt",
+	}}}
+	res := s.handleFleetCommand(&pb.Command{Op: op})
+	if !res.GetOk() || res.GetCommit().GetBranch() != "main" {
+		t.Fatalf("commit_create: ok=%v branch=%q err=%q", res.GetOk(), res.GetCommit().GetBranch(), res.GetError())
+	}
+
+	// Verify the file actually landed in the work tree.
+	got, err := os.ReadFile(filepath.Join(work, "newfile.txt"))
+	if err != nil {
+		t.Fatalf("newfile.txt not on disk: %v", err)
+	}
+	if string(got) != "brand new\n" {
+		t.Fatalf("newfile.txt content = %q, want \"brand new\\n\"", got)
+	}
+}

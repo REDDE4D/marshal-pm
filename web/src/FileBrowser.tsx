@@ -5,7 +5,7 @@ import { json } from "@codemirror/lang-json";
 import { python } from "@codemirror/lang-python";
 import { go } from "@codemirror/lang-go";
 import {
-  listDir, readFile, fileDownloadURL, writeFile, deleteFile, renameFile,
+  listDir, readFile, fileDownloadURL, writeFile, createFile, deleteFile, renameFile,
   type DirEntry, type FileContent,
 } from "./api";
 
@@ -72,7 +72,7 @@ export function FileBrowser({ agent, app, credential }: { agent: string; app: st
     const rel = joinPath(path, name);
     setBusy(true); setErr(null); setNote(null);
     try {
-      const res = await writeFile(agent, app, rel, "", `Create ${rel}`, credential);
+      const res = await createFile(agent, app, rel, "", `Create ${rel}`, credential);
       setNote(`Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
       setReload((n) => n + 1);
     } catch (e: any) { setErr(String(e.message || e)); }

@@ -289,6 +289,20 @@ export async function writeFile(
   return r.json();
 }
 
+export async function createFile(
+  agent: string, app: string, path: string, content: string, message: string, credential?: string,
+): Promise<CommitResult> {
+  const q = new URLSearchParams({ path, create: "1" });
+  const r = await fetch(`/api/fleet/${encodeURIComponent(agent)}/apps/${encodeURIComponent(app)}/file?${q}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content, message, credential: credential || "" }),
+  });
+  if (r.status === 401) throw new Error("unauthorized");
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `save failed (${r.status})`);
+  return r.json();
+}
+
 export async function deleteFile(
   agent: string, app: string, path: string, message: string, credential?: string,
 ): Promise<CommitResult> {

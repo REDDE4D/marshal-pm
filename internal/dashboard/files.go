@@ -129,12 +129,18 @@ type renameBody struct {
 	Credential string `json:"credential"`
 }
 
-// writeFileFiles serves PUT /api/fleet/{agent}/apps/{app}/file?path=<rel>.
-// Edits an existing file or creates it; commits and pushes via the agent.
+// writeFileFiles serves PUT /api/fleet/{agent}/apps/{app}/file?path=<rel>[&create=1].
+// With create=1 the op uses COMMIT_CREATE (path need not exist yet); otherwise
+// COMMIT_EDIT (path must already exist). Commits and pushes via the agent.
 func (h *handler) writeFileFiles(w http.ResponseWriter, r *http.Request) {
 	agent, app := r.PathValue("agent"), r.PathValue("app")
 	if agent == "" || app == "" {
 		http.Error(w, "agent and app required", http.StatusBadRequest)
+		return
+	}
+	p := r.URL.Query().Get("path")
+	if p == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path required"})
 		return
 	}
 	var body writeBody
@@ -151,12 +157,19 @@ func (h *handler) writeFileFiles(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": cerr.Error()})
 		return
 	}
+	create := r.URL.Query().Get("create") == "1"
+	kind := pb.CommitKind_COMMIT_EDIT
+	defaultMsg := "Update " + p
+	if create {
+		kind = pb.CommitKind_COMMIT_CREATE
+		defaultMsg = "Create " + p
+	}
 	msg := body.Message
 	if msg == "" {
-		msg = "Update " + r.URL.Query().Get("path")
+		msg = defaultMsg
 	}
 	op := &pb.ControlOp{Op: &pb.ControlOp_Commit{Commit: &pb.CommitRequest{
-		App: app, Kind: pb.CommitKind_COMMIT_EDIT, Path: r.URL.Query().Get("path"),
+		App: app, Kind: kind, Path: p,
 		Content: []byte(body.Content), Message: msg, Credential: cred,
 	}}}
 	h.commitControl(w, r, agent, app, "edit", op)
@@ -169,6 +182,11 @@ func (h *handler) deleteFileFiles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "agent and app required", http.StatusBadRequest)
 		return
 	}
+	p := r.URL.Query().Get("path")
+	if p == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path required"})
+		return
+	}
 	var body deleteBody
 	_ = json.NewDecoder(r.Body).Decode(&body) // empty body is fine
 	cred, cerr := h.resolveCredential(body.Credential)
@@ -178,10 +196,10 @@ func (h *handler) deleteFileFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	msg := body.Message
 	if msg == "" {
-		msg = "Delete " + r.URL.Query().Get("path")
+		msg = "Delete " + p
 	}
 	op := &pb.ControlOp{Op: &pb.ControlOp_Commit{Commit: &pb.CommitRequest{
-		App: app, Kind: pb.CommitKind_COMMIT_DELETE, Path: r.URL.Query().Get("path"),
+		App: app, Kind: pb.CommitKind_COMMIT_DELETE, Path: p,
 		Message: msg, Credential: cred,
 	}}}
 	h.commitControl(w, r, agent, app, "delete", op)
