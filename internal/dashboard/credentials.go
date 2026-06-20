@@ -53,7 +53,7 @@ func (h *handler) createCredential(w http.ResponseWriter, r *http.Request) {
 	if body.Type == "ssh-key" {
 		pub, err := h.creds.Generate(body.Name)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		log.Printf("dashboard: credential.generate %s (ssh-key) by %s", body.Name, user) // never log the key
