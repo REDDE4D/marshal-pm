@@ -160,9 +160,11 @@ func (h *handler) writeFileFiles(w http.ResponseWriter, r *http.Request) {
 	create := r.URL.Query().Get("create") == "1"
 	kind := pb.CommitKind_COMMIT_EDIT
 	defaultMsg := "Update " + p
+	label := "edit"
 	if create {
 		kind = pb.CommitKind_COMMIT_CREATE
 		defaultMsg = "Create " + p
+		label = "create"
 	}
 	msg := body.Message
 	if msg == "" {
@@ -172,7 +174,7 @@ func (h *handler) writeFileFiles(w http.ResponseWriter, r *http.Request) {
 		App: app, Kind: kind, Path: p,
 		Content: []byte(body.Content), Message: msg, Credential: cred,
 	}}}
-	h.commitControl(w, r, agent, app, "edit", op)
+	h.commitControl(w, r, agent, app, label, op)
 }
 
 // deleteFileFiles serves DELETE /api/fleet/{agent}/apps/{app}/file?path=<rel>.
