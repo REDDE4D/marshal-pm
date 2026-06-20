@@ -1,8 +1,10 @@
 package credstore
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -123,4 +125,69 @@ func bytesContains(b, sub []byte) bool {
 		}
 	}
 	return false
+}
+
+func TestGenerateAndGetKey(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, err := s.Generate("deploykey")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(pub, "ssh-ed25519 ") {
+		t.Fatalf("public key = %q, want ssh-ed25519 prefix", pub)
+	}
+
+	// Meta exposes the public key + type, never the private key.
+	metas := s.List()
+	if len(metas) != 1 || metas[0].Type != "ssh-key" || metas[0].PublicKey != pub {
+		t.Fatalf("meta = %+v", metas)
+	}
+
+	// The private key round-trips via GetKey...
+	priv, kh, ok, err := s.GetKey("deploykey")
+	if err != nil || !ok {
+		t.Fatalf("GetKey ok=%v err=%v", ok, err)
+	}
+	if !strings.Contains(priv, "PRIVATE KEY") {
+		t.Fatalf("private key not returned: %q", priv)
+	}
+	if kh != "" {
+		t.Fatalf("known_hosts should start empty, got %q", kh)
+	}
+
+	// ...but is NOT present in plaintext on disk.
+	raw, _ := os.ReadFile(filepath.Join(dir, "credentials.json"))
+	if bytes.Contains(raw, []byte(priv)) {
+		t.Fatal("private key leaked to credentials.json in plaintext")
+	}
+
+	// SetKnownHosts persists the pin.
+	if err := s.SetKnownHosts("deploykey", "github.com ssh-ed25519 AAAA"); err != nil {
+		t.Fatal(err)
+	}
+	_, kh2, _, _ := s.GetKey("deploykey")
+	if kh2 != "github.com ssh-ed25519 AAAA" {
+		t.Fatalf("pin not persisted: %q", kh2)
+	}
+}
+
+func TestHTTPSEntriesStillWork(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Put("tok", "octocat", "ghp_xxx"); err != nil {
+		t.Fatal(err)
+	}
+	u, tk, ok, err := s.Get("tok")
+	if err != nil || !ok || u != "octocat" || tk != "ghp_xxx" {
+		t.Fatalf("https get broke: u=%q tk=%q ok=%v err=%v", u, tk, ok, err)
+	}
+	if m := s.List(); m[0].Type != "https-token" || m[0].PublicKey != "" {
+		t.Fatalf("https meta wrong: %+v", m[0])
+	}
 }
