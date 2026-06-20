@@ -152,7 +152,7 @@ func (h *handler) writeFileFiles(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file too large (max 1 MiB)"})
 		return
 	}
-	cred, cerr := h.resolveCredential(body.Credential)
+	cred, cerr := h.resolveCredential(body.Credential, "")
 	if cerr != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": cerr.Error()})
 		return
@@ -191,7 +191,7 @@ func (h *handler) deleteFileFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	var body deleteBody
 	_ = json.NewDecoder(r.Body).Decode(&body) // empty body is fine
-	cred, cerr := h.resolveCredential(body.Credential)
+	cred, cerr := h.resolveCredential(body.Credential, "")
 	if cerr != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": cerr.Error()})
 		return
@@ -219,7 +219,7 @@ func (h *handler) renameFiles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "from and to required", http.StatusBadRequest)
 		return
 	}
-	cred, cerr := h.resolveCredential(body.Credential)
+	cred, cerr := h.resolveCredential(body.Credential, "")
 	if cerr != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": cerr.Error()})
 		return
