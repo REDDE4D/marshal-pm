@@ -325,7 +325,7 @@ func (d *Deployer) gitCredEnv(cred Credential) (env []string, cleanup func(), er
 			return fail(err)
 		}
 		sshCmd := fmt.Sprintf(
-			"ssh -i %s -o IdentitiesOnly=yes -o IdentityAgent=none -o StrictHostKeyChecking=yes -o UserKnownHostsFile=%s",
+			"ssh -i '%s' -o IdentitiesOnly=yes -o IdentityAgent=none -o StrictHostKeyChecking=yes -o UserKnownHostsFile='%s'",
 			keyPath, khPath)
 		return []string{"GIT_SSH_COMMAND=" + sshCmd, "GIT_TERMINAL_PROMPT=0"}, func() { _ = os.RemoveAll(tmp) }, nil
 	}

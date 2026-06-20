@@ -495,7 +495,7 @@ func TestGitCredEnvSSH(t *testing.T) {
 	if sshCmd == "" {
 		t.Fatal("no GIT_SSH_COMMAND in env")
 	}
-	for _, want := range []string{"StrictHostKeyChecking=yes", "IdentitiesOnly=yes", "UserKnownHostsFile=", "-i "} {
+	for _, want := range []string{"StrictHostKeyChecking=yes", "IdentitiesOnly=yes", "IdentityAgent=none", "UserKnownHostsFile=", "-i "} {
 		if !strings.Contains(sshCmd, want) {
 			t.Fatalf("GIT_SSH_COMMAND %q missing %q", sshCmd, want)
 		}
@@ -510,6 +510,10 @@ func TestGitCredEnvSSH(t *testing.T) {
 			khPath = strings.TrimPrefix(f, "UserKnownHostsFile=")
 		}
 	}
+	// Trim surrounding single quotes (added by shell quoting in gitCredEnv)
+	keyPath = strings.Trim(keyPath, "'")
+	khPath = strings.Trim(khPath, "'")
+
 	fi, err := os.Stat(keyPath)
 	if err != nil {
 		t.Fatal(err)
