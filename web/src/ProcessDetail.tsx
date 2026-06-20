@@ -26,7 +26,7 @@ function uptime(ms: number): string {
 function mib(b: number): string { return b <= 0 ? "—" : `${(b / 1048576).toFixed(1)}`; }
 
 export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: string; onLogout: () => void }) {
-  const [p, setP] = useState<{ state: string; pid: number; uptime_ms: number; restarts: number; cpu: number; mem: number; source?: "command" | "git" } | null>(null);
+  const [p, setP] = useState<{ state: string; pid: number; uptime_ms: number; restarts: number; cpu: number; mem: number; source?: "command" | "git"; credential?: string } | null>(null);
   const [connected, setConnected] = useState(false);
   const [errCount, setErrCount] = useState(0);
   const [windowMs, setWindowMs] = useState(WINDOWS[0].ms);
@@ -135,7 +135,7 @@ export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: 
       {p?.source === "git" && (
         <div className="card">
           <div className="card-head"><span className="lbl">files</span></div>
-          <FileBrowser agent={agent} app={proc} />
+          <FileBrowser agent={agent} app={proc} credential={p?.credential} />
         </div>
       )}
 

@@ -272,3 +272,46 @@ export function fileDownloadURL(agent: string, app: string, path: string): strin
   const q = new URLSearchParams({ path, raw: "1" });
   return `/api/fleet/${encodeURIComponent(agent)}/apps/${encodeURIComponent(app)}/file?${q}`;
 }
+
+export type CommitResult = { sha: string; branch: string };
+
+export async function writeFile(
+  agent: string, app: string, path: string, content: string, message: string, credential?: string,
+): Promise<CommitResult> {
+  const q = new URLSearchParams({ path });
+  const r = await fetch(`/api/fleet/${encodeURIComponent(agent)}/apps/${encodeURIComponent(app)}/file?${q}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content, message, credential: credential || "" }),
+  });
+  if (r.status === 401) throw new Error("unauthorized");
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `save failed (${r.status})`);
+  return r.json();
+}
+
+export async function deleteFile(
+  agent: string, app: string, path: string, message: string, credential?: string,
+): Promise<CommitResult> {
+  const q = new URLSearchParams({ path });
+  const r = await fetch(`/api/fleet/${encodeURIComponent(agent)}/apps/${encodeURIComponent(app)}/file?${q}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, credential: credential || "" }),
+  });
+  if (r.status === 401) throw new Error("unauthorized");
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `delete failed (${r.status})`);
+  return r.json();
+}
+
+export async function renameFile(
+  agent: string, app: string, from: string, to: string, message: string, credential?: string,
+): Promise<CommitResult> {
+  const r = await fetch(`/api/fleet/${encodeURIComponent(agent)}/apps/${encodeURIComponent(app)}/rename`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to, message, credential: credential || "" }),
+  });
+  if (r.status === 401) throw new Error("unauthorized");
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `rename failed (${r.status})`);
+  return r.json();
+}
