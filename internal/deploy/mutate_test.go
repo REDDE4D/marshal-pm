@@ -175,3 +175,60 @@ func TestMutateAndPush_GitGuard(t *testing.T) {
 		t.Fatalf(".git write must be rejected")
 	}
 }
+
+func TestMutateAndPush_RollbackOnPushReject(t *testing.T) {
+	d := New(nil, ExecRunner{}, t.TempDir())
+	work, remote := newRepoWithRemote(t)
+	preSHA := strings.TrimSpace(gitT(t, work, "rev-parse", "HEAD"))
+
+	// Advance origin from a second clone so our push is a non-fast-forward.
+	other := filepath.Join(t.TempDir(), "other")
+	gitT(t, filepath.Dir(other), "clone", remote, other)
+	if err := os.WriteFile(filepath.Join(other, "README.md"), []byte("theirs\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitT(t, other, "add", "README.md")
+	gitT(t, other, "commit", "-m", "theirs")
+	gitT(t, other, "push", "origin", "main")
+
+	if _, err := d.mutateAndPush(work, config.GitSource{}, Credential{}, pb.CommitKind_COMMIT_EDIT, "README.md", "", []byte("mine\n"), "Update README.md"); err == nil {
+		t.Fatalf("expected push rejection")
+	}
+	// Local tree rolled back to preSHA, working file unchanged, no dangling commit.
+	if got := strings.TrimSpace(gitT(t, work, "rev-parse", "HEAD")); got != preSHA {
+		t.Fatalf("HEAD = %q, want rolled back to %q", got, preSHA)
+	}
+	if b, _ := os.ReadFile(filepath.Join(work, "README.md")); string(b) != "seed\n" {
+		t.Fatalf("working file not rolled back: %q", b)
+	}
+}
+
+func TestMutateAndPush_RollbackRemovesCreatedLeftover(t *testing.T) {
+	d := New(nil, ExecRunner{}, t.TempDir())
+	work, remote := newRepoWithRemote(t)
+	// Force a push reject as above.
+	other := filepath.Join(t.TempDir(), "other2")
+	gitT(t, filepath.Dir(other), "clone", remote, other)
+	if err := os.WriteFile(filepath.Join(other, "x"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitT(t, other, "add", "x")
+	gitT(t, other, "commit", "-m", "x")
+	gitT(t, other, "push", "origin", "main")
+
+	if _, err := d.mutateAndPush(work, config.GitSource{}, Credential{}, pb.CommitKind_COMMIT_CREATE, "newfile.txt", "", []byte("n"), "Create newfile.txt"); err == nil {
+		t.Fatalf("expected push rejection")
+	}
+	if _, err := os.Stat(filepath.Join(work, "newfile.txt")); !os.IsNotExist(err) {
+		t.Fatalf("created leftover not removed on rollback")
+	}
+}
+
+func TestMutateAndPush_DetachedHeadRejected(t *testing.T) {
+	d := New(nil, ExecRunner{}, t.TempDir())
+	work, _ := newRepoWithRemote(t)
+	gitT(t, work, "checkout", "--detach", "HEAD")
+	if _, err := d.mutateAndPush(work, config.GitSource{}, Credential{}, pb.CommitKind_COMMIT_EDIT, "README.md", "", []byte("x\n"), "m"); err == nil {
+		t.Fatalf("detached HEAD must be rejected")
+	}
+}
