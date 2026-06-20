@@ -101,6 +101,19 @@ func (s *Server) handleFleetCommand(cmd *pb.Command) *pb.ControlResult {
 		}
 		return &pb.ControlResult{Ok: true, File: fc}
 
+	case *pb.ControlOp_Commit:
+		if s.deployer == nil {
+			return &pb.ControlResult{Ok: false, Error: "deploy not supported"}
+		}
+		c := v.Commit
+		cc := c.GetCredential()
+		cred := deploy.Credential{Username: cc.GetUsername(), Token: cc.GetToken()}
+		res, cerr := s.deployer.Commit(c.GetApp(), c.GetKind(), c.GetPath(), c.GetNewPath(), c.GetContent(), c.GetMessage(), cred)
+		if cerr != nil {
+			return &pb.ControlResult{Ok: false, Error: cerr.Error()}
+		}
+		return &pb.ControlResult{Ok: true, Commit: res}
+
 	default:
 		return &pb.ControlResult{Ok: false, Error: fmt.Sprintf("unknown op type %T", op.GetOp())}
 	}
