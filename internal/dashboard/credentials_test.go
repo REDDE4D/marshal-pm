@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -51,4 +52,44 @@ func TestCredentialsDisabledWhenNil(t *testing.T) {
 func newTestHandlerWithCreds(t *testing.T, creds Credentials) *handler {
 	t.Helper()
 	return newHandler(nil, nil, nil, nil, nil, time.Hour, "", "", creds)
+}
+
+// TestCreateSSHCredentialReturnsPublicKey verifies that POST /api/credentials
+// with type=ssh-key generates an SSH keypair and returns the public key.
+func TestCreateSSHCredentialReturnsPublicKey(t *testing.T) {
+	cs, err := credstore.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newTestHandlerWithCreds(t, cs)
+	body := `{"name":"deploykey","type":"ssh-key"}`
+	rec := httptest.NewRecorder()
+	h.createCredential(rec, httptest.NewRequest("POST", "/api/credentials", strings.NewReader(body)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		PublicKey string `json:"public_key"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !strings.HasPrefix(got.PublicKey, "ssh-ed25519 ") {
+		t.Fatalf("public_key = %q, want ssh-ed25519 prefix", got.PublicKey)
+	}
+}
+
+// TestCreateSSHCredentialRejectsEmptyName verifies that POST /api/credentials
+// with type=ssh-key but no name returns 400.
+func TestCreateSSHCredentialRejectsEmptyName(t *testing.T) {
+	cs, err := credstore.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newTestHandlerWithCreds(t, cs)
+	rec := httptest.NewRecorder()
+	h.createCredential(rec, httptest.NewRequest("POST", "/api/credentials", strings.NewReader(`{"type":"ssh-key"}`)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
 }
