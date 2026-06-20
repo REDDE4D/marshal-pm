@@ -187,7 +187,7 @@ func (d *Deployer) mutateAndPush(dir string, src config.GitSource, cred Credenti
 		return nil, fmt.Errorf("credential setup failed")
 	}
 	defer cleanup()
-	credActive := cred.Token != ""
+	credActive := cred.httpsActive()
 	pushURL := "origin"
 	if credActive {
 		pushURL = withUsername(src.Repo, cred.Username)

@@ -36,11 +36,26 @@ type Host interface {
 	Writers(label string) (stdout, stderr io.Writer)
 }
 
-// Credential is an HTTPS git credential pushed per-deploy (M22). Empty Token
-// means "no managed credential" — use the host's own git auth.
+// Credential is a git credential pushed per-deploy (M22/M25). For HTTPS, Token
+// is set and SSH is false. For SSH, SSH is true and PrivateKey/KnownHosts are
+// set. An empty Token with SSH false means "no managed credential".
 type Credential struct {
-	Username string
-	Token    string
+	Username   string
+	Token      string // HTTPS personal-access token
+	PrivateKey string // SSH OpenSSH-format private key
+	KnownHosts string // SSH server-pinned host key line(s)
+	SSH        bool   // true → SSH key auth
+}
+
+func (c Credential) httpsActive() bool { return !c.SSH && c.Token != "" }
+
+// String redacts secrets so a stray %v/%+v cannot leak the token or key.
+func (c Credential) String() string {
+	kind := "https"
+	if c.SSH {
+		kind = "ssh"
+	}
+	return fmt.Sprintf("Credential{user:%q kind:%s}", c.Username, kind)
 }
 
 type state struct {
@@ -256,7 +271,7 @@ func (d *Deployer) fetch(ctx context.Context, dir string, src config.GitSource, 
 	}
 	defer cleanup()
 
-	credActive := cred.Token != ""
+	credActive := cred.httpsActive()
 
 	if !redeploy {
 		_ = os.RemoveAll(dir)
@@ -285,10 +300,35 @@ func (d *Deployer) fetch(ctx context.Context, dir string, src config.GitSource, 
 	return d.runner.Run(ctx, dir, env, stdout, stderr, "git", gitArgs(credActive, "reset", "--hard", "FETCH_HEAD")...)
 }
 
-// gitCredEnv writes a throwaway GIT_ASKPASS helper and returns the env that
-// makes git read the token from the environment (never argv/URL). cleanup
-// removes the helper. With no token it returns (nil, noop, nil).
+// gitCredEnv returns the env vars that make git authenticate without putting
+// secrets on the command line. For SSH credentials it writes a short-lived
+// private key + known_hosts pair under a 0600 temp dir and sets
+// GIT_SSH_COMMAND. For HTTPS it writes a throwaway GIT_ASKPASS helper. With
+// no credential it returns (nil, noop, nil).
 func (d *Deployer) gitCredEnv(cred Credential) (env []string, cleanup func(), err error) {
+	if cred.SSH {
+		tmp, err := os.MkdirTemp("", "marshal-ssh-")
+		if err != nil {
+			return nil, func() {}, err
+		}
+		fail := func(e error) ([]string, func(), error) { _ = os.RemoveAll(tmp); return nil, func() {}, e }
+		keyPath := filepath.Join(tmp, "id")
+		key := cred.PrivateKey
+		if !strings.HasSuffix(key, "\n") {
+			key += "\n" // OpenSSH refuses a key without a trailing newline
+		}
+		if err := os.WriteFile(keyPath, []byte(key), 0o600); err != nil {
+			return fail(err)
+		}
+		khPath := filepath.Join(tmp, "known_hosts")
+		if err := os.WriteFile(khPath, []byte(cred.KnownHosts), 0o600); err != nil {
+			return fail(err)
+		}
+		sshCmd := fmt.Sprintf(
+			"ssh -i %s -o IdentitiesOnly=yes -o IdentityAgent=none -o StrictHostKeyChecking=yes -o UserKnownHostsFile=%s",
+			keyPath, khPath)
+		return []string{"GIT_SSH_COMMAND=" + sshCmd, "GIT_TERMINAL_PROMPT=0"}, func() { _ = os.RemoveAll(tmp) }, nil
+	}
 	if cred.Token == "" {
 		return nil, func() {}, nil
 	}
