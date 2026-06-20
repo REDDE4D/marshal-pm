@@ -8,6 +8,23 @@ import (
 	"marshal/internal/pb"
 )
 
+// credFromProto maps a wire credential to the deployer's credential, branching
+// on kind. A nil credential maps to the zero value (no managed credential).
+func credFromProto(c *pb.GitCredential) deploy.Credential {
+	if c == nil {
+		return deploy.Credential{}
+	}
+	if c.GetKind() == pb.CredentialKind_CRED_SSH {
+		return deploy.Credential{
+			Username:   c.GetUsername(),
+			PrivateKey: c.GetPrivateKey(),
+			KnownHosts: c.GetKnownHosts(),
+			SSH:        true,
+		}
+	}
+	return deploy.Credential{Username: c.GetUsername(), Token: c.GetToken()}
+}
+
 // handleFleetCommand executes a control command received from the fleet server
 // and returns its result. It is wired into the fleet client via fleet.WithCommands.
 func (s *Server) handleFleetCommand(cmd *pb.Command) *pb.ControlResult {
@@ -56,7 +73,7 @@ func (s *Server) handleFleetCommand(cmd *pb.Command) *pb.ControlResult {
 			return &pb.ControlResult{Ok: false, Error: cerr.Error()}
 		}
 		c := v.Deploy.GetCredential()
-		cred := deploy.Credential{Username: c.GetUsername(), Token: c.GetToken()}
+		cred := credFromProto(c)
 		if derr := s.deployer.Start(app, cred); derr != nil {
 			return &pb.ControlResult{Ok: false, Error: derr.Error()}
 		}
@@ -67,7 +84,7 @@ func (s *Server) handleFleetCommand(cmd *pb.Command) *pb.ControlResult {
 			return &pb.ControlResult{Ok: false, Error: "deploy not supported"}
 		}
 		rc := v.Redeploy.GetCredential()
-		cred := deploy.Credential{Username: rc.GetUsername(), Token: rc.GetToken()}
+		cred := credFromProto(rc)
 		if derr := s.deployer.Redeploy(v.Redeploy.GetTarget(), cred); derr != nil {
 			return &pb.ControlResult{Ok: false, Error: derr.Error()}
 		}
@@ -107,7 +124,7 @@ func (s *Server) handleFleetCommand(cmd *pb.Command) *pb.ControlResult {
 		}
 		c := v.Commit
 		cc := c.GetCredential()
-		cred := deploy.Credential{Username: cc.GetUsername(), Token: cc.GetToken()}
+		cred := credFromProto(cc)
 		res, cerr := s.deployer.Commit(c.GetApp(), c.GetKind(), c.GetPath(), c.GetNewPath(), c.GetContent(), c.GetMessage(), cred)
 		if cerr != nil {
 			return &pb.ControlResult{Ok: false, Error: cerr.Error()}

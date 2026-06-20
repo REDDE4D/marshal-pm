@@ -325,3 +325,25 @@ func TestHandleFleetCommand_CommitCreate(t *testing.T) {
 		t.Fatalf("newfile.txt content = %q, want \"brand new\\n\"", got)
 	}
 }
+
+func TestCredFromProtoSSH(t *testing.T) {
+	got := credFromProto(&pb.GitCredential{
+		Kind:       pb.CredentialKind_CRED_SSH,
+		PrivateKey: "PRIV",
+		KnownHosts: "h ssh-ed25519 AAAA",
+		Username:   "git",
+	})
+	if !got.SSH || got.PrivateKey != "PRIV" || got.KnownHosts == "" {
+		t.Fatalf("ssh mapping wrong: %+v", got)
+	}
+}
+
+func TestCredFromProtoHTTPS(t *testing.T) {
+	got := credFromProto(&pb.GitCredential{Username: "octocat", Token: "ghp_x"})
+	if got.SSH || got.Username != "octocat" || got.Token != "ghp_x" {
+		t.Fatalf("https mapping wrong: %+v", got)
+	}
+	if (credFromProto(nil)) != (deploy.Credential{}) {
+		t.Fatal("nil credential must map to zero value")
+	}
+}
