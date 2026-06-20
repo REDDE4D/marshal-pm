@@ -247,6 +247,9 @@ func (h *handler) resolveCredential(name, repoURL string) (*pb.GitCredential, er
 // scp-like form (git@host:path) and the ssh:// URL form. Returns ("","") if not
 // recognizably SSH.
 func sshHostPort(repo string) (host, port string) {
+	if strings.HasPrefix(repo, "https://") || strings.HasPrefix(repo, "http://") {
+		return "", ""
+	}
 	if strings.HasPrefix(repo, "ssh://") {
 		if u, err := url.Parse(repo); err == nil {
 			return u.Hostname(), u.Port()

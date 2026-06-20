@@ -60,6 +60,7 @@ func TestSSHHostPort(t *testing.T) {
 		{"git@github.com:o/r.git", "github.com", ""},
 		{"ssh://git@ssh.github.com:443/o/r.git", "ssh.github.com", "443"},
 		{"ssh://git@example.com/o/r.git", "example.com", ""},
+		{"https://github.com/o/r.git", "", ""},
 	}
 	for _, c := range cases {
 		h, p := sshHostPort(c.repo)
