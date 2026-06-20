@@ -79,6 +79,9 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 	mux.HandleFunc("DELETE /api/credentials/{name}", h.requireSession(h.deleteCredential))
 	mux.HandleFunc("GET /api/fleet/{agent}/apps/{app}/dir", h.requireSession(h.listDirFiles))
 	mux.HandleFunc("GET /api/fleet/{agent}/apps/{app}/file", h.requireSession(h.readFileFiles))
+	mux.HandleFunc("PUT /api/fleet/{agent}/apps/{app}/file", h.requireSession(h.writeFileFiles))
+	mux.HandleFunc("DELETE /api/fleet/{agent}/apps/{app}/file", h.requireSession(h.deleteFileFiles))
+	mux.HandleFunc("POST /api/fleet/{agent}/apps/{app}/rename", h.requireSession(h.renameFiles))
 	mux.HandleFunc("/", h.spa)
 	h.mux = mux
 	return h
