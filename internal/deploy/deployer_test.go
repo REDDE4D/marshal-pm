@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"marshal/internal/config"
+	"marshal/internal/pb"
 )
 
 // fakeCall records one invocation of fakeRunner.Run.
@@ -424,5 +425,49 @@ func TestSnapshotsAndForget(t *testing.T) {
 	}
 	if d.Forget("web") {
 		t.Fatal("Forget on absent entry should report false")
+	}
+}
+
+func TestDeployerCommit(t *testing.T) {
+	work, remote := newRepoWithRemote(t)
+	// deployRoot/app1 IS the work clone.
+	deployRoot := filepath.Dir(work)
+	app1 := filepath.Base(work)
+
+	h := newFakeHost()
+	h.sources[app1] = config.GitSource{Repo: "origin-unused"}
+	d := New(h, ExecRunner{}, deployRoot)
+
+	res, err := d.Commit(app1, pb.CommitKind_COMMIT_EDIT, "README.md", "", []byte("via deployer\n"), "Update README.md", Credential{})
+	if err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	if res.GetBranch() != "main" {
+		t.Fatalf("branch = %q", res.GetBranch())
+	}
+	if got, _ := remoteHead(t, remote, "README.md"); got != "via deployer\n" {
+		t.Fatalf("not pushed: %q", got)
+	}
+
+	// Unknown app rejected.
+	if _, err := d.Commit("ghost", pb.CommitKind_COMMIT_EDIT, "x", "", []byte("y"), "m", Credential{}); err == nil {
+		t.Fatalf("unknown app must error")
+	}
+}
+
+func TestDeployerCommit_RejectsWhileDeploying(t *testing.T) {
+	work, _ := newRepoWithRemote(t)
+	deployRoot := filepath.Dir(work)
+	app1 := filepath.Base(work)
+	h := newFakeHost()
+	h.sources[app1] = config.GitSource{Repo: "r"}
+	d := New(h, ExecRunner{}, deployRoot)
+
+	d.mu.Lock()
+	d.states[app1] = state{phase: phaseBuilding}
+	d.mu.Unlock()
+
+	if _, err := d.Commit(app1, pb.CommitKind_COMMIT_EDIT, "README.md", "", []byte("x"), "m", Credential{}); err == nil {
+		t.Fatalf("Commit during deploy must be rejected")
 	}
 }
