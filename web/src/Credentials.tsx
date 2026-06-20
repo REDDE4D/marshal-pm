@@ -1,5 +1,5 @@
 import { useState, useEffect, type FormEvent } from "react";
-import { CredentialMeta, listCredentials, createCredential, deleteCredential } from "./api";
+import { CredentialMeta, listCredentials, createCredential, createSSHCredential, deleteCredential } from "./api";
 import { Logo } from "./Logo";
 
 function fmtDate(unixSec: number): string {
@@ -10,12 +10,14 @@ function fmtDate(unixSec: number): string {
 export function Credentials({ onLogout }: { onLogout: () => void }) {
   const [creds, setCreds] = useState<CredentialMeta[]>([]);
   const [loading, setLoading] = useState(true);
+  const [kind, setKind] = useState<"https-token" | "ssh-key">("https-token");
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [newPublicKey, setNewPublicKey] = useState("");
 
   async function refresh() {
     const list = await listCredentials();
@@ -25,22 +27,38 @@ export function Credentials({ onLogout }: { onLogout: () => void }) {
 
   useEffect(() => { refresh(); }, []);
 
-  const canSubmit = name.trim() !== "" && username.trim() !== "" && token !== "" && !busy;
+  const canSubmit = kind === "ssh-key"
+    ? name.trim() !== "" && !busy
+    : name.trim() !== "" && username.trim() !== "" && token !== "" && !busy;
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     if (!canSubmit) return;
     setBusy(true);
     setError("");
-    const res = await createCredential(name.trim(), username.trim(), token);
-    setBusy(false);
-    if (res.ok) {
-      setName("");
-      setUsername("");
-      setToken("");
-      await refresh();
+    setNewPublicKey("");
+
+    if (kind === "ssh-key") {
+      const res = await createSSHCredential(name.trim());
+      setBusy(false);
+      if (res.ok) {
+        setNewPublicKey(res.public_key ?? "");
+        setName("");
+        await refresh();
+      } else {
+        setError(res.error || "error");
+      }
     } else {
-      setError(res.error || "error");
+      const res = await createCredential(name.trim(), username.trim(), token);
+      setBusy(false);
+      if (res.ok) {
+        setName("");
+        setUsername("");
+        setToken("");
+        await refresh();
+      } else {
+        setError(res.error || "error");
+      }
     }
   }
 
@@ -81,7 +99,22 @@ export function Credentials({ onLogout }: { onLogout: () => void }) {
               <div className="cred-row card" key={c.name}>
                 <div className="cred-row-info">
                   <span className="cred-name">{c.name}</span>
-                  <span className="cred-meta">{c.username} · {c.type} · added {fmtDate(c.created_at)}</span>
+                  <span className="cred-meta">
+                    {c.type === "ssh-key" ? "ssh-key" : `${c.username} · https-token`}
+                    {" · added "}{fmtDate(c.created_at)}
+                  </span>
+                  {c.type === "ssh-key" && c.public_key && (
+                    <div className="cred-pubkey">
+                      <div className="cred-pubkey-label">public key (deploy key)</div>
+                      <pre className="cred-pubkey-text">{c.public_key}</pre>
+                      <button
+                        className="btn"
+                        onClick={() => navigator.clipboard.writeText(c.public_key!)}
+                      >
+                        copy
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="ctl">
                   {deleteTarget === c.name ? (
@@ -105,28 +138,78 @@ export function Credentials({ onLogout }: { onLogout: () => void }) {
 
         <form className="cred-form" onSubmit={handleCreate}>
           <div className="cred-form-title">add credential</div>
+          <div className="field">
+            <label className="field-label">type</label>
+            <div className="cred-type-toggle">
+              <label>
+                <input
+                  type="radio"
+                  name="cred-kind"
+                  value="https-token"
+                  checked={kind === "https-token"}
+                  onChange={() => { setKind("https-token"); setNewPublicKey(""); setError(""); }}
+                />
+                {" "}HTTPS token
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="cred-kind"
+                  value="ssh-key"
+                  checked={kind === "ssh-key"}
+                  onChange={() => { setKind("ssh-key"); setNewPublicKey(""); setError(""); }}
+                />
+                {" "}SSH key
+              </label>
+            </div>
+          </div>
           <label className="field">
             name
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-github" />
           </label>
-          <label className="field">
-            username
-            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="github-user" />
-          </label>
-          <label className="field">
-            token
-            <input
-              type="password"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="ghp_…"
-              autoComplete="new-password"
-            />
-          </label>
+          {kind === "https-token" && (
+            <>
+              <label className="field">
+                username
+                <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="github-user" />
+              </label>
+              <label className="field">
+                token
+                <input
+                  type="password"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  placeholder="ghp_…"
+                  autoComplete="new-password"
+                />
+              </label>
+            </>
+          )}
           {error && <div className="modal-error">{error}</div>}
+          {newPublicKey && (
+            <div className="cred-pubkey-new">
+              <div className="cred-pubkey-label">
+                generated public key — add this as a deploy key on your repo
+                (e.g. GitHub → Settings → Deploy keys → Add deploy key).
+              </div>
+              <textarea
+                className="cred-pubkey-text"
+                readOnly
+                rows={3}
+                value={newPublicKey}
+              />
+              <button
+                type="button"
+                className="btn"
+                onClick={() => navigator.clipboard.writeText(newPublicKey)}
+              >
+                copy
+              </button>
+            </div>
+          )}
           <div className="cred-form-foot">
             <button type="submit" className="btn primary" disabled={!canSubmit}>
-              {busy ? "saving…" : "add credential"}
+              {busy ? "saving…" : kind === "ssh-key" ? "generate key" : "add credential"}
             </button>
           </div>
         </form>

@@ -212,8 +212,9 @@ export async function redeploy(
 
 export interface CredentialMeta {
   name: string;
-  type: string;
+  type: string;          // "https-token" | "ssh-key"
   username: string;
+  public_key?: string;   // ssh-key only
   created_at: number;
 }
 
@@ -234,6 +235,30 @@ export async function createCredential(
     body: JSON.stringify({ name, username, token }),
   });
   if (r.status === 201 || r.status === 200) return { ok: true };
+  try {
+    const j = await r.json();
+    return { ok: false, error: (j.error as string) ?? `error ${r.status}` };
+  } catch {
+    return { ok: false, error: `error ${r.status}` };
+  }
+}
+
+export async function createSSHCredential(
+  name: string,
+): Promise<{ ok: boolean; public_key?: string; error?: string }> {
+  const r = await fetch("/api/credentials", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, type: "ssh-key" }),
+  });
+  if (r.status === 201 || r.status === 200) {
+    try {
+      const j = await r.json();
+      return { ok: true, public_key: j.public_key as string };
+    } catch {
+      return { ok: true };
+    }
+  }
   try {
     const j = await r.json();
     return { ok: false, error: (j.error as string) ?? `error ${r.status}` };
