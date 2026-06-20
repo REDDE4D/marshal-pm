@@ -2,9 +2,13 @@ package deploy
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"marshal/internal/config"
+	"marshal/internal/pb"
 )
 
 func TestConfineNew(t *testing.T) {
@@ -48,5 +52,126 @@ func TestIsGitInternal(t *testing.T) {
 		if isGitInternal(rel) {
 			t.Errorf("isGitInternal(%q) = true, want false", rel)
 		}
+	}
+}
+
+// gitT runs a git command in dir for test setup, failing the test on error.
+func gitT(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{
+		"-c", "user.email=t@e", "-c", "user.name=t",
+		"-c", "init.defaultBranch=main",
+	}, args...)...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return string(out)
+}
+
+// newRepoWithRemote builds a bare remote with one commit, clones it into a work
+// dir on branch main, and returns (workDir, remoteDir).
+func newRepoWithRemote(t *testing.T) (string, string) {
+	t.Helper()
+	base := t.TempDir()
+	remote := filepath.Join(base, "remote.git")
+	gitT(t, base, "init", "--bare", "--initial-branch=main", remote)
+
+	seed := filepath.Join(base, "seed")
+	gitT(t, base, "clone", remote, seed)
+	if err := os.WriteFile(filepath.Join(seed, "README.md"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitT(t, seed, "add", "README.md")
+	gitT(t, seed, "commit", "-m", "seed")
+	gitT(t, seed, "push", "origin", "main")
+
+	work := filepath.Join(base, "work")
+	gitT(t, base, "clone", remote, work)
+	return work, remote
+}
+
+func remoteHead(t *testing.T, remote, path string) (string, bool) {
+	t.Helper()
+	cmd := exec.Command("git", "show", "main:"+path)
+	cmd.Dir = remote
+	out, err := cmd.CombinedOutput()
+	return string(out), err == nil
+}
+
+func TestMutateAndPush_AllKinds(t *testing.T) {
+	d := New(nil, ExecRunner{}, t.TempDir())
+	src := config.GitSource{Repo: "ignored-no-cred"} // no credential: pushes to origin URL
+
+	// edit
+	work, remote := newRepoWithRemote(t)
+	if _, err := d.mutateAndPush(work, src, Credential{}, pb.CommitKind_COMMIT_EDIT, "README.md", "", []byte("edited\n"), "Update README.md"); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	if got, _ := remoteHead(t, remote, "README.md"); got != "edited\n" {
+		t.Fatalf("edit not on origin: %q", got)
+	}
+
+	// create (with intermediate dir)
+	work, remote = newRepoWithRemote(t)
+	if _, err := d.mutateAndPush(work, src, Credential{}, pb.CommitKind_COMMIT_CREATE, "cfg/app.yaml", "", []byte("k: v\n"), "Create cfg/app.yaml"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if got, ok := remoteHead(t, remote, "cfg/app.yaml"); !ok || got != "k: v\n" {
+		t.Fatalf("create not on origin: %q ok=%v", got, ok)
+	}
+
+	// delete
+	work, remote = newRepoWithRemote(t)
+	if _, err := d.mutateAndPush(work, src, Credential{}, pb.CommitKind_COMMIT_DELETE, "README.md", "", nil, "Delete README.md"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, ok := remoteHead(t, remote, "README.md"); ok {
+		t.Fatalf("delete: README.md still on origin")
+	}
+
+	// rename
+	work, remote = newRepoWithRemote(t)
+	res, err := d.mutateAndPush(work, src, Credential{}, pb.CommitKind_COMMIT_RENAME, "README.md", "DOCS.md", nil, "Rename README.md → DOCS.md")
+	if err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if _, ok := remoteHead(t, remote, "README.md"); ok {
+		t.Fatalf("rename: old path still on origin")
+	}
+	if got, ok := remoteHead(t, remote, "DOCS.md"); !ok || got != "seed\n" {
+		t.Fatalf("rename: new path = %q ok=%v", got, ok)
+	}
+	if res.GetBranch() != "main" || res.GetSha() == "" {
+		t.Fatalf("rename result: %+v", res)
+	}
+}
+
+func TestMutateAndPush_TargetedStaging(t *testing.T) {
+	// An untracked build artifact must NOT be swept into the commit.
+	d := New(nil, ExecRunner{}, t.TempDir())
+	work, _ := newRepoWithRemote(t)
+	if err := os.WriteFile(filepath.Join(work, "app.bin"), []byte("ARTIFACT"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.mutateAndPush(work, config.GitSource{}, Credential{}, pb.CommitKind_COMMIT_EDIT, "README.md", "", []byte("x\n"), "Update README.md"); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	files := gitT(t, work, "show", "--name-only", "--pretty=format:", "HEAD")
+	if strings.Contains(files, "app.bin") {
+		t.Fatalf("build artifact leaked into commit: %q", files)
+	}
+	st := gitT(t, work, "status", "--porcelain")
+	if !strings.Contains(st, "app.bin") {
+		t.Fatalf("artifact should still be untracked: %q", st)
+	}
+}
+
+func TestMutateAndPush_GitGuard(t *testing.T) {
+	d := New(nil, ExecRunner{}, t.TempDir())
+	work, _ := newRepoWithRemote(t)
+	if _, err := d.mutateAndPush(work, config.GitSource{}, Credential{}, pb.CommitKind_COMMIT_EDIT, ".git/config", "", []byte("x"), "m"); err == nil {
+		t.Fatalf(".git write must be rejected")
 	}
 }
