@@ -81,3 +81,31 @@ func TestDefaultCooldown(t *testing.T) {
 		t.Fatalf("want default 300, got %d", s.Settings().CooldownSeconds)
 	}
 }
+
+func TestPutChannelConfigNotAliased(t *testing.T) {
+	s, _ := testStore(t)
+	// Put a channel with a Config map the caller retains a reference to.
+	callerCfg := map[string]string{"chat_id": "99"}
+	if err := s.PutChannel(Channel{Name: "alias-test", Type: "telegram", Enabled: true, Config: callerCfg}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Mutate the caller's original map — must not affect the store.
+	callerCfg["chat_id"] = "MUTATED-BY-CALLER"
+
+	// Mutate the Config of a Channel returned by Channels() — must not affect the store.
+	got := s.Channels()
+	if len(got) != 1 {
+		t.Fatalf("expected 1 channel, got %d", len(got))
+	}
+	got[0].Config["chat_id"] = "MUTATED-BY-RETURNED-VIEW"
+
+	// A fresh read from the store must still see the original value.
+	fresh := s.Channels()
+	if len(fresh) != 1 {
+		t.Fatalf("expected 1 channel after re-read, got %d", len(fresh))
+	}
+	if fresh[0].Config["chat_id"] != "99" {
+		t.Fatalf("aliasing detected: store Config was mutated, got %q", fresh[0].Config["chat_id"])
+	}
+}

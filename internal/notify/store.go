@@ -3,6 +3,7 @@ package notify
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -73,7 +74,7 @@ func (s *Store) Channels() []Channel {
 	defer s.mu.Unlock()
 	out := make([]Channel, 0, len(s.data.Channels))
 	for name, c := range s.data.Channels {
-		out = append(out, Channel{Name: name, Type: c.Type, Enabled: c.Enabled, Config: c.Config})
+		out = append(out, Channel{Name: name, Type: c.Type, Enabled: c.Enabled, Config: maps.Clone(c.Config)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
@@ -96,7 +97,7 @@ func (s *Store) PutChannel(c Channel, secrets map[string]string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	old, existed := s.data.Channels[c.Name]
-	sc := storedChannel{Type: c.Type, Enabled: c.Enabled, Config: c.Config, CreatedAt: old.CreatedAt}
+	sc := storedChannel{Type: c.Type, Enabled: c.Enabled, Config: maps.Clone(c.Config), CreatedAt: old.CreatedAt}
 	if !existed {
 		sc.CreatedAt = time.Now().Unix()
 	}
