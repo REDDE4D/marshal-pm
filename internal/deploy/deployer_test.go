@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -469,5 +470,76 @@ func TestDeployerCommit_RejectsWhileDeploying(t *testing.T) {
 
 	if _, err := d.Commit(app1, pb.CommitKind_COMMIT_EDIT, "README.md", "", []byte("x"), "m", Credential{}); err == nil {
 		t.Fatalf("Commit during deploy must be rejected")
+	}
+}
+
+func TestGitCredEnvSSH(t *testing.T) {
+	d := New(nil, nil, t.TempDir())
+	cred := Credential{
+		SSH:        true,
+		PrivateKey: "-----BEGIN OPENSSH PRIVATE KEY-----\nzzz\n-----END OPENSSH PRIVATE KEY-----\n",
+		KnownHosts: "github.com ssh-ed25519 AAAA",
+	}
+	env, cleanup, err := d.gitCredEnv(cred)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	var sshCmd, keyPath, khPath string
+	for _, e := range env {
+		if strings.HasPrefix(e, "GIT_SSH_COMMAND=") {
+			sshCmd = strings.TrimPrefix(e, "GIT_SSH_COMMAND=")
+		}
+	}
+	if sshCmd == "" {
+		t.Fatal("no GIT_SSH_COMMAND in env")
+	}
+	for _, want := range []string{"StrictHostKeyChecking=yes", "IdentitiesOnly=yes", "IdentityAgent=none", "UserKnownHostsFile=", "-i "} {
+		if !strings.Contains(sshCmd, want) {
+			t.Fatalf("GIT_SSH_COMMAND %q missing %q", sshCmd, want)
+		}
+	}
+	// pull the -i <key> and UserKnownHostsFile=<kh> paths back out and assert 0600 + contents
+	fields := strings.Fields(sshCmd)
+	for i, f := range fields {
+		if f == "-i" {
+			keyPath = fields[i+1]
+		}
+		if strings.HasPrefix(f, "UserKnownHostsFile=") {
+			khPath = strings.TrimPrefix(f, "UserKnownHostsFile=")
+		}
+	}
+	// Trim surrounding single quotes (added by shell quoting in gitCredEnv)
+	keyPath = strings.Trim(keyPath, "'")
+	khPath = strings.Trim(khPath, "'")
+
+	fi, err := os.Stat(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o600 {
+		t.Fatalf("key file mode = %o, want 600", fi.Mode().Perm())
+	}
+	if b, _ := os.ReadFile(keyPath); !strings.Contains(string(b), "OPENSSH PRIVATE KEY") {
+		t.Fatal("key file content wrong")
+	}
+	if b, _ := os.ReadFile(khPath); string(b) != cred.KnownHosts {
+		t.Fatalf("known_hosts content = %q", b)
+	}
+
+	cleanup()
+	if _, err := os.Stat(keyPath); !os.IsNotExist(err) {
+		t.Fatal("cleanup did not remove the key file")
+	}
+}
+
+func TestCredentialStringRedacts(t *testing.T) {
+	c := Credential{Username: "git", Token: "ghp_secret", PrivateKey: "PRIVDATA", SSH: true}
+	s := fmt.Sprintf("%v %+v %s", c, c, c)
+	for _, secret := range []string{"ghp_secret", "PRIVDATA"} {
+		if strings.Contains(s, secret) {
+			t.Fatalf("Credential String leaked %q: %s", secret, s)
+		}
 	}
 }

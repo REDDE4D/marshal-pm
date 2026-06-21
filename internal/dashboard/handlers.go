@@ -3,9 +3,11 @@ package dashboard
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"net"
 	"net/http"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -38,6 +40,9 @@ type handler struct {
 	static      http.Handler
 	mux         http.Handler
 	creds       Credentials
+	// scanHost performs a one-time SSH host-key scan (TOFU). The default
+	// implementation shells out to ssh-keyscan; tests inject a stub.
+	scanHost func(hostport string) (string, error)
 }
 
 // newHandler builds a *handler (with its mux) for the given session lifetime.
@@ -62,6 +67,22 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 		files:       files,
 		static:      http.FileServer(http.FS(files)),
 		creds:       creds,
+	}
+	h.scanHost = func(hostport string) (string, error) {
+		host, port := hostport, ""
+		if i := strings.LastIndex(hostport, ":"); i >= 0 {
+			host, port = hostport[:i], hostport[i+1:]
+		}
+		args := []string{}
+		if port != "" {
+			args = append(args, "-p", port)
+		}
+		args = append(args, host)
+		out, err := exec.Command("ssh-keyscan", args...).Output()
+		if err != nil {
+			return "", fmt.Errorf("ssh-keyscan %s: %w", host, err)
+		}
+		return strings.TrimSpace(string(out)), nil
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/login", h.login)

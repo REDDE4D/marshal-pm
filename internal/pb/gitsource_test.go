@@ -62,3 +62,21 @@ func TestCommitOpWire(t *testing.T) {
 		t.Fatalf("CommitResult not wired: %+v", res.GetCommit())
 	}
 }
+
+func TestGitCredentialSSHFields(t *testing.T) {
+	c := &GitCredential{
+		PrivateKey: "PRIV",
+		KnownHosts: "github.com ssh-ed25519 AAAA",
+		Kind:       CredentialKind_CRED_SSH,
+	}
+	if c.GetPrivateKey() != "PRIV" || c.GetKnownHosts() == "" {
+		t.Fatal("ssh fields not carried")
+	}
+	if c.GetKind() != CredentialKind_CRED_SSH {
+		t.Fatalf("kind = %v, want CRED_SSH", c.GetKind())
+	}
+	// default kind is HTTPS so legacy agents/messages keep working
+	if (&GitCredential{}).GetKind() != CredentialKind_CRED_HTTPS {
+		t.Fatal("zero-value kind must be CRED_HTTPS")
+	}
+}

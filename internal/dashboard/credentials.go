@@ -13,11 +13,15 @@ type Credentials interface {
 	List() []credstore.Meta
 	Get(name string) (username, token string, ok bool, err error)
 	Put(name, username, token string) error
+	Generate(name string) (publicKey string, err error)
+	GetKey(name string) (privateKey, knownHosts string, ok bool, err error)
+	SetKnownHosts(name, line string) error
 	Delete(name string) bool
 }
 
 type credentialReq struct {
 	Name     string `json:"name"`
+	Type     string `json:"type"` // "" or "https-token" → HTTPS; "ssh-key" → generate a key
 	Username string `json:"username"`
 	Token    string `json:"token"`
 }
@@ -40,7 +44,24 @@ func (h *handler) createCredential(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	if body.Name == "" || body.Token == "" {
+	if body.Name == "" {
+		http.Error(w, "name required", http.StatusBadRequest)
+		return
+	}
+	user, _ := r.Context().Value(userKey).(string)
+
+	if body.Type == "ssh-key" {
+		pub, err := h.creds.Generate(body.Name)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		log.Printf("dashboard: credential.generate %s (ssh-key) by %s", body.Name, user) // never log the key
+		writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "public_key": pub})
+		return
+	}
+
+	if body.Token == "" {
 		http.Error(w, "name and token required", http.StatusBadRequest)
 		return
 	}
@@ -48,7 +69,6 @@ func (h *handler) createCredential(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	user, _ := r.Context().Value(userKey).(string)
 	log.Printf("dashboard: credential.put %s (user=%s) by %s", body.Name, body.Username, user) // never log the token
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true})
 }

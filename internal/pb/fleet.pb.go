@@ -21,6 +21,52 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type CredentialKind int32
+
+const (
+	CredentialKind_CRED_HTTPS CredentialKind = 0
+	CredentialKind_CRED_SSH   CredentialKind = 1
+)
+
+// Enum value maps for CredentialKind.
+var (
+	CredentialKind_name = map[int32]string{
+		0: "CRED_HTTPS",
+		1: "CRED_SSH",
+	}
+	CredentialKind_value = map[string]int32{
+		"CRED_HTTPS": 0,
+		"CRED_SSH":   1,
+	}
+)
+
+func (x CredentialKind) Enum() *CredentialKind {
+	p := new(CredentialKind)
+	*p = x
+	return p
+}
+
+func (x CredentialKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CredentialKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_marshal_v1_fleet_proto_enumTypes[0].Descriptor()
+}
+
+func (CredentialKind) Type() protoreflect.EnumType {
+	return &file_marshal_v1_fleet_proto_enumTypes[0]
+}
+
+func (x CredentialKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CredentialKind.Descriptor instead.
+func (CredentialKind) EnumDescriptor() ([]byte, []int) {
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{0}
+}
+
 type CommitKind int32
 
 const (
@@ -57,11 +103,11 @@ func (x CommitKind) String() string {
 }
 
 func (CommitKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_marshal_v1_fleet_proto_enumTypes[0].Descriptor()
+	return file_marshal_v1_fleet_proto_enumTypes[1].Descriptor()
 }
 
 func (CommitKind) Type() protoreflect.EnumType {
-	return &file_marshal_v1_fleet_proto_enumTypes[0]
+	return &file_marshal_v1_fleet_proto_enumTypes[1]
 }
 
 func (x CommitKind) Number() protoreflect.EnumNumber {
@@ -70,7 +116,7 @@ func (x CommitKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CommitKind.Descriptor instead.
 func (CommitKind) EnumDescriptor() ([]byte, []int) {
-	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{0}
+	return file_marshal_v1_fleet_proto_rawDescGZIP(), []int{1}
 }
 
 type AgentMessage struct {
@@ -1006,7 +1052,10 @@ func (x *FleetMetricsHistoryRequest) GetBucketMs() int64 {
 type GitCredential struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
-	Token         string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	Token         string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`                               // HTTPS only
+	PrivateKey    string                 `protobuf:"bytes,3,opt,name=private_key,json=privateKey,proto3" json:"private_key,omitempty"`   // SSH only — sealed in transit by TLS; never persisted on the agent
+	KnownHosts    string                 `protobuf:"bytes,4,opt,name=known_hosts,json=knownHosts,proto3" json:"known_hosts,omitempty"`   // SSH only — the server-pinned host key line(s)
+	Kind          CredentialKind         `protobuf:"varint,5,opt,name=kind,proto3,enum=marshal.v1.CredentialKind" json:"kind,omitempty"` // default CRED_HTTPS keeps M22/M24 agents working
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1053,6 +1102,27 @@ func (x *GitCredential) GetToken() string {
 		return x.Token
 	}
 	return ""
+}
+
+func (x *GitCredential) GetPrivateKey() string {
+	if x != nil {
+		return x.PrivateKey
+	}
+	return ""
+}
+
+func (x *GitCredential) GetKnownHosts() string {
+	if x != nil {
+		return x.KnownHosts
+	}
+	return ""
+}
+
+func (x *GitCredential) GetKind() CredentialKind {
+	if x != nil {
+		return x.Kind
+	}
+	return CredentialKind_CRED_HTTPS
 }
 
 // M23 — read-only file browser for deployed apps.
@@ -2159,10 +2229,15 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"agent_name\x18\x01 \x01(\tR\tagentName\x12\x1a\n" +
 	"\bselector\x18\x02 \x01(\tR\bselector\x12\x19\n" +
 	"\bsince_ms\x18\x03 \x01(\x03R\asinceMs\x12\x1b\n" +
-	"\tbucket_ms\x18\x04 \x01(\x03R\bbucketMs\"A\n" +
+	"\tbucket_ms\x18\x04 \x01(\x03R\bbucketMs\"\xb3\x01\n" +
 	"\rGitCredential\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x14\n" +
-	"\x05token\x18\x02 \x01(\tR\x05token\"6\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\x12\x1f\n" +
+	"\vprivate_key\x18\x03 \x01(\tR\n" +
+	"privateKey\x12\x1f\n" +
+	"\vknown_hosts\x18\x04 \x01(\tR\n" +
+	"knownHosts\x12.\n" +
+	"\x04kind\x18\x05 \x01(\x0e2\x1a.marshal.v1.CredentialKindR\x04kind\"6\n" +
 	"\x0eListDirRequest\x12\x10\n" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\"7\n" +
@@ -2239,7 +2314,11 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"agent_name\x18\x01 \x01(\tR\tagentName\x12%\n" +
 	"\x02op\x18\x02 \x01(\v2\x15.marshal.v1.ControlOpR\x02op\"I\n" +
 	"\x14FleetControlResponse\x121\n" +
-	"\x06result\x18\x01 \x01(\v2\x19.marshal.v1.ControlResultR\x06result*V\n" +
+	"\x06result\x18\x01 \x01(\v2\x19.marshal.v1.ControlResultR\x06result*.\n" +
+	"\x0eCredentialKind\x12\x0e\n" +
+	"\n" +
+	"CRED_HTTPS\x10\x00\x12\f\n" +
+	"\bCRED_SSH\x10\x01*V\n" +
 	"\n" +
 	"CommitKind\x12\x0f\n" +
 	"\vCOMMIT_EDIT\x10\x00\x12\x11\n" +
@@ -2265,102 +2344,104 @@ func file_marshal_v1_fleet_proto_rawDescGZIP() []byte {
 	return file_marshal_v1_fleet_proto_rawDescData
 }
 
-var file_marshal_v1_fleet_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_marshal_v1_fleet_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_marshal_v1_fleet_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_marshal_v1_fleet_proto_goTypes = []any{
-	(CommitKind)(0),                    // 0: marshal.v1.CommitKind
-	(*AgentMessage)(nil),               // 1: marshal.v1.AgentMessage
-	(*ServerMessage)(nil),              // 2: marshal.v1.ServerMessage
-	(*Hello)(nil),                      // 3: marshal.v1.Hello
-	(*HelloAck)(nil),                   // 4: marshal.v1.HelloAck
-	(*StateSnapshot)(nil),              // 5: marshal.v1.StateSnapshot
-	(*ListFleetRequest)(nil),           // 6: marshal.v1.ListFleetRequest
-	(*ListFleetResponse)(nil),          // 7: marshal.v1.ListFleetResponse
-	(*AgentState)(nil),                 // 8: marshal.v1.AgentState
-	(*MetricSample)(nil),               // 9: marshal.v1.MetricSample
-	(*MetricBatch)(nil),                // 10: marshal.v1.MetricBatch
-	(*LogShipLine)(nil),                // 11: marshal.v1.LogShipLine
-	(*LogBatch)(nil),                   // 12: marshal.v1.LogBatch
-	(*FleetLogsHistoryRequest)(nil),    // 13: marshal.v1.FleetLogsHistoryRequest
-	(*FleetLogsHistoryResponse)(nil),   // 14: marshal.v1.FleetLogsHistoryResponse
-	(*FleetMetricsHistoryRequest)(nil), // 15: marshal.v1.FleetMetricsHistoryRequest
-	(*GitCredential)(nil),              // 16: marshal.v1.GitCredential
-	(*ListDirRequest)(nil),             // 17: marshal.v1.ListDirRequest
-	(*ReadFileRequest)(nil),            // 18: marshal.v1.ReadFileRequest
-	(*DirEntry)(nil),                   // 19: marshal.v1.DirEntry
-	(*DirListing)(nil),                 // 20: marshal.v1.DirListing
-	(*FileContent)(nil),                // 21: marshal.v1.FileContent
-	(*DeployRequest)(nil),              // 22: marshal.v1.DeployRequest
-	(*RedeployRequest)(nil),            // 23: marshal.v1.RedeployRequest
-	(*CommitRequest)(nil),              // 24: marshal.v1.CommitRequest
-	(*CommitResult)(nil),               // 25: marshal.v1.CommitResult
-	(*ControlOp)(nil),                  // 26: marshal.v1.ControlOp
-	(*ControlResult)(nil),              // 27: marshal.v1.ControlResult
-	(*Command)(nil),                    // 28: marshal.v1.Command
-	(*CommandResult)(nil),              // 29: marshal.v1.CommandResult
-	(*FleetControlRequest)(nil),        // 30: marshal.v1.FleetControlRequest
-	(*FleetControlResponse)(nil),       // 31: marshal.v1.FleetControlResponse
-	(*ProcInfo)(nil),                   // 32: marshal.v1.ProcInfo
-	(LogStream)(0),                     // 33: marshal.v1.LogStream
-	(*LogLine)(nil),                    // 34: marshal.v1.LogLine
-	(*AppSpec)(nil),                    // 35: marshal.v1.AppSpec
-	(*Selector)(nil),                   // 36: marshal.v1.Selector
-	(*StartRequest)(nil),               // 37: marshal.v1.StartRequest
-	(*MetricsHistoryResponse)(nil),     // 38: marshal.v1.MetricsHistoryResponse
+	(CredentialKind)(0),                // 0: marshal.v1.CredentialKind
+	(CommitKind)(0),                    // 1: marshal.v1.CommitKind
+	(*AgentMessage)(nil),               // 2: marshal.v1.AgentMessage
+	(*ServerMessage)(nil),              // 3: marshal.v1.ServerMessage
+	(*Hello)(nil),                      // 4: marshal.v1.Hello
+	(*HelloAck)(nil),                   // 5: marshal.v1.HelloAck
+	(*StateSnapshot)(nil),              // 6: marshal.v1.StateSnapshot
+	(*ListFleetRequest)(nil),           // 7: marshal.v1.ListFleetRequest
+	(*ListFleetResponse)(nil),          // 8: marshal.v1.ListFleetResponse
+	(*AgentState)(nil),                 // 9: marshal.v1.AgentState
+	(*MetricSample)(nil),               // 10: marshal.v1.MetricSample
+	(*MetricBatch)(nil),                // 11: marshal.v1.MetricBatch
+	(*LogShipLine)(nil),                // 12: marshal.v1.LogShipLine
+	(*LogBatch)(nil),                   // 13: marshal.v1.LogBatch
+	(*FleetLogsHistoryRequest)(nil),    // 14: marshal.v1.FleetLogsHistoryRequest
+	(*FleetLogsHistoryResponse)(nil),   // 15: marshal.v1.FleetLogsHistoryResponse
+	(*FleetMetricsHistoryRequest)(nil), // 16: marshal.v1.FleetMetricsHistoryRequest
+	(*GitCredential)(nil),              // 17: marshal.v1.GitCredential
+	(*ListDirRequest)(nil),             // 18: marshal.v1.ListDirRequest
+	(*ReadFileRequest)(nil),            // 19: marshal.v1.ReadFileRequest
+	(*DirEntry)(nil),                   // 20: marshal.v1.DirEntry
+	(*DirListing)(nil),                 // 21: marshal.v1.DirListing
+	(*FileContent)(nil),                // 22: marshal.v1.FileContent
+	(*DeployRequest)(nil),              // 23: marshal.v1.DeployRequest
+	(*RedeployRequest)(nil),            // 24: marshal.v1.RedeployRequest
+	(*CommitRequest)(nil),              // 25: marshal.v1.CommitRequest
+	(*CommitResult)(nil),               // 26: marshal.v1.CommitResult
+	(*ControlOp)(nil),                  // 27: marshal.v1.ControlOp
+	(*ControlResult)(nil),              // 28: marshal.v1.ControlResult
+	(*Command)(nil),                    // 29: marshal.v1.Command
+	(*CommandResult)(nil),              // 30: marshal.v1.CommandResult
+	(*FleetControlRequest)(nil),        // 31: marshal.v1.FleetControlRequest
+	(*FleetControlResponse)(nil),       // 32: marshal.v1.FleetControlResponse
+	(*ProcInfo)(nil),                   // 33: marshal.v1.ProcInfo
+	(LogStream)(0),                     // 34: marshal.v1.LogStream
+	(*LogLine)(nil),                    // 35: marshal.v1.LogLine
+	(*AppSpec)(nil),                    // 36: marshal.v1.AppSpec
+	(*Selector)(nil),                   // 37: marshal.v1.Selector
+	(*StartRequest)(nil),               // 38: marshal.v1.StartRequest
+	(*MetricsHistoryResponse)(nil),     // 39: marshal.v1.MetricsHistoryResponse
 }
 var file_marshal_v1_fleet_proto_depIdxs = []int32{
-	3,  // 0: marshal.v1.AgentMessage.hello:type_name -> marshal.v1.Hello
-	5,  // 1: marshal.v1.AgentMessage.snapshot:type_name -> marshal.v1.StateSnapshot
-	10, // 2: marshal.v1.AgentMessage.metrics:type_name -> marshal.v1.MetricBatch
-	12, // 3: marshal.v1.AgentMessage.logs:type_name -> marshal.v1.LogBatch
-	29, // 4: marshal.v1.AgentMessage.result:type_name -> marshal.v1.CommandResult
-	4,  // 5: marshal.v1.ServerMessage.hello_ack:type_name -> marshal.v1.HelloAck
-	28, // 6: marshal.v1.ServerMessage.command:type_name -> marshal.v1.Command
-	32, // 7: marshal.v1.StateSnapshot.procs:type_name -> marshal.v1.ProcInfo
-	8,  // 8: marshal.v1.ListFleetResponse.agents:type_name -> marshal.v1.AgentState
-	32, // 9: marshal.v1.AgentState.procs:type_name -> marshal.v1.ProcInfo
-	9,  // 10: marshal.v1.MetricBatch.samples:type_name -> marshal.v1.MetricSample
-	11, // 11: marshal.v1.LogBatch.lines:type_name -> marshal.v1.LogShipLine
-	33, // 12: marshal.v1.FleetLogsHistoryRequest.stream:type_name -> marshal.v1.LogStream
-	34, // 13: marshal.v1.FleetLogsHistoryResponse.lines:type_name -> marshal.v1.LogLine
-	19, // 14: marshal.v1.DirListing.entries:type_name -> marshal.v1.DirEntry
-	35, // 15: marshal.v1.DeployRequest.app:type_name -> marshal.v1.AppSpec
-	16, // 16: marshal.v1.DeployRequest.credential:type_name -> marshal.v1.GitCredential
-	16, // 17: marshal.v1.RedeployRequest.credential:type_name -> marshal.v1.GitCredential
-	0,  // 18: marshal.v1.CommitRequest.kind:type_name -> marshal.v1.CommitKind
-	16, // 19: marshal.v1.CommitRequest.credential:type_name -> marshal.v1.GitCredential
-	36, // 20: marshal.v1.ControlOp.stop:type_name -> marshal.v1.Selector
-	36, // 21: marshal.v1.ControlOp.restart:type_name -> marshal.v1.Selector
-	36, // 22: marshal.v1.ControlOp.delete:type_name -> marshal.v1.Selector
-	37, // 23: marshal.v1.ControlOp.start:type_name -> marshal.v1.StartRequest
-	22, // 24: marshal.v1.ControlOp.deploy:type_name -> marshal.v1.DeployRequest
-	23, // 25: marshal.v1.ControlOp.redeploy:type_name -> marshal.v1.RedeployRequest
-	17, // 26: marshal.v1.ControlOp.list_dir:type_name -> marshal.v1.ListDirRequest
-	18, // 27: marshal.v1.ControlOp.read_file:type_name -> marshal.v1.ReadFileRequest
-	24, // 28: marshal.v1.ControlOp.commit:type_name -> marshal.v1.CommitRequest
-	32, // 29: marshal.v1.ControlResult.procs:type_name -> marshal.v1.ProcInfo
-	20, // 30: marshal.v1.ControlResult.dir:type_name -> marshal.v1.DirListing
-	21, // 31: marshal.v1.ControlResult.file:type_name -> marshal.v1.FileContent
-	25, // 32: marshal.v1.ControlResult.commit:type_name -> marshal.v1.CommitResult
-	26, // 33: marshal.v1.Command.op:type_name -> marshal.v1.ControlOp
-	27, // 34: marshal.v1.CommandResult.result:type_name -> marshal.v1.ControlResult
-	26, // 35: marshal.v1.FleetControlRequest.op:type_name -> marshal.v1.ControlOp
-	27, // 36: marshal.v1.FleetControlResponse.result:type_name -> marshal.v1.ControlResult
-	1,  // 37: marshal.v1.Fleet.Connect:input_type -> marshal.v1.AgentMessage
-	6,  // 38: marshal.v1.Fleet.ListFleet:input_type -> marshal.v1.ListFleetRequest
-	15, // 39: marshal.v1.Fleet.FleetMetricsHistory:input_type -> marshal.v1.FleetMetricsHistoryRequest
-	13, // 40: marshal.v1.Fleet.FleetLogsHistory:input_type -> marshal.v1.FleetLogsHistoryRequest
-	30, // 41: marshal.v1.Fleet.FleetControl:input_type -> marshal.v1.FleetControlRequest
-	2,  // 42: marshal.v1.Fleet.Connect:output_type -> marshal.v1.ServerMessage
-	7,  // 43: marshal.v1.Fleet.ListFleet:output_type -> marshal.v1.ListFleetResponse
-	38, // 44: marshal.v1.Fleet.FleetMetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
-	14, // 45: marshal.v1.Fleet.FleetLogsHistory:output_type -> marshal.v1.FleetLogsHistoryResponse
-	31, // 46: marshal.v1.Fleet.FleetControl:output_type -> marshal.v1.FleetControlResponse
-	42, // [42:47] is the sub-list for method output_type
-	37, // [37:42] is the sub-list for method input_type
-	37, // [37:37] is the sub-list for extension type_name
-	37, // [37:37] is the sub-list for extension extendee
-	0,  // [0:37] is the sub-list for field type_name
+	4,  // 0: marshal.v1.AgentMessage.hello:type_name -> marshal.v1.Hello
+	6,  // 1: marshal.v1.AgentMessage.snapshot:type_name -> marshal.v1.StateSnapshot
+	11, // 2: marshal.v1.AgentMessage.metrics:type_name -> marshal.v1.MetricBatch
+	13, // 3: marshal.v1.AgentMessage.logs:type_name -> marshal.v1.LogBatch
+	30, // 4: marshal.v1.AgentMessage.result:type_name -> marshal.v1.CommandResult
+	5,  // 5: marshal.v1.ServerMessage.hello_ack:type_name -> marshal.v1.HelloAck
+	29, // 6: marshal.v1.ServerMessage.command:type_name -> marshal.v1.Command
+	33, // 7: marshal.v1.StateSnapshot.procs:type_name -> marshal.v1.ProcInfo
+	9,  // 8: marshal.v1.ListFleetResponse.agents:type_name -> marshal.v1.AgentState
+	33, // 9: marshal.v1.AgentState.procs:type_name -> marshal.v1.ProcInfo
+	10, // 10: marshal.v1.MetricBatch.samples:type_name -> marshal.v1.MetricSample
+	12, // 11: marshal.v1.LogBatch.lines:type_name -> marshal.v1.LogShipLine
+	34, // 12: marshal.v1.FleetLogsHistoryRequest.stream:type_name -> marshal.v1.LogStream
+	35, // 13: marshal.v1.FleetLogsHistoryResponse.lines:type_name -> marshal.v1.LogLine
+	0,  // 14: marshal.v1.GitCredential.kind:type_name -> marshal.v1.CredentialKind
+	20, // 15: marshal.v1.DirListing.entries:type_name -> marshal.v1.DirEntry
+	36, // 16: marshal.v1.DeployRequest.app:type_name -> marshal.v1.AppSpec
+	17, // 17: marshal.v1.DeployRequest.credential:type_name -> marshal.v1.GitCredential
+	17, // 18: marshal.v1.RedeployRequest.credential:type_name -> marshal.v1.GitCredential
+	1,  // 19: marshal.v1.CommitRequest.kind:type_name -> marshal.v1.CommitKind
+	17, // 20: marshal.v1.CommitRequest.credential:type_name -> marshal.v1.GitCredential
+	37, // 21: marshal.v1.ControlOp.stop:type_name -> marshal.v1.Selector
+	37, // 22: marshal.v1.ControlOp.restart:type_name -> marshal.v1.Selector
+	37, // 23: marshal.v1.ControlOp.delete:type_name -> marshal.v1.Selector
+	38, // 24: marshal.v1.ControlOp.start:type_name -> marshal.v1.StartRequest
+	23, // 25: marshal.v1.ControlOp.deploy:type_name -> marshal.v1.DeployRequest
+	24, // 26: marshal.v1.ControlOp.redeploy:type_name -> marshal.v1.RedeployRequest
+	18, // 27: marshal.v1.ControlOp.list_dir:type_name -> marshal.v1.ListDirRequest
+	19, // 28: marshal.v1.ControlOp.read_file:type_name -> marshal.v1.ReadFileRequest
+	25, // 29: marshal.v1.ControlOp.commit:type_name -> marshal.v1.CommitRequest
+	33, // 30: marshal.v1.ControlResult.procs:type_name -> marshal.v1.ProcInfo
+	21, // 31: marshal.v1.ControlResult.dir:type_name -> marshal.v1.DirListing
+	22, // 32: marshal.v1.ControlResult.file:type_name -> marshal.v1.FileContent
+	26, // 33: marshal.v1.ControlResult.commit:type_name -> marshal.v1.CommitResult
+	27, // 34: marshal.v1.Command.op:type_name -> marshal.v1.ControlOp
+	28, // 35: marshal.v1.CommandResult.result:type_name -> marshal.v1.ControlResult
+	27, // 36: marshal.v1.FleetControlRequest.op:type_name -> marshal.v1.ControlOp
+	28, // 37: marshal.v1.FleetControlResponse.result:type_name -> marshal.v1.ControlResult
+	2,  // 38: marshal.v1.Fleet.Connect:input_type -> marshal.v1.AgentMessage
+	7,  // 39: marshal.v1.Fleet.ListFleet:input_type -> marshal.v1.ListFleetRequest
+	16, // 40: marshal.v1.Fleet.FleetMetricsHistory:input_type -> marshal.v1.FleetMetricsHistoryRequest
+	14, // 41: marshal.v1.Fleet.FleetLogsHistory:input_type -> marshal.v1.FleetLogsHistoryRequest
+	31, // 42: marshal.v1.Fleet.FleetControl:input_type -> marshal.v1.FleetControlRequest
+	3,  // 43: marshal.v1.Fleet.Connect:output_type -> marshal.v1.ServerMessage
+	8,  // 44: marshal.v1.Fleet.ListFleet:output_type -> marshal.v1.ListFleetResponse
+	39, // 45: marshal.v1.Fleet.FleetMetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
+	15, // 46: marshal.v1.Fleet.FleetLogsHistory:output_type -> marshal.v1.FleetLogsHistoryResponse
+	32, // 47: marshal.v1.Fleet.FleetControl:output_type -> marshal.v1.FleetControlResponse
+	43, // [43:48] is the sub-list for method output_type
+	38, // [38:43] is the sub-list for method input_type
+	38, // [38:38] is the sub-list for extension type_name
+	38, // [38:38] is the sub-list for extension extendee
+	0,  // [0:38] is the sub-list for field type_name
 }
 
 func init() { file_marshal_v1_fleet_proto_init() }
@@ -2396,7 +2477,7 @@ func file_marshal_v1_fleet_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_marshal_v1_fleet_proto_rawDesc), len(file_marshal_v1_fleet_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,

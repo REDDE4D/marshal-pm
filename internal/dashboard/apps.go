@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"marshal/internal/pb"
 )
@@ -99,7 +101,7 @@ func (h *handler) apps(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "name and repo required", http.StatusBadRequest)
 			return
 		}
-		cred, cerr := h.resolveCredential(g.Credential)
+		cred, cerr := h.resolveCredential(g.Credential, g.Repo)
 		if cerr != nil {
 			http.Error(w, cerr.Error(), http.StatusBadRequest)
 			return
@@ -124,7 +126,7 @@ func (h *handler) redeploy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "agent and name required", http.StatusBadRequest)
 		return
 	}
-	cred, cerr := h.resolveCredential(body.Credential)
+	cred, cerr := h.resolveCredential(body.Credential, "")
 	if cerr != nil {
 		http.Error(w, cerr.Error(), http.StatusBadRequest)
 		return
@@ -186,14 +188,54 @@ func deployOp(g gitSource, cred *pb.GitCredential) *pb.ControlOp {
 }
 
 // resolveCredential turns a credential name into the secret to attach. Empty
-// name → (nil, nil) = no managed credential.
-func (h *handler) resolveCredential(name string) (*pb.GitCredential, error) {
+// name → (nil, nil). repoURL supplies the host for the one-time SSH host-key
+// scan; pass "" when the URL is not available (redeploy/commit — the pin is
+// already set from the first deploy).
+func (h *handler) resolveCredential(name, repoURL string) (*pb.GitCredential, error) {
 	if name == "" {
 		return nil, nil
 	}
 	if h.creds == nil {
 		return nil, fmt.Errorf("credentials unavailable")
 	}
+	kind := ""
+	for _, m := range h.creds.List() {
+		if m.Name == name {
+			kind = m.Type
+			break
+		}
+	}
+	if kind == "ssh-key" {
+		priv, kh, ok, err := h.creds.GetKey(name)
+		if err != nil {
+			return nil, fmt.Errorf("credential %q: %v", name, err)
+		}
+		if !ok {
+			return nil, fmt.Errorf("unknown credential %q", name)
+		}
+		if kh == "" && repoURL != "" {
+			host, port := sshHostPort(repoURL)
+			if host != "" {
+				hostport := host
+				if port != "" {
+					hostport = host + ":" + port
+				}
+				scanned, serr := h.scanHost(hostport)
+				if serr != nil {
+					return nil, fmt.Errorf("host-key scan failed: %v", serr)
+				}
+				if err := h.creds.SetKnownHosts(name, scanned); err != nil {
+					return nil, err
+				}
+				kh = scanned
+			}
+		}
+		if kh == "" {
+			return nil, fmt.Errorf("ssh credential %q has no pinned host key yet; deploy it first to pin the host key", name)
+		}
+		return &pb.GitCredential{Username: "git", PrivateKey: priv, KnownHosts: kh, Kind: pb.CredentialKind_CRED_SSH}, nil
+	}
+
 	user, tok, ok, err := h.creds.Get(name)
 	if err != nil {
 		return nil, fmt.Errorf("credential %q: %v", name, err)
@@ -201,5 +243,37 @@ func (h *handler) resolveCredential(name string) (*pb.GitCredential, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown credential %q", name)
 	}
-	return &pb.GitCredential{Username: user, Token: tok}, nil
+	return &pb.GitCredential{Username: user, Token: tok, Kind: pb.CredentialKind_CRED_HTTPS}, nil
+}
+
+// sshHostPort extracts host and optional port from an SSH git URL. Handles the
+// scp-like form (git@host:path) and the ssh:// URL form. Returns ("","") if not
+// recognizably SSH.
+func sshHostPort(repo string) (host, port string) {
+	if strings.HasPrefix(repo, "https://") || strings.HasPrefix(repo, "http://") {
+		return "", ""
+	}
+	if strings.HasPrefix(repo, "ssh://") {
+		if u, err := url.Parse(repo); err == nil {
+			host := u.Hostname()
+			if strings.HasPrefix(host, "-") {
+				return "", ""
+			}
+			return host, u.Port()
+		}
+		return "", ""
+	}
+	// scp-like: [user@]host:path  — host is between an optional "@" and the first ":"
+	s := repo
+	if at := strings.Index(s, "@"); at >= 0 {
+		s = s[at+1:]
+	}
+	if colon := strings.Index(s, ":"); colon >= 0 {
+		host := s[:colon]
+		if strings.HasPrefix(host, "-") {
+			return "", ""
+		}
+		return host, ""
+	}
+	return "", ""
 }

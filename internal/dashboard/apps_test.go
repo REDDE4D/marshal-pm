@@ -15,6 +15,133 @@ import (
 	"marshal/internal/pb"
 )
 
+// fakeCreds is a test-only implementation of the Credentials interface.
+// It is used to test SSH credential resolution without real disk I/O.
+type fakeCreds struct {
+	metas []credstore.Meta
+	priv  string // private key returned by GetKey
+	kh    string // known_hosts returned by GetKey
+
+	setKH string // captured value passed to SetKnownHosts
+
+	// HTTPS fields (for Get)
+	httpsUser string
+	httpsTok  string
+	httpsOk   bool
+}
+
+func (f *fakeCreds) List() []credstore.Meta { return f.metas }
+
+func (f *fakeCreds) Get(name string) (string, string, bool, error) {
+	if f.httpsOk {
+		return f.httpsUser, f.httpsTok, true, nil
+	}
+	return "", "", false, nil
+}
+
+func (f *fakeCreds) Put(name, user, tok string) error { return nil }
+
+func (f *fakeCreds) Generate(name string) (string, error) { return "ssh-ed25519 FAKE", nil }
+
+func (f *fakeCreds) GetKey(name string) (string, string, bool, error) {
+	return f.priv, f.kh, f.priv != "", nil
+}
+
+func (f *fakeCreds) SetKnownHosts(name, line string) error {
+	f.setKH = line
+	f.kh = line
+	return nil
+}
+
+func (f *fakeCreds) Delete(name string) bool { return true }
+
+func TestSSHHostPort(t *testing.T) {
+	cases := []struct{ repo, host, port string }{
+		{"git@github.com:o/r.git", "github.com", ""},
+		{"ssh://git@ssh.github.com:443/o/r.git", "ssh.github.com", "443"},
+		{"ssh://git@example.com/o/r.git", "example.com", ""},
+		{"https://github.com/o/r.git", "", ""},
+		{"ssh://git@-evil.example.com/o/r.git", "", ""}, // leading-dash host → rejected
+	}
+	for _, c := range cases {
+		h, p := sshHostPort(c.repo)
+		if h != c.host || p != c.port {
+			t.Fatalf("%s -> (%q,%q), want (%q,%q)", c.repo, h, p, c.host, c.port)
+		}
+	}
+}
+
+func TestResolveSSHScansAndPins(t *testing.T) {
+	fc := &fakeCreds{
+		metas: []credstore.Meta{{Name: "dk", Type: "ssh-key", PublicKey: "ssh-ed25519 AAAA"}},
+		priv:  "PRIVKEY",
+		kh:    "", // no pin yet → must scan
+	}
+	h := newTestHandlerWithCreds(t, fc)
+	var scanCalled bool
+	h.scanHost = func(hp string) (string, error) {
+		if hp != "github.com" {
+			t.Fatalf("scanned %q, want github.com", hp)
+		}
+		scanCalled = true
+		return "github.com ssh-ed25519 SCANNED", nil
+	}
+
+	cred, err := h.resolveCredential("dk", "git@github.com:o/r.git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cred.GetKind() != pb.CredentialKind_CRED_SSH || cred.GetPrivateKey() != "PRIVKEY" {
+		t.Fatalf("cred = %+v", cred)
+	}
+	if cred.GetKnownHosts() != "github.com ssh-ed25519 SCANNED" {
+		t.Fatalf("known_hosts = %q", cred.GetKnownHosts())
+	}
+	if !scanCalled {
+		t.Fatal("scanHost was not called")
+	}
+	if fc.setKH != "github.com ssh-ed25519 SCANNED" {
+		t.Fatal("pin was not persisted via SetKnownHosts")
+	}
+}
+
+func TestResolveSSHUnpinnedNoRepoErrors(t *testing.T) {
+	fc := &fakeCreds{
+		metas: []credstore.Meta{{Name: "dk", Type: "ssh-key"}},
+		priv:  "PRIVKEY",
+		kh:    "", // no pin, no repo URL → must error
+	}
+	h := newTestHandlerWithCreds(t, fc)
+	h.scanHost = func(string) (string, error) {
+		t.Fatal("must not scan when no repo URL given")
+		return "", nil
+	}
+	cred, err := h.resolveCredential("dk", "") // no repo URL, no scan possible
+	if err == nil {
+		t.Fatalf("expected error for unpinned ssh credential with no repo URL, got cred=%+v", cred)
+	}
+	if cred != nil {
+		t.Fatalf("expected nil credential, got %+v", cred)
+	}
+}
+
+func TestResolveSSHAlreadyPinnedSkipsScan(t *testing.T) {
+	fc := &fakeCreds{
+		metas: []credstore.Meta{{Name: "dk", Type: "ssh-key"}},
+		priv:  "PRIVKEY",
+		kh:    "github.com ssh-ed25519 PINNED",
+	}
+	h := newTestHandlerWithCreds(t, fc)
+	h.scanHost = func(string) (string, error) {
+		t.Fatal("must not scan when already pinned")
+		return "", nil
+	}
+	cred, err := h.resolveCredential("dk", "git@github.com:o/r.git")
+	if err != nil || cred.GetKnownHosts() != "github.com ssh-ed25519 PINNED" {
+		t.Fatalf("cred=%+v err=%v", cred, err)
+	}
+}
+
 // authedRequest builds a request with a user already injected into the context,
 // so tests can call handler methods directly without going through requireSession.
 func authedRequest(t *testing.T, method, target, body string) *http.Request {
