@@ -2,7 +2,6 @@ package notify
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -27,7 +26,6 @@ type Dispatcher struct {
 	syncMode bool
 	mu       sync.Mutex
 	last     map[string]time.Time
-	senders  map[string]Sender
 }
 
 // DispatchOption configures a Dispatcher.
@@ -42,11 +40,10 @@ func WithSyncDelivery() DispatchOption { return func(d *Dispatcher) { d.syncMode
 // NewDispatcher builds a dispatcher.
 func NewDispatcher(store StoreReader, build BuildFunc, opts ...DispatchOption) *Dispatcher {
 	d := &Dispatcher{
-		store:   store,
-		build:   build,
-		now:     time.Now,
-		last:    map[string]time.Time{},
-		senders: map[string]Sender{},
+		store: store,
+		build: build,
+		now:   time.Now,
+		last:  map[string]time.Time{},
 	}
 	for _, o := range opts {
 		o(d)
@@ -115,9 +112,14 @@ func (d *Dispatcher) matchChannels(e Event) []Channel {
 }
 
 func (d *Dispatcher) deliver(c Channel, msg Message) {
-	sender, err := d.senderFor(c)
+	secrets, _, err := d.store.ChannelSecrets(c.Name)
 	if err != nil {
-		log.Printf("notify: channel %q: %v", c.Name, err)
+		log.Printf("notify: channel %q: secret: %v", c.Name, err)
+		return
+	}
+	sender, err := d.build(c, secrets)
+	if err != nil {
+		log.Printf("notify: channel %q: build: %v", c.Name, err)
 		return
 	}
 	const attempts = 3
@@ -131,28 +133,4 @@ func (d *Dispatcher) deliver(c Channel, msg Message) {
 		time.Sleep(time.Duration(i+1) * 200 * time.Millisecond)
 	}
 	log.Printf("notify: channel %q send failed after %d attempts: %v", c.Name, attempts, err)
-}
-
-// senderFor returns a cached Sender for the channel, building one if needed.
-func (d *Dispatcher) senderFor(c Channel) (Sender, error) {
-	d.mu.Lock()
-	if s, ok := d.senders[c.Name]; ok {
-		d.mu.Unlock()
-		return s, nil
-	}
-	d.mu.Unlock()
-
-	secrets, _, err := d.store.ChannelSecrets(c.Name)
-	if err != nil {
-		return nil, fmt.Errorf("secret: %w", err)
-	}
-	s, err := d.build(c, secrets)
-	if err != nil {
-		return nil, fmt.Errorf("build: %w", err)
-	}
-
-	d.mu.Lock()
-	d.senders[c.Name] = s
-	d.mu.Unlock()
-	return s, nil
 }

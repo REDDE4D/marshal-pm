@@ -37,6 +37,9 @@ func newTestDispatcher(t *testing.T, st *fakeStore, clock func() time.Time) (*Di
 	t.Helper()
 	senders := map[string]*fakeSender{}
 	build := func(c Channel, _ map[string]string) (Sender, error) {
+		if existing, ok := senders[c.Name]; ok {
+			return existing, nil
+		}
 		fs := &fakeSender{chName: c.Name}
 		senders[c.Name] = fs
 		return fs, nil
