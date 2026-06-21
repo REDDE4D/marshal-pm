@@ -1,0 +1,76 @@
+name: 🐛 Bug report
+description: Something in Marshal doesn't work the way it should.
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Marshal is an experiment in agent-built software
+        (see the README — it was vibecoded with Claude Code), so concrete, reproducible
+        reports are especially valuable. Please fill in as much as you can.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected instead.
+      placeholder: When I run `marshal start ...`, the agent ... but I expected ...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact commands / config / clicks that trigger it.
+      placeholder: |
+        1. `go build -o marshal ./cmd/marshal`
+        2. `marshal start marshal.yaml` with the config below
+        3. Open the dashboard and ...
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant marshal.yaml / config
+      description: Redact any secrets. This will be rendered as a code block.
+      render: yaml
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / output
+      description: Relevant CLI output, agent/server logs, or browser console errors. Redact secrets.
+      render: shell
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Marshal version / commit
+      description: Output of `marshal --version`, or the git commit you built from.
+      placeholder: "e.g. main @ f453ca7"
+    validations:
+      required: false
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where does it occur?
+      multiple: true
+      options:
+        - CLI
+        - Agent / daemon
+        - Central server (fleet)
+        - Web dashboard
+        - Git deploy / credentials
+        - Other / not sure
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS + architecture + Go version (`go version`).
+      placeholder: "e.g. macOS 15 arm64, go1.26.4"
+    validations:
+      required: false

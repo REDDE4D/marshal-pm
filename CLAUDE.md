@@ -61,5 +61,6 @@ go vet ./... && gofmt -l .             # lint/format (gofmt should list nothing)
 ## Environment notes
 
 - Go was installed via Homebrew (`/opt/homebrew/bin/go`, currently 1.26.4).
-- No git remote is configured (local-only repo) — PRs aren't available until one is added.
+- Published as a **public GitHub repo**: `REDDE4D/marshal-pm` (`origin`). PRs are available
+  via `gh`. License: **GPL-3.0** (copyleft — forks must stay open source).
 - Module path is the local `marshal`; imports are `marshal/internal/...`.
