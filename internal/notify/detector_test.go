@@ -1,6 +1,8 @@
 package notify
 
 import (
+	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -74,5 +76,56 @@ func TestDiffCleanStopNoEvent(t *testing.T) {
 	next := []*pb.AgentState{agent("dev-1", true, proc("api", "stopped", 0))}
 	if evs := diff(prev, next, time.Now()); len(evs) != 0 {
 		t.Fatalf("clean stop should not alert, got %v", types(evs))
+	}
+}
+
+type fakeLister struct {
+	mu    sync.Mutex
+	snaps [][]*pb.AgentState
+	i     int
+}
+
+func (f *fakeLister) List() []*pb.AgentState {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.i >= len(f.snaps) {
+		return f.snaps[len(f.snaps)-1]
+	}
+	s := f.snaps[f.i]
+	f.i++
+	return s
+}
+
+type recEmitter struct {
+	mu  sync.Mutex
+	evs []Event
+}
+
+func (r *recEmitter) Emit(e Event) { r.mu.Lock(); r.evs = append(r.evs, e); r.mu.Unlock() }
+func (r *recEmitter) count() int   { r.mu.Lock(); defer r.mu.Unlock(); return len(r.evs) }
+
+func TestDetectorRunEmitsOnTransition(t *testing.T) {
+	lst := &fakeLister{snaps: [][]*pb.AgentState{
+		{agent("dev-1", true, proc("api", "online", 0))},     // seed
+		{agent("dev-1", true, proc("api", "restarting", 1))}, // crash
+	}}
+	em := &recEmitter{}
+	d := NewDetector(lst, em, time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	go d.Run(ctx)
+	deadline := time.After(2 * time.Second)
+	for em.count() < 1 {
+		select {
+		case <-deadline:
+			t.Fatal("no event within deadline")
+		default:
+			time.Sleep(2 * time.Millisecond)
+		}
+	}
+	cancel()
+	em.mu.Lock()
+	defer em.mu.Unlock()
+	if em.evs[0].Type != EventCrash {
+		t.Fatalf("want crash, got %v", em.evs[0].Type)
 	}
 }

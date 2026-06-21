@@ -1,6 +1,7 @@
 package notify
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -73,4 +74,36 @@ func procEvent(agentName, prevState string, p *pb.ProcInfo, now time.Time) (Even
 		return base, true
 	}
 	return Event{}, false
+}
+
+// Detector polls fleet snapshots and emits events on transitions.
+type Detector struct {
+	lister   Lister
+	emit     Emitter
+	interval time.Duration
+	now      func() time.Time
+	prev     []*pb.AgentState
+}
+
+// NewDetector builds a detector polling l every interval.
+func NewDetector(l Lister, e Emitter, interval time.Duration) *Detector {
+	return &Detector{lister: l, emit: e, interval: interval, now: time.Now}
+}
+
+// Run polls until ctx is cancelled. The first poll seeds the baseline.
+func (d *Detector) Run(ctx context.Context) {
+	t := time.NewTicker(d.interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			next := d.lister.List()
+			for _, e := range diff(d.prev, next, d.now()) {
+				d.emit.Emit(e)
+			}
+			d.prev = next
+		}
+	}
 }
