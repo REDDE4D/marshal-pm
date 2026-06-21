@@ -141,7 +141,14 @@ existing deploy/redeploy/commit endpoints resolve an ssh-key credential transpar
 
 ## Concrete next step
 
-1. **Merge `m25-ssh-deploy-keys` to `main`** (`--no-ff`, no remote) via
-   `superpowers:finishing-a-development-branch`.
-2. Then: the deferred **auth-required HTTPS-remote** demo (the only remaining M22-era gap, now that SSH push is
-   proven), **proactive UI writability** + the cosmetic SSH-UI styling, or bump the `cmd/marshal` SIGINT deadline.
+1. ~~Merge `m25-ssh-deploy-keys` to `main`~~ — **done** (`f453ca7`, `--no-ff`). The project was then
+   **published as a public GitHub repo**: `REDDE4D/marshal-pm` (GPL-3.0, `origin`).
+2. Candidate next milestones:
+   - **Notification service** (user-requested, flagged 2026-06-21): push fleet alerts to **Telegram /
+     Slack / email / webhooks** when a process crashes, enters a restart loop, exceeds max-restarts, an
+     agent disconnects, or a deploy/redeploy fails. Likely server-side (the central server already
+     aggregates fleet state); per-channel secrets via the existing encrypted credstore; needs
+     debounce/rate-limiting + a dashboard UI to manage channels/rules. Brainstorm scope first.
+   - The deferred **auth-required HTTPS-remote** demo (the only remaining M22-era gap, now that SSH push
+     is proven), **proactive UI writability** + the cosmetic SSH-UI styling, or bump the `cmd/marshal`
+     SIGINT deadline.
