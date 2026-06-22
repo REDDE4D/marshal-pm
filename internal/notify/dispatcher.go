@@ -97,8 +97,10 @@ func (d *Dispatcher) allow(e Event) bool {
 }
 
 // pruneLocked drops entries whose age has reached their type's cooldown. Caller
-// holds d.mu. An entry past its cooldown always allows the next event of that
-// key, so removing it changes no observable behavior; this bounds the map to
+// holds d.mu. For a fixed or lowered cooldown, an entry past its cooldown always
+// allows the next event of that key, so removing it changes no observable behavior.
+// (If the cooldown is raised at runtime, a swept key may permit one early re-fire —
+// benign: it can only over-notify, never suppress an alert.) This bounds the map to
 // distinct keys seen within their cooldown window.
 func (d *Dispatcher) pruneLocked(s Settings, now time.Time) {
 	for k, e := range d.last {

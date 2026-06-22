@@ -97,10 +97,12 @@ type cooldownEntry struct {
 ```
 
 Inside the existing locked section of `allow()`, after recording the new entry, sweep the map
-and delete any entry where `now.Sub(e.at) >= s.cooldownFor(e.typ)`. An entry whose age has
-reached its own cooldown can never gate a future event again (the next event of that key is
-always allowed), so eviction is safe and changes no observable behavior. Result: the map is
-bounded to "distinct (agent, process, type) keys seen within their cooldown window."
+and delete any entry where `now.Sub(e.at) >= s.cooldownFor(e.typ)`. For a fixed or lowered
+cooldown, an entry whose age has reached its own cooldown can never gate a future event again
+(the next event of that key is always allowed), so eviction is safe and changes no observable
+behavior. If the cooldown is raised at runtime, a swept key may permit one early re-fire —
+benign (it can only over-notify, never suppress an alert). Result: the map is bounded to
+"distinct (agent, process, type) keys seen within their cooldown window."
 
 Cost: the sweep is O(n) in the number of live keys, performed only on an emit that passes the
 suppress gate. Emits are infrequent (gated by the 2 s detector tick and the cooldowns
