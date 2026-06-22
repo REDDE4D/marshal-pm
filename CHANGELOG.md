@@ -21,6 +21,11 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
   `deleteChannel`, `putRule`, `deleteRule`, `putSettings`, plus not-found/error and
   service-unavailable paths) and detector edge cases (deploy-fail detail pass-through
   with fallback, and a new process seeding silently alongside a transitioning one).
+- **Recovery notices** — the notification detector now emits a `recovered` event
+  ("Process recovered") when a process that was crashing, restart-looping, or
+  deploy-failing returns to `online` (including deploy recovery through an
+  intermediate build). Controlled by a "Send recovery notices" setting that is on
+  by default; routes through existing notification rules.
 
 ### Fixed
 - **Flaky CI test** — bumped the tight 5s deadlines in
