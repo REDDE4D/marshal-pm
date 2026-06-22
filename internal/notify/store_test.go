@@ -109,3 +109,44 @@ func TestPutChannelConfigNotAliased(t *testing.T) {
 		t.Fatalf("aliasing detected: store Config was mutated, got %q", fresh[0].Config["chat_id"])
 	}
 }
+
+func TestDefaultRecoveryEnabled(t *testing.T) {
+	s, _ := testStore(t)
+	if s.Settings().SuppressRecovery {
+		t.Fatal("recovery should default ON (SuppressRecovery=false)")
+	}
+}
+
+func TestSuppressRecoveryPersists(t *testing.T) {
+	s, dir := testStore(t)
+	if err := s.SetSettings(Settings{CooldownSeconds: 120, SuppressRecovery: true}); err != nil {
+		t.Fatal(err)
+	}
+	var key [32]byte
+	key[0] = 7
+	s2, err := Open(dir, secretbox.FromKey(key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s2.Settings().SuppressRecovery {
+		t.Fatalf("suppress_recovery not persisted: %+v", s2.Settings())
+	}
+}
+
+func TestLegacyConfigRecoveryEnabled(t *testing.T) {
+	dir := t.TempDir()
+	// A notifications.json predating the field: no suppress_recovery key.
+	legacy := `{"channels":{},"rules":{},"settings":{"cooldown_seconds":300}}`
+	if err := os.WriteFile(filepath.Join(dir, "notifications.json"), []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var key [32]byte
+	key[0] = 7
+	s, err := Open(dir, secretbox.FromKey(key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Settings().SuppressRecovery {
+		t.Fatal("legacy config must default to recovery ON")
+	}
+}

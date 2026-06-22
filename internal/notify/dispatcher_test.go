@@ -117,3 +117,35 @@ func TestDispatcherSkipsDisabledChannel(t *testing.T) {
 		t.Fatal("disabled channel must not fire")
 	}
 }
+
+func TestDispatcherSuppressesRecovery(t *testing.T) {
+	st := &fakeStore{
+		channels: []Channel{{Name: "tg", Type: "telegram", Enabled: true}},
+		rules:    []Rule{{Name: "all", Enabled: true, Channels: []string{"tg"}}},
+		settings: Settings{CooldownSeconds: 300, SuppressRecovery: true},
+	}
+	now := time.Unix(1000, 0)
+	d, senders := newTestDispatcher(t, st, func() time.Time { return now })
+	d.Emit(Event{Type: EventRecovered, Agent: "dev-1", Process: "api"})
+	if s := senders["tg"]; s != nil && len(s.sent) != 0 {
+		t.Fatalf("recovered must be suppressed, got %d", len(s.sent))
+	}
+	d.Emit(Event{Type: EventCrash, Agent: "dev-1", Process: "api"})
+	if len(senders["tg"].sent) != 1 {
+		t.Fatalf("crash should still deliver, got %d", len(senders["tg"].sent))
+	}
+}
+
+func TestDispatcherDeliversRecoveryWhenEnabled(t *testing.T) {
+	st := &fakeStore{
+		channels: []Channel{{Name: "tg", Type: "telegram", Enabled: true}},
+		rules:    []Rule{{Name: "all", Enabled: true, Channels: []string{"tg"}}},
+		settings: Settings{CooldownSeconds: 300, SuppressRecovery: false},
+	}
+	now := time.Unix(1000, 0)
+	d, senders := newTestDispatcher(t, st, func() time.Time { return now })
+	d.Emit(Event{Type: EventRecovered, Agent: "dev-1", Process: "api"})
+	if len(senders["tg"].sent) != 1 {
+		t.Fatalf("recovered should deliver when enabled, got %d", len(senders["tg"].sent))
+	}
+}

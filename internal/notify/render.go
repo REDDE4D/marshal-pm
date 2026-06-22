@@ -8,6 +8,7 @@ var eventTitles = map[EventType]string{
 	EventAgentDown:   "Agent disconnected",
 	EventAgentUp:     "Agent reconnected",
 	EventDeployFail:  "Deploy failed",
+	EventRecovered:   "Process recovered",
 }
 
 // render builds a human-facing Message for an event.

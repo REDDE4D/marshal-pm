@@ -5,7 +5,7 @@ import {
   type NotifConfig, type NotifChannel, type NotifRule,
 } from "./api";
 
-const EVENT_TYPES = ["crash", "restart_loop", "agent_down", "agent_up", "deploy_fail"];
+const EVENT_TYPES = ["crash", "restart_loop", "agent_down", "agent_up", "deploy_fail", "recovered"];
 const CHANNEL_TYPES = ["webhook", "telegram", "slack", "email"];
 
 // config + secret field names per channel type (secret fields are write-only)
@@ -156,11 +156,13 @@ function RuleSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => void
 
 function SettingsSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => void }) {
   const [cooldown, setCooldown] = useState(cfg.settings.cooldown_seconds);
+  const [recovery, setRecovery] = useState(!cfg.settings.suppress_recovery);
   return (
     <section>
       <h3>Settings</h3>
       <label>Cooldown (seconds): <input type="number" value={cooldown} onChange={(e) => setCooldown(Number(e.target.value))} /></label>
-      <button onClick={async () => { await putNotifSettings({ cooldown_seconds: cooldown }); onChange(); }}>Save</button>
+      <label><input type="checkbox" checked={recovery} onChange={(e) => setRecovery(e.target.checked)} /> Send recovery notices</label>
+      <button onClick={async () => { await putNotifSettings({ cooldown_seconds: cooldown, suppress_recovery: !recovery }); onChange(); }}>Save</button>
     </section>
   );
 }
