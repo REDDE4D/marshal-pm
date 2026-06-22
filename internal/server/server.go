@@ -401,8 +401,9 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 		if notifStore != nil {
 			nw = notifStore
 		}
+		em := enrollMinter{auth: auth, fp: fp, fleetAddr: lis.Addr().String()}
 		go func() {
-			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath, auditPath, cw, nw, channels.New); err != nil {
+			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath, auditPath, cw, nw, channels.New, em); err != nil {
 				log.Printf("dashboard: %v", err)
 			}
 		}()
