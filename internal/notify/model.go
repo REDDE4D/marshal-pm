@@ -16,6 +16,7 @@ const (
 	EventAgentDown   EventType = "agent_down"
 	EventAgentUp     EventType = "agent_up"
 	EventDeployFail  EventType = "deploy_fail"
+	EventRecovered   EventType = "recovered"
 )
 
 // Event is a single detected condition. Process is "" for agent-level events.
@@ -48,6 +49,10 @@ type Rule struct {
 // Settings holds dispatcher tunables.
 type Settings struct {
 	CooldownSeconds int `json:"cooldown_seconds"`
+	// SuppressRecovery silences "recovered" notices when true. It is inverted
+	// (suppress, not enable) so the zero value keeps recovery on by default,
+	// including for config files written before this field existed.
+	SuppressRecovery bool `json:"suppress_recovery"`
 }
 
 // Message is a rendered alert handed to a Sender.
