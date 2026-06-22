@@ -79,6 +79,49 @@ func TestDiffCleanStopNoEvent(t *testing.T) {
 	}
 }
 
+func TestDiffDeployFailCarriesDetail(t *testing.T) {
+	prev := []*pb.AgentState{agent("dev-1", true, proc("web", "building", 0))}
+	failed := proc("web", "failed", 0)
+	failed.Detail = "exit status 1: build error"
+	next := []*pb.AgentState{agent("dev-1", true, failed)}
+	evs := diff(prev, next, time.Now())
+	if len(evs) != 1 || evs[0].Type != EventDeployFail {
+		t.Fatalf("want one deploy_fail, got %+v", evs)
+	}
+	if evs[0].Detail != "exit status 1: build error" {
+		t.Fatalf("detail not carried through: %q", evs[0].Detail)
+	}
+}
+
+func TestDiffDeployFailFallsBackWhenNoDetail(t *testing.T) {
+	prev := []*pb.AgentState{agent("dev-1", true, proc("web", "building", 0))}
+	next := []*pb.AgentState{agent("dev-1", true, proc("web", "failed", 0))}
+	evs := diff(prev, next, time.Now())
+	if len(evs) != 1 || evs[0].Type != EventDeployFail {
+		t.Fatalf("want one deploy_fail, got %+v", evs)
+	}
+	if evs[0].Detail != "deploy failed" {
+		t.Fatalf("want fallback detail, got %q", evs[0].Detail)
+	}
+}
+
+// A process appearing for the first time in the same tick as another process
+// transitions: the new one seeds silently, only the transition emits.
+func TestDiffNewProcessSeedsAlongsideTransition(t *testing.T) {
+	prev := []*pb.AgentState{agent("dev-1", true, proc("api", "online", 0))}
+	next := []*pb.AgentState{agent("dev-1", true,
+		proc("api", "restarting", 1), // transition -> crash
+		proc("worker", "online", 0),  // brand new -> seed silently
+	)}
+	evs := diff(prev, next, time.Now())
+	if len(evs) != 1 {
+		t.Fatalf("want exactly one event, got %+v", evs)
+	}
+	if evs[0].Type != EventCrash || evs[0].Process != "api" {
+		t.Fatalf("want crash for api, got %+v", evs[0])
+	}
+}
+
 type fakeLister struct {
 	mu    sync.Mutex
 	snaps [][]*pb.AgentState

@@ -17,6 +17,15 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
   (TypeScript) build on every push and PR to `dev`/`main`; `release.yml` cross-builds
   version-stamped binaries (darwin/linux × amd64/arm64) and attaches them to a GitHub
   Release when a `v*` tag is pushed.
+- **Test coverage** — notification dashboard handlers (`testChannel`,
+  `deleteChannel`, `putRule`, `deleteRule`, `putSettings`, plus not-found/error and
+  service-unavailable paths) and detector edge cases (deploy-fail detail pass-through
+  with fallback, and a new process seeding silently alongside a transitioning one).
+
+### Fixed
+- **Flaky CI test** — bumped the tight 5s deadlines in
+  `cmd/marshal/TestRunSupervisesAndStops` (15s startup, 30s post-SIGINT exit) so
+  `go test -race` runs reliably on loaded runners.
 
 ## [0.1.0] - 2026-06-22
 
