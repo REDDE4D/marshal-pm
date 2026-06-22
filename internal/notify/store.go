@@ -3,6 +3,7 @@ package notify
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"maps"
 	"os"
 	"path/filepath"
@@ -126,7 +127,9 @@ func (s *Store) DeleteChannel(name string) bool {
 		return false
 	}
 	delete(s.data.Channels, name)
-	_ = s.flushLocked()
+	if err := s.flushLocked(); err != nil {
+		log.Printf("notify: persist after delete %q: %v", name, err)
+	}
 	return true
 }
 
@@ -183,7 +186,9 @@ func (s *Store) DeleteRule(name string) bool {
 		return false
 	}
 	delete(s.data.Rules, name)
-	_ = s.flushLocked()
+	if err := s.flushLocked(); err != nil {
+		log.Printf("notify: persist after delete %q: %v", name, err)
+	}
 	return true
 }
 

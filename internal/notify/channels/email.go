@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/smtp"
+	"strings"
 
 	"marshal/internal/notify"
 )
@@ -30,9 +31,14 @@ func newEmail(c notify.Channel, secrets map[string]string) (notify.Sender, error
 	return e, nil
 }
 
+// stripCRLF removes CR/LF so a value can't inject extra headers.
+func stripCRLF(s string) string {
+	return strings.NewReplacer("\r", "", "\n", "").Replace(s)
+}
+
 func (e *email) Send(_ context.Context, m notify.Message) error {
 	msg := []byte(fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s\r\n",
-		e.from, e.to, m.Title, m.Body))
+		e.from, e.to, stripCRLF(m.Title), m.Body))
 	var auth smtp.Auth
 	if e.username != "" {
 		auth = smtp.PlainAuth("", e.username, e.password, e.host)
