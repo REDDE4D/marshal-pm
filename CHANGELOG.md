@@ -13,6 +13,7 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 ## [Unreleased]
 
 ### Added
+- Dashboard "Connect an agent": generates a ready-to-run command (with a freshly minted enroll token, the server fingerprint, and address) to enroll a new agent host.
 - Per-event-type cooldown overrides: each notification event type can have its own cooldown, falling back to the global cooldown when unset (`settings.cooldown_overrides`).
 
 ### Fixed
