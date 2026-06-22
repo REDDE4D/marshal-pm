@@ -30,8 +30,3 @@ func New(c notify.Channel, secrets map[string]string) (notify.Sender, error) {
 		return nil, fmt.Errorf("unknown channel type %q", c.Type)
 	}
 }
-
-// temporary stub — replaced in Task 10
-func newEmail(notify.Channel, map[string]string) (notify.Sender, error) {
-	return nil, fmt.Errorf("email: not yet")
-}
