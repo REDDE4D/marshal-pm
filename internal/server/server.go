@@ -19,7 +19,10 @@ import (
 	"marshal/internal/dashboard"
 	"marshal/internal/logstore"
 	"marshal/internal/metricstore"
+	"marshal/internal/notify"
+	"marshal/internal/notify/channels"
 	"marshal/internal/pb"
+	"marshal/internal/secretbox"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -382,8 +385,24 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 		if cerr == nil {
 			cw = creds
 		}
+		// Notification service: detector polls the registry; dispatcher routes to channels.
+		var notifStore *notify.Store
+		if box, berr := secretbox.Load(dataDir); berr != nil {
+			log.Printf("server: notifications disabled: %v", berr)
+		} else if ns, nerr := notify.Open(dataDir, box); nerr != nil {
+			log.Printf("server: notifications disabled: %v", nerr)
+		} else {
+			notifStore = ns
+			disp := notify.NewDispatcher(ns, channels.New)
+			det := notify.NewDetector(reg, disp, 2*time.Second)
+			go det.Run(ctx)
+		}
+		var nw dashboard.Notifications
+		if notifStore != nil {
+			nw = notifStore
+		}
 		go func() {
-			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath, auditPath, cw); err != nil {
+			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath, auditPath, cw, nw, channels.New); err != nil {
 				log.Printf("dashboard: %v", err)
 			}
 		}()
