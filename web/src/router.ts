@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 
-export type Route = { name: "overview" } | { name: "detail"; agent: string; proc: string } | { name: "credentials" };
+export type Route = { name: "overview" } | { name: "detail"; agent: string; proc: string } | { name: "credentials" } | { name: "notifications" };
 
 export function parseHash(hash: string): Route {
+  if (hash === "#/notifications") return { name: "notifications" };
   if (hash === "#/credentials") return { name: "credentials" };
   const m = hash.match(/^#\/a\/([^/]+)\/p\/([^/]+)$/);
   if (m) return { name: "detail", agent: decodeURIComponent(m[1]), proc: decodeURIComponent(m[2]) };
