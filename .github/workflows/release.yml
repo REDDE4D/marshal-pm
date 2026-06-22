@@ -1,0 +1,45 @@
+name: Release
+
+# Cut a release when a vX.Y.Z tag is pushed to main: cross-build version-stamped
+# binaries and attach them to a GitHub Release. See CLAUDE.md for the release flow.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build binaries + GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build cross-platform binaries
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64; do
+            os="${target%/*}"; arch="${target#*/}"
+            name="marshal-${VERSION}-${os}-${arch}"
+            echo "building ${name}"
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build \
+              -ldflags "-X marshal/internal/version.Version=${VERSION}" \
+              -o "dist/${name}" ./cmd/marshal
+            tar -czf "dist/${name}.tar.gz" -C dist "${name}"
+            rm "dist/${name}"
+          done
+          ls -la dist
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/*.tar.gz \
+            --title "${{ github.ref_name }}" \
+            --notes "Automated release for ${{ github.ref_name }}. See CHANGELOG.md for details." \
+            --verify-tag

@@ -12,7 +12,11 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **CI** — GitHub Actions: `ci.yml` runs gofmt/vet/`go test -race`/build and a web
+  (TypeScript) build on every push and PR to `dev`/`main`; `release.yml` cross-builds
+  version-stamped binaries (darwin/linux × amd64/arm64) and attaches them to a GitHub
+  Release when a `v*` tag is pushed.
 
 ## [0.1.0] - 2026-06-22
 
