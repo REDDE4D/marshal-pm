@@ -430,3 +430,15 @@ export async function putNotifSettings(s: NotifSettings): Promise<{ ok: boolean 
   });
   return { ok: r.ok };
 }
+
+export type ConnectInfo = { token: string; fingerprint: string; default_address: string };
+
+export async function connectToken(address?: string, name?: string): Promise<ConnectInfo> {
+  const r = await fetch("/api/fleet/connect-token", {
+    method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address: address ?? "", name: name ?? "" }),
+  });
+  if (!r.ok) throw new Error(`connect-token failed: ${r.status}`);
+  return (await r.json()) as ConnectInfo;
+}
