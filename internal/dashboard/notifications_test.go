@@ -280,6 +280,21 @@ func TestPutSettings(t *testing.T) {
 	}
 }
 
+func TestPutSettingsRoundTripsSuppressRecovery(t *testing.T) {
+	n := &fakeNotifs{}
+	h := testHandlerWithNotifs(t, n)
+	body, _ := json.Marshal(notify.Settings{CooldownSeconds: 60, SuppressRecovery: true})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/notifications/settings", bytes.NewReader(body))
+	h.putSettings(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body %s", rec.Code, rec.Body)
+	}
+	if !n.settings.SuppressRecovery {
+		t.Fatalf("suppress_recovery not stored: %+v", n.settings)
+	}
+}
+
 func TestPutSettingsRejectsBadJSON(t *testing.T) {
 	h := testHandlerWithNotifs(t, &fakeNotifs{})
 	rec := httptest.NewRecorder()

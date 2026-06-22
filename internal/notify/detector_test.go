@@ -204,9 +204,11 @@ func TestRecoveryPrunesVanishedProcess(t *testing.T) {
 	now := time.Now()
 	online := []*pb.AgentState{agent("dev-1", true, proc("api", "online", 0))}
 	restarting := []*pb.AgentState{agent("dev-1", true, proc("api", "restarting", 1))}
-	gone := []*pb.AgentState{agent("dev-1", true)} // api removed
-	d.tick(online, restarting, now)                // alerting api
-	d.tick(restarting, gone, now)                  // api vanished -> pruned, no recovery
+	gone := []*pb.AgentState{agent("dev-1", true)}           // api removed
+	d.tick(online, restarting, now)                          // alerting api
+	if evs := d.tick(restarting, gone, now); len(evs) != 0 { // api vanished -> pruned, no recovery
+		t.Fatalf("vanished process must not emit recovery, got %+v", evs)
+	}
 	if len(d.alerting) != 0 {
 		t.Fatalf("alerting map should be pruned, got %v", d.alerting)
 	}
