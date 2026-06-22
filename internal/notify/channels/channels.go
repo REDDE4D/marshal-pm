@@ -31,13 +31,7 @@ func New(c notify.Channel, secrets map[string]string) (notify.Sender, error) {
 	}
 }
 
-// temporary stubs — replaced in Tasks 9 and 10
-func newTelegram(notify.Channel, map[string]string) (notify.Sender, error) {
-	return nil, fmt.Errorf("telegram: not yet")
-}
-func newSlack(notify.Channel, map[string]string) (notify.Sender, error) {
-	return nil, fmt.Errorf("slack: not yet")
-}
+// temporary stub — replaced in Task 10
 func newEmail(notify.Channel, map[string]string) (notify.Sender, error) {
 	return nil, fmt.Errorf("email: not yet")
 }
