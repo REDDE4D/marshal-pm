@@ -25,7 +25,14 @@ type Dispatcher struct {
 	now      func() time.Time
 	syncMode bool
 	mu       sync.Mutex
-	last     map[string]time.Time
+	last     map[string]cooldownEntry
+}
+
+// cooldownEntry records when a (agent,process,type) key last fired and its type,
+// so the prune sweep can apply the type's own cooldown without re-parsing the key.
+type cooldownEntry struct {
+	at  time.Time
+	typ EventType
 }
 
 // DispatchOption configures a Dispatcher.
@@ -43,7 +50,7 @@ func NewDispatcher(store StoreReader, build BuildFunc, opts ...DispatchOption) *
 		store: store,
 		build: build,
 		now:   time.Now,
-		last:  map[string]time.Time{},
+		last:  map[string]cooldownEntry{},
 	}
 	for _, o := range opts {
 		o(d)
@@ -73,18 +80,32 @@ func (d *Dispatcher) Emit(e Event) {
 	}
 }
 
-// allow records and checks the per-(agent,process,type) cooldown.
+// allow records and checks the per-(agent,process,type) cooldown, then prunes
+// entries that have outlived their own cooldown (they can never gate again).
 func (d *Dispatcher) allow(e Event) bool {
 	key := e.Agent + "\x00" + e.Process + "\x00" + string(e.Type)
-	cooldown := time.Duration(d.store.Settings().CooldownSeconds) * time.Second
+	s := d.store.Settings()
 	now := d.now()
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if last, ok := d.last[key]; ok && now.Sub(last) < cooldown {
+	if last, ok := d.last[key]; ok && now.Sub(last.at) < s.cooldownFor(e.Type) {
 		return false
 	}
-	d.last[key] = now
+	d.last[key] = cooldownEntry{at: now, typ: e.Type}
+	d.pruneLocked(s, now)
 	return true
+}
+
+// pruneLocked drops entries whose age has reached their type's cooldown. Caller
+// holds d.mu. An entry past its cooldown always allows the next event of that
+// key, so removing it changes no observable behavior; this bounds the map to
+// distinct keys seen within their cooldown window.
+func (d *Dispatcher) pruneLocked(s Settings, now time.Time) {
+	for k, e := range d.last {
+		if now.Sub(e.at) >= s.cooldownFor(e.typ) {
+			delete(d.last, k)
+		}
+	}
 }
 
 // matchChannels returns the deduplicated, enabled channels for an event.
