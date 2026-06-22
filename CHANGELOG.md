@@ -18,6 +18,7 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ### Fixed
 - The notification cooldown map is now pruned of expired entries on each emit, so it stays bounded regardless of fleet size or uptime (previously grew unbounded).
+- A `marshal.yaml` with a `server:` block and no `apps:` is now valid; `marshal start` previously rejected it with "config has no apps", preventing fleet agents (which start with zero apps and receive them later via fleet deploy) from enrolling.
 
 ## [0.2.0] - 2026-06-22
 

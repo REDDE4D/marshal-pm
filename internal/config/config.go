@@ -165,7 +165,7 @@ func (c *Config) validate() error {
 			return fmt.Errorf("server needs a trust source: set server.fingerprint or server.ca")
 		}
 	}
-	if len(c.Apps) == 0 {
+	if len(c.Apps) == 0 && c.Server == nil {
 		return fmt.Errorf("config has no apps")
 	}
 	seen := map[string]bool{}
