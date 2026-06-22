@@ -157,12 +157,33 @@ function RuleSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => void
 function SettingsSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => void }) {
   const [cooldown, setCooldown] = useState(cfg.settings.cooldown_seconds);
   const [recovery, setRecovery] = useState(!cfg.settings.suppress_recovery);
+  const [overrides, setOverrides] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const ev of EVENT_TYPES) {
+      const v = cfg.settings.cooldown_overrides?.[ev];
+      init[ev] = v === undefined ? "" : String(v);
+    }
+    return init;
+  });
   return (
     <section>
       <h3>Settings</h3>
       <label>Cooldown (seconds): <input type="number" value={cooldown} onChange={(e) => setCooldown(Number(e.target.value))} /></label>
       <label><input type="checkbox" checked={recovery} onChange={(e) => setRecovery(e.target.checked)} /> Send recovery notices</label>
-      <button onClick={async () => { await putNotifSettings({ cooldown_seconds: cooldown, suppress_recovery: !recovery }); onChange(); }}>Save</button>
+      <div>
+        <h4>Per-event cooldown (seconds)</h4>
+        {EVENT_TYPES.map((ev) => (
+          <label key={ev}>{ev}: <input type="number" placeholder={`${cooldown} (global)`} value={overrides[ev]} onChange={(e) => setOverrides({ ...overrides, [ev]: e.target.value })} /></label>
+        ))}
+      </div>
+      <button onClick={async () => {
+        const co: Record<string, number> = {};
+        for (const ev of EVENT_TYPES) {
+          if (overrides[ev] !== "") co[ev] = Number(overrides[ev]);
+        }
+        await putNotifSettings({ cooldown_seconds: cooldown, suppress_recovery: !recovery, cooldown_overrides: co });
+        onChange();
+      }}>Save</button>
     </section>
   );
 }
