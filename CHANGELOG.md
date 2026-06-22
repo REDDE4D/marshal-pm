@@ -12,6 +12,8 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-22
+
 ### Added
 - **CI** — GitHub Actions: `ci.yml` runs gofmt/vet/`go test -race`/build and a web
   (TypeScript) build on every push and PR to `dev`/`main`; `release.yml` cross-builds
@@ -65,5 +67,6 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/REDDE4D/marshal-pm/releases/tag/v0.1.0
