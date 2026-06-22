@@ -8,13 +8,10 @@
 package credstore
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
+	"marshal/internal/secretbox"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,18 +46,18 @@ type entry struct {
 // Store is a file-backed, encrypted credential store.
 type Store struct {
 	path string
-	key  [32]byte
+	box  *secretbox.Box
 	mu   sync.Mutex
 	data map[string]entry
 }
 
 // Open loads or creates the store under dir, resolving the master key.
 func Open(dir string) (*Store, error) {
-	key, err := loadMasterKey(dir)
+	box, err := secretbox.Load(dir)
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{path: filepath.Join(dir, "credentials.json"), key: key, data: map[string]entry{}}
+	s := &Store{path: filepath.Join(dir, "credentials.json"), box: box, data: map[string]entry{}}
 	if b, err := os.ReadFile(s.path); err == nil {
 		if err := json.Unmarshal(b, &s.data); err != nil {
 			return nil, fmt.Errorf("parse credentials.json: %w", err)
@@ -71,79 +68,15 @@ func Open(dir string) (*Store, error) {
 	return s, nil
 }
 
-func loadMasterKey(dir string) ([32]byte, error) {
-	var key [32]byte
-	if env := os.Getenv("MARSHAL_MASTER_KEY"); env != "" {
-		raw, err := base64.StdEncoding.DecodeString(env)
-		if err != nil || len(raw) != 32 {
-			return key, fmt.Errorf("MARSHAL_MASTER_KEY must be base64 of exactly 32 bytes")
-		}
-		copy(key[:], raw)
-		return key, nil
-	}
-	path := filepath.Join(dir, "master.key")
-	if b, err := os.ReadFile(path); err == nil {
-		if len(b) != 32 {
-			return key, fmt.Errorf("%s must be exactly 32 bytes", path)
-		}
-		copy(key[:], b)
-		return key, nil
-	} else if !os.IsNotExist(err) {
-		return key, err
-	}
-	if _, err := rand.Read(key[:]); err != nil {
-		return key, err
-	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return key, err
-	}
-	if err := os.WriteFile(path, key[:], 0o600); err != nil {
-		return key, err
-	}
-	return key, nil
-}
-
 // seal encrypts plaintext under the master key, returning base64 nonce + cipher.
 func (s *Store) seal(plaintext string) (nonceB64, cipherB64 string, err error) {
-	block, err := aes.NewCipher(s.key[:])
-	if err != nil {
-		return "", "", err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", "", err
-	}
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return "", "", err
-	}
-	ct := gcm.Seal(nil, nonce, []byte(plaintext), nil)
-	return base64.StdEncoding.EncodeToString(nonce), base64.StdEncoding.EncodeToString(ct), nil
+	return s.box.Seal([]byte(plaintext))
 }
 
 // openCipher decrypts base64-encoded nonce + ciphertext under the master key.
 func (s *Store) openCipher(nonceB64, cipherB64 string) (string, error) {
-	block, err := aes.NewCipher(s.key[:])
-	if err != nil {
-		return "", err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-	nonce, err := base64.StdEncoding.DecodeString(nonceB64)
-	if err != nil {
-		return "", err
-	}
-	ct, err := base64.StdEncoding.DecodeString(cipherB64)
-	if err != nil {
-		return "", err
-	}
-	pt, err := gcm.Open(nil, nonce, ct, nil)
-	if err != nil {
-		return "", fmt.Errorf("decrypt: %w", err)
-	}
-	return string(pt), nil
+	pt, err := s.box.Open(nonceB64, cipherB64)
+	return string(pt), err
 }
 
 // genKeypair mints an ed25519 keypair via ssh-keygen, returning OpenSSH-format

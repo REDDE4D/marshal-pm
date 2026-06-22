@@ -354,3 +354,79 @@ export async function renameFile(
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `rename failed (${r.status})`);
   return r.json();
 }
+
+export type NotifChannel = {
+  name: string;
+  type: "webhook" | "telegram" | "slack" | "email";
+  enabled: boolean;
+  config: Record<string, string>;
+  has_secret: boolean;
+};
+export type NotifRule = {
+  name: string;
+  enabled: boolean;
+  events: string[];
+  agent: string;
+  process: string;
+  channels: string[];
+};
+export type NotifSettings = { cooldown_seconds: number };
+export type NotifConfig = { channels: NotifChannel[]; rules: NotifRule[]; settings: NotifSettings };
+
+export async function getNotifications(): Promise<NotifConfig> {
+  const r = await fetch("/api/notifications", { credentials: "same-origin" });
+  if (r.status === 401) throw new Error("unauthorized");
+  if (!r.ok) return { channels: [], rules: [], settings: { cooldown_seconds: 300 } };
+  return r.json();
+}
+
+export async function putChannel(body: {
+  name: string; type: string; enabled: boolean;
+  config: Record<string, string>; secrets: Record<string, string>;
+}): Promise<{ ok: boolean; error?: string }> {
+  const r = await fetch("/api/notifications/channels", {
+    method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (r.ok) return { ok: true };
+  return { ok: false, error: await r.text() };
+}
+
+export async function deleteChannel(name: string): Promise<{ ok: boolean }> {
+  const r = await fetch(`/api/notifications/channels/${encodeURIComponent(name)}`, {
+    method: "DELETE", credentials: "same-origin",
+  });
+  return { ok: r.ok };
+}
+
+export async function testChannel(name: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await fetch(`/api/notifications/channels/${encodeURIComponent(name)}/test`, {
+    method: "POST", credentials: "same-origin",
+  });
+  if (!r.ok) return { ok: false, error: await r.text() };
+  return r.json();
+}
+
+export async function putRule(rule: NotifRule): Promise<{ ok: boolean; error?: string }> {
+  const r = await fetch("/api/notifications/rules", {
+    method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(rule),
+  });
+  if (r.ok) return { ok: true };
+  return { ok: false, error: await r.text() };
+}
+
+export async function deleteRule(name: string): Promise<{ ok: boolean }> {
+  const r = await fetch(`/api/notifications/rules/${encodeURIComponent(name)}`, {
+    method: "DELETE", credentials: "same-origin",
+  });
+  return { ok: r.ok };
+}
+
+export async function putNotifSettings(s: NotifSettings): Promise<{ ok: boolean }> {
+  const r = await fetch("/api/notifications/settings", {
+    method: "PUT", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(s),
+  });
+  return { ok: r.ok };
+}

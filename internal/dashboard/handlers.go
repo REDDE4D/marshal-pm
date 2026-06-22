@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"marshal/internal/audit"
+	"marshal/internal/notify"
 )
 
 const sessionCookie = "marshal_session"
@@ -40,6 +41,8 @@ type handler struct {
 	static      http.Handler
 	mux         http.Handler
 	creds       Credentials
+	notifs      Notifications
+	notifBuild  notify.BuildFunc
 	// scanHost performs a one-time SSH host-key scan (TOFU). The default
 	// implementation shells out to ssh-keyscan; tests inject a stub.
 	scanHost func(hostport string) (string, error)
@@ -98,6 +101,13 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 	mux.HandleFunc("GET /api/credentials", h.requireSession(h.listCredentials))
 	mux.HandleFunc("POST /api/credentials", h.requireSession(h.createCredential))
 	mux.HandleFunc("DELETE /api/credentials/{name}", h.requireSession(h.deleteCredential))
+	mux.HandleFunc("GET /api/notifications", h.requireSession(h.getNotifications))
+	mux.HandleFunc("POST /api/notifications/channels", h.requireSession(h.putChannel))
+	mux.HandleFunc("DELETE /api/notifications/channels/{name}", h.requireSession(h.deleteChannelHandler))
+	mux.HandleFunc("POST /api/notifications/channels/{name}/test", h.requireSession(h.testChannel))
+	mux.HandleFunc("POST /api/notifications/rules", h.requireSession(h.putRule))
+	mux.HandleFunc("DELETE /api/notifications/rules/{name}", h.requireSession(h.deleteRuleHandler))
+	mux.HandleFunc("PUT /api/notifications/settings", h.requireSession(h.putSettings))
 	mux.HandleFunc("GET /api/fleet/{agent}/apps/{app}/dir", h.requireSession(h.listDirFiles))
 	mux.HandleFunc("GET /api/fleet/{agent}/apps/{app}/file", h.requireSession(h.readFileFiles))
 	mux.HandleFunc("PUT /api/fleet/{agent}/apps/{app}/file", h.requireSession(h.writeFileFiles))

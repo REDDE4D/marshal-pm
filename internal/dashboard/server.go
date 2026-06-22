@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"marshal/internal/notify"
 )
 
 // Serve runs the dashboard HTTP server over TLS on addr until ctx is canceled.
@@ -13,8 +15,11 @@ import (
 // sessionsPath persists sessions to disk; "" keeps them in-memory. auditPath
 // enables the login audit log; "" disables it.
 // creds may be nil, which disables credential endpoints (they return 503).
-func Serve(ctx context.Context, addr string, lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, cert tls.Certificate, sessionsPath, auditPath string, creds Credentials) error {
+// notifs and notifBuild may be nil, which disables notification endpoints.
+func Serve(ctx context.Context, addr string, lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, cert tls.Certificate, sessionsPath, auditPath string, creds Credentials, notifs Notifications, notifBuild notify.BuildFunc) error {
 	h := newHandler(lister, metrics, logs, controller, auth, 24*time.Hour, sessionsPath, auditPath, creds)
+	h.notifs = notifs
+	h.notifBuild = notifBuild
 	go h.sessions.sweepLoop(ctx, time.Hour)
 	srv := &http.Server{
 		Addr:      addr,
