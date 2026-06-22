@@ -76,6 +76,58 @@ func procEvent(agentName, prevState string, p *pb.ProcInfo, now time.Time) (Even
 	return Event{}, false
 }
 
+func procKey(agent, process string) string { return agent + "\x00" + process }
+
+// recoveryDetail describes what a process recovered from.
+func recoveryDetail(from EventType) string {
+	switch from {
+	case EventCrash:
+		return "recovered after crash"
+	case EventRestartLoop:
+		return "recovered after restart loop"
+	case EventDeployFail:
+		return "deploy recovered"
+	default:
+		return "recovered"
+	}
+}
+
+// recoveries records this tick's alerts, then emits a recovery for any alerting
+// process that has returned to "online". A clean "stopped" clears the flag
+// silently; processes that vanish from the snapshot are pruned.
+func (d *Detector) recoveries(alerts []Event, next []*pb.AgentState, now time.Time) []Event {
+	for _, e := range alerts {
+		if e.Process != "" {
+			d.alerting[procKey(e.Agent, e.Process)] = e.Type
+		}
+	}
+	present := map[string]bool{}
+	var out []Event
+	for _, a := range next {
+		for _, p := range a.GetProcs() {
+			key := procKey(a.GetAgentName(), p.GetName())
+			present[key] = true
+			from, ok := d.alerting[key]
+			if !ok {
+				continue
+			}
+			switch p.GetState() {
+			case "online":
+				out = append(out, Event{Type: EventRecovered, Agent: a.GetAgentName(), Process: p.GetName(), Detail: recoveryDetail(from), Time: now})
+				delete(d.alerting, key)
+			case "stopped":
+				delete(d.alerting, key) // clean stop: alarm moot
+			}
+		}
+	}
+	for key := range d.alerting {
+		if !present[key] {
+			delete(d.alerting, key)
+		}
+	}
+	return out
+}
+
 // Detector polls fleet snapshots and emits events on transitions.
 type Detector struct {
 	lister   Lister
@@ -83,11 +135,12 @@ type Detector struct {
 	interval time.Duration
 	now      func() time.Time
 	prev     []*pb.AgentState
+	alerting map[string]EventType // key: agent\x00process -> last alert type
 }
 
 // NewDetector builds a detector polling l every interval.
 func NewDetector(l Lister, e Emitter, interval time.Duration) *Detector {
-	return &Detector{lister: l, emit: e, interval: interval, now: time.Now}
+	return &Detector{lister: l, emit: e, interval: interval, now: time.Now, alerting: map[string]EventType{}}
 }
 
 // Run polls until ctx is cancelled. The first poll seeds the baseline.
@@ -100,7 +153,12 @@ func (d *Detector) Run(ctx context.Context) {
 			return
 		case <-t.C:
 			next := d.lister.List()
-			for _, e := range diff(d.prev, next, d.now()) {
+			now := d.now()
+			alerts := diff(d.prev, next, now)
+			for _, e := range alerts {
+				d.emit.Emit(e)
+			}
+			for _, e := range d.recoveries(alerts, next, now) {
 				d.emit.Emit(e)
 			}
 			d.prev = next

@@ -370,7 +370,7 @@ export type NotifRule = {
   process: string;
   channels: string[];
 };
-export type NotifSettings = { cooldown_seconds: number };
+export type NotifSettings = { cooldown_seconds: number; suppress_recovery?: boolean };
 export type NotifConfig = { channels: NotifChannel[]; rules: NotifRule[]; settings: NotifSettings };
 
 export async function getNotifications(): Promise<NotifConfig> {

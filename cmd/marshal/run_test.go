@@ -64,8 +64,11 @@ apps:
 	}
 
 	// Wait until the app has actually started before interrupting, so the test
-	// does not race process startup (which can lag under load).
-	waitFor(t, 5*time.Second, func() bool { return strings.Contains(out.String(), "started") },
+	// does not race process startup (which can lag under load). The deadlines
+	// here and below are deliberately generous: the test returns as soon as its
+	// condition is met, so a high ceiling costs nothing on a fast machine but
+	// keeps the test from flaking on loaded CI runners (notably under -race).
+	waitFor(t, 15*time.Second, func() bool { return strings.Contains(out.String(), "started") },
 		func() { _ = cmd.Process.Kill() }, "app did not print 'started' in time", out)
 
 	if err := cmd.Process.Signal(os.Interrupt); err != nil {
@@ -76,7 +79,7 @@ apps:
 	go func() { done <- cmd.Wait() }()
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		_ = cmd.Process.Kill()
 		t.Fatalf("marshal run did not exit after SIGINT; output:\n%s", out.String())
 	}

@@ -12,7 +12,27 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
-_Nothing yet._
+## [0.2.0] - 2026-06-22
+
+### Added
+- **CI** — GitHub Actions: `ci.yml` runs gofmt/vet/`go test -race`/build and a web
+  (TypeScript) build on every push and PR to `dev`/`main`; `release.yml` cross-builds
+  version-stamped binaries (darwin/linux × amd64/arm64) and attaches them to a GitHub
+  Release when a `v*` tag is pushed.
+- **Test coverage** — notification dashboard handlers (`testChannel`,
+  `deleteChannel`, `putRule`, `deleteRule`, `putSettings`, plus not-found/error and
+  service-unavailable paths) and detector edge cases (deploy-fail detail pass-through
+  with fallback, and a new process seeding silently alongside a transitioning one).
+- **Recovery notices** — the notification detector now emits a `recovered` event
+  ("Process recovered") when a process that was crashing, restart-looping, or
+  deploy-failing returns to `online` (including deploy recovery through an
+  intermediate build). Controlled by a "Send recovery notices" setting that is on
+  by default; routes through existing notification rules.
+
+### Fixed
+- **Flaky CI test** — bumped the tight 5s deadlines in
+  `cmd/marshal/TestRunSupervisesAndStops` (15s startup, 30s post-SIGINT exit) so
+  `go test -race` runs reliably on loaded runners.
 
 ## [0.1.0] - 2026-06-22
 
@@ -47,5 +67,6 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/REDDE4D/marshal-pm/releases/tag/v0.1.0

@@ -53,6 +53,9 @@ func NewDispatcher(store StoreReader, build BuildFunc, opts ...DispatchOption) *
 
 // Emit gates the event by cooldown, then fans out to matching channels.
 func (d *Dispatcher) Emit(e Event) {
+	if e.Type == EventRecovered && d.store.Settings().SuppressRecovery {
+		return
+	}
 	if !d.allow(e) {
 		return
 	}

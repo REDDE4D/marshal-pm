@@ -79,6 +79,141 @@ func TestDiffCleanStopNoEvent(t *testing.T) {
 	}
 }
 
+func TestDiffDeployFailCarriesDetail(t *testing.T) {
+	prev := []*pb.AgentState{agent("dev-1", true, proc("web", "building", 0))}
+	failed := proc("web", "failed", 0)
+	failed.Detail = "exit status 1: build error"
+	next := []*pb.AgentState{agent("dev-1", true, failed)}
+	evs := diff(prev, next, time.Now())
+	if len(evs) != 1 || evs[0].Type != EventDeployFail {
+		t.Fatalf("want one deploy_fail, got %+v", evs)
+	}
+	if evs[0].Detail != "exit status 1: build error" {
+		t.Fatalf("detail not carried through: %q", evs[0].Detail)
+	}
+}
+
+func TestDiffDeployFailFallsBackWhenNoDetail(t *testing.T) {
+	prev := []*pb.AgentState{agent("dev-1", true, proc("web", "building", 0))}
+	next := []*pb.AgentState{agent("dev-1", true, proc("web", "failed", 0))}
+	evs := diff(prev, next, time.Now())
+	if len(evs) != 1 || evs[0].Type != EventDeployFail {
+		t.Fatalf("want one deploy_fail, got %+v", evs)
+	}
+	if evs[0].Detail != "deploy failed" {
+		t.Fatalf("want fallback detail, got %q", evs[0].Detail)
+	}
+}
+
+// A process appearing for the first time in the same tick as another process
+// transitions: the new one seeds silently, only the transition emits.
+func TestDiffNewProcessSeedsAlongsideTransition(t *testing.T) {
+	prev := []*pb.AgentState{agent("dev-1", true, proc("api", "online", 0))}
+	next := []*pb.AgentState{agent("dev-1", true,
+		proc("api", "restarting", 1), // transition -> crash
+		proc("worker", "online", 0),  // brand new -> seed silently
+	)}
+	evs := diff(prev, next, time.Now())
+	if len(evs) != 1 {
+		t.Fatalf("want exactly one event, got %+v", evs)
+	}
+	if evs[0].Type != EventCrash || evs[0].Process != "api" {
+		t.Fatalf("want crash for api, got %+v", evs[0])
+	}
+}
+
+// tick simulates one detector poll: compute alerts via diff, then recoveries.
+func (d *Detector) tick(prev, next []*pb.AgentState, now time.Time) []Event {
+	alerts := diff(prev, next, now)
+	return d.recoveries(alerts, next, now)
+}
+
+func newDetectorForTest() *Detector {
+	return &Detector{alerting: map[string]EventType{}}
+}
+
+func TestRecoveryDetail(t *testing.T) {
+	cases := map[EventType]string{
+		EventCrash:         "recovered after crash",
+		EventRestartLoop:   "recovered after restart loop",
+		EventDeployFail:    "deploy recovered",
+		EventType("weird"): "recovered",
+	}
+	for from, want := range cases {
+		if got := recoveryDetail(from); got != want {
+			t.Errorf("recoveryDetail(%q) = %q, want %q", from, got, want)
+		}
+	}
+}
+
+func TestRecoveryAfterCrash(t *testing.T) {
+	d := newDetectorForTest()
+	now := time.Now()
+	online := []*pb.AgentState{agent("dev-1", true, proc("api", "online", 0))}
+	restarting := []*pb.AgentState{agent("dev-1", true, proc("api", "restarting", 1))}
+	// tick 1: crash -> no recovery yet
+	if evs := d.tick(online, restarting, now); len(evs) != 0 {
+		t.Fatalf("no recovery on crash tick, got %+v", evs)
+	}
+	// tick 2: back online -> recovered
+	evs := d.tick(restarting, online, now)
+	if len(evs) != 1 || evs[0].Type != EventRecovered || evs[0].Process != "api" {
+		t.Fatalf("want recovered for api, got %+v", evs)
+	}
+	if evs[0].Detail != "recovered after crash" {
+		t.Fatalf("want crash detail, got %q", evs[0].Detail)
+	}
+}
+
+func TestRecoveryDeployPathThroughBuilding(t *testing.T) {
+	d := newDetectorForTest()
+	now := time.Now()
+	building := []*pb.AgentState{agent("dev-1", true, proc("web", "building", 0))}
+	failed := []*pb.AgentState{agent("dev-1", true, proc("web", "failed", 0))}
+	online := []*pb.AgentState{agent("dev-1", true, proc("web", "online", 0))}
+	if evs := d.tick(building, failed, now); len(evs) != 0 { // deploy_fail tick
+		t.Fatalf("no recovery on fail tick, got %+v", evs)
+	}
+	if evs := d.tick(failed, building, now); len(evs) != 0 { // rebuild, still alerting
+		t.Fatalf("no recovery while building, got %+v", evs)
+	}
+	evs := d.tick(building, online, now) // online -> recovered
+	if len(evs) != 1 || evs[0].Type != EventRecovered || evs[0].Detail != "deploy recovered" {
+		t.Fatalf("want deploy recovered, got %+v", evs)
+	}
+}
+
+func TestCleanStopWhileAlertingClearsSilently(t *testing.T) {
+	d := newDetectorForTest()
+	now := time.Now()
+	online := []*pb.AgentState{agent("dev-1", true, proc("api", "online", 0))}
+	errored := []*pb.AgentState{agent("dev-1", true, proc("api", "errored", 5))}
+	stopped := []*pb.AgentState{agent("dev-1", true, proc("api", "stopped", 5))}
+	d.tick(online, errored, now) // restart_loop -> alerting
+	if evs := d.tick(errored, stopped, now); len(evs) != 0 {
+		t.Fatalf("clean stop must not emit recovery, got %+v", evs)
+	}
+	// coming back online after a clean stop is a normal start, not a recovery
+	if evs := d.tick(stopped, online, now); len(evs) != 0 {
+		t.Fatalf("start after clean stop must not recover, got %+v", evs)
+	}
+}
+
+func TestRecoveryPrunesVanishedProcess(t *testing.T) {
+	d := newDetectorForTest()
+	now := time.Now()
+	online := []*pb.AgentState{agent("dev-1", true, proc("api", "online", 0))}
+	restarting := []*pb.AgentState{agent("dev-1", true, proc("api", "restarting", 1))}
+	gone := []*pb.AgentState{agent("dev-1", true)}           // api removed
+	d.tick(online, restarting, now)                          // alerting api
+	if evs := d.tick(restarting, gone, now); len(evs) != 0 { // api vanished -> pruned, no recovery
+		t.Fatalf("vanished process must not emit recovery, got %+v", evs)
+	}
+	if len(d.alerting) != 0 {
+		t.Fatalf("alerting map should be pruned, got %v", d.alerting)
+	}
+}
+
 type fakeLister struct {
 	mu    sync.Mutex
 	snaps [][]*pb.AgentState
