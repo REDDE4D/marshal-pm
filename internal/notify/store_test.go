@@ -150,3 +150,59 @@ func TestLegacyConfigRecoveryEnabled(t *testing.T) {
 		t.Fatal("legacy config must default to recovery ON")
 	}
 }
+
+func TestCooldownOverridesPersist(t *testing.T) {
+	s, dir := testStore(t)
+	if err := s.SetSettings(Settings{
+		CooldownSeconds:   120,
+		CooldownOverrides: map[EventType]int{EventRecovered: 600},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var key [32]byte
+	key[0] = 7
+	s2, err := Open(dir, secretbox.FromKey(key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s2.Settings().CooldownOverrides[EventRecovered]; got != 600 {
+		t.Fatalf("override not persisted: %+v", s2.Settings())
+	}
+}
+
+func TestNoCooldownOverridesStaysNil(t *testing.T) {
+	s, dir := testStore(t)
+	if err := s.SetSettings(Settings{CooldownSeconds: 120}); err != nil {
+		t.Fatal(err)
+	}
+	var key [32]byte
+	key[0] = 7
+	s2, err := Open(dir, secretbox.FromKey(key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s2.Settings().CooldownOverrides != nil {
+		t.Fatalf("expected nil overrides, got %+v", s2.Settings().CooldownOverrides)
+	}
+}
+
+func TestLegacyConfigNoOverrides(t *testing.T) {
+	dir := t.TempDir()
+	// A notifications.json predating the field: no cooldown_overrides key.
+	legacy := `{"channels":{},"rules":{},"settings":{"cooldown_seconds":300}}`
+	if err := os.WriteFile(filepath.Join(dir, "notifications.json"), []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var key [32]byte
+	key[0] = 7
+	s, err := Open(dir, secretbox.FromKey(key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Settings().CooldownOverrides != nil {
+		t.Fatal("legacy config must load with nil overrides")
+	}
+	if s.Settings().CooldownSeconds != 300 {
+		t.Fatalf("legacy global cooldown lost: %d", s.Settings().CooldownSeconds)
+	}
+}
