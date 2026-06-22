@@ -12,6 +12,9 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Added
+- Per-event-type cooldown overrides: each notification event type can have its own cooldown, falling back to the global cooldown when unset (`settings.cooldown_overrides`).
+
 ## [0.2.0] - 2026-06-22
 
 ### Added

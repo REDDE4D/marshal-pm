@@ -53,6 +53,23 @@ type Settings struct {
 	// (suppress, not enable) so the zero value keeps recovery on by default,
 	// including for config files written before this field existed.
 	SuppressRecovery bool `json:"suppress_recovery"`
+	// CooldownOverrides maps an event type to a per-type cooldown in seconds,
+	// overriding CooldownSeconds for that type. A key's PRESENCE is the signal:
+	// absent  = inherit the global CooldownSeconds;
+	// present = use this value (including an explicit 0, which disables the
+	//           cooldown for that type). The map sidesteps the
+	//           int-zero-means-unset ambiguity that CooldownSeconds has.
+	CooldownOverrides map[EventType]int `json:"cooldown_overrides,omitempty"`
+}
+
+// cooldownFor returns the cooldown duration for an event type: the per-type
+// override if present, otherwise the global CooldownSeconds.
+func (s Settings) cooldownFor(t EventType) time.Duration {
+	secs := s.CooldownSeconds
+	if v, ok := s.CooldownOverrides[t]; ok {
+		secs = v
+	}
+	return time.Duration(secs) * time.Second
 }
 
 // Message is a rendered alert handed to a Sender.
