@@ -32,6 +32,28 @@ server's in-memory `AuthStore` does not pick up on-disk `passwd`/`token --rotate
 until restart): set the password, rotate a fresh enroll token, capture the fingerprint,
 *then* start the server with `--http-listen`, then enroll the agent.
 
+## Versioning & release workflow (IMPORTANT)
+
+The project uses **Semantic Versioning** (pre-1.0: minor bumps on features, patch on fixes)
+and a **`CHANGELOG.md`** in [Keep a Changelog](https://keepachangelog.com/) format.
+
+**Branching:** `main` is the **release** branch — it only moves when a release is cut.
+Day-to-day work happens on **`dev`** (the integration branch): create milestone/feature
+branches off `dev`, merge them back into `dev` (`--no-ff`), and only **merge `dev` → `main`
+when a release is finished**. Never commit feature work directly to `main`.
+
+**Every change records a changelog entry** under `## [Unreleased]` in `CHANGELOG.md` (Added /
+Changed / Fixed / Removed) as part of the work — don't leave it for release time.
+
+**Cutting a release** (on `dev`, then promote): move the `[Unreleased]` items into a new
+`## [X.Y.Z] - YYYY-MM-DD` section, update the compare links at the bottom, merge `dev` → `main`
+(`--no-ff`), then **tag** `main` (`git tag vX.Y.Z`) and push `main`, `dev`, and the tag.
+The version is **git-tag-derived**: `make build` stamps `marshal --version` from
+`git describe --tags` via `-ldflags` (see the Makefile); a plain `go build` reports the
+in-source default `0.0.0-dev`.
+
+Current baseline: **v0.1.0** (tagged on `main`, baselining the work through M26).
+
 ## Where things live
 
 - `docs/superpowers/specs/` — design specs (fleet architecture; agent-core design).
@@ -43,7 +65,9 @@ until restart): set the password, rotate a fresh enroll token, capture the finge
 ## Build / run / test
 
 ```bash
-go build -o marshal ./cmd/marshal      # build the CLI
+make build                             # build the CLI, stamping the version from git tags
+go build -o marshal ./cmd/marshal      # plain build (version reports 0.0.0-dev)
+make version                           # print the version make build would stamp
 ./marshal run marshal.yaml             # foreground supervisor (M1)
 go test ./...                          # all tests
 go test ./... -race -count=1           # race check (do this before finishing work)
@@ -56,7 +80,8 @@ go vet ./... && gofmt -l .             # lint/format (gofmt should list nothing)
   focused (one clear responsibility each).
 - Commit messages: imperative subject; co-author trailer
   `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
-- Do feature work on a branch, not directly on `main`.
+- Do feature work on a branch off **`dev`**, never directly on `main`; `main` only moves on a
+  release (see *Versioning & release workflow*). Update `CHANGELOG.md`'s `[Unreleased]` as you go.
 
 ## Environment notes
 
