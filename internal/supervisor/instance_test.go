@@ -44,6 +44,12 @@ func TestInstanceOnlineThenStop(t *testing.T) {
 	if got := i.Snapshot().State; got != StateStopped {
 		t.Fatalf("state after cancel = %q, want stopped", got)
 	}
+	// Operator stop is recorded as an exit too: stop() sends SIGTERM and
+	// recordExit captures it. Guard that path so a dropped recordExit in
+	// stop() would fail the suite.
+	if got := i.Snapshot().ExitReason; got == "" {
+		t.Fatalf("ExitReason after operator stop = %q, want non-empty (e.g. \"signal: terminated\")", got)
+	}
 }
 
 func TestInstanceOnFailureDoesNotRestartOnCleanExit(t *testing.T) {
