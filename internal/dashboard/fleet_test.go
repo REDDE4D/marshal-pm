@@ -69,3 +69,15 @@ func TestProcViewCredential(t *testing.T) {
 		t.Fatalf("credential dropped by procView: %+v", views[0].Procs[0])
 	}
 }
+
+func TestFleetViewIncludesMetadata(t *testing.T) {
+	f := fakeLister{agents: []*pb.AgentState{{
+		AgentName: "web-1", Connected: true, Hostname: "web-01", Ip: "203.0.113.7",
+		Os: "linux", Arch: "amd64", MarshalVersion: "v0.1.0", HostBootUnix: 1700000000,
+	}}}
+	v := fleetView(f)[0]
+	if v.Hostname != "web-01" || v.IP != "203.0.113.7" || v.OS != "linux" || v.Arch != "amd64" ||
+		v.MarshalVersion != "v0.1.0" || v.HostBootUnix != 1700000000 {
+		t.Fatalf("metadata missing from view: %+v", v)
+	}
+}
