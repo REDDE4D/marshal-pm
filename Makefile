@@ -1,4 +1,4 @@
-.PHONY: ui build test version
+.PHONY: ui build test version proto
 
 # Version is derived from git tags (e.g. v0.1.0, or v0.1.0-3-gabc123 between
 # tags, with -dirty when the tree has uncommitted changes). Falls back to the
@@ -19,3 +19,7 @@ version:
 
 test:
 	go test ./... -race -count=1
+
+.PHONY: proto
+proto: ## regenerate internal/pb from proto/marshal/v1
+	./scripts/gen-proto.sh
