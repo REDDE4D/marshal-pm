@@ -19,6 +19,10 @@ type procView struct {
 	Source     string  `json:"source"`               // "command" | "git" — drives the redeploy button (M21)
 	Detail     string  `json:"detail"`               // status summary for in-flight/failed deploys (M21)
 	Credential string  `json:"credential,omitempty"` // M22 credential name (drives redeploy)
+	Threads    int32   `json:"threads"`
+	OpenFds    int32   `json:"open_fds"`              // -1 = unavailable on this platform
+	ExitCode   int32   `json:"exit_code"`
+	ExitReason string  `json:"exit_reason,omitempty"` // "" = never exited
 }
 
 type agentView struct {
@@ -52,6 +56,10 @@ func fleetView(l FleetLister) []agentView {
 				Source:     p.GetSource(),
 				Detail:     p.GetDetail(),
 				Credential: p.GetCredential(),
+				Threads:    p.GetThreads(),
+				OpenFds:    p.GetOpenFds(),
+				ExitCode:   p.GetExitCode(),
+				ExitReason: p.GetExitReason(),
 			})
 		}
 		out = append(out, agentView{
