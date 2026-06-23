@@ -135,6 +135,8 @@ button { font-family: var(--mono); cursor: pointer; }
 .env-row input { flex: 1 1 auto; }
 .modal-error { color: var(--danger); font-size: 0.8rem; word-break: break-word; }
 .modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 0.3rem; }
+.warn { color: var(--lime); font-size: 0.78rem; line-height: 1.5; word-break: break-word; margin: 0.2rem 0; }
+.connect-cmd { white-space: pre-wrap; word-break: break-all; overflow-x: auto; max-width: 100%; box-sizing: border-box; margin: 0; background: #060608; border: 1px solid var(--border-soft); border-radius: 8px; padding: 9px 11px; font-family: var(--mono); font-size: 10.5px; line-height: 1.7; color: var(--text); }
 
 /* git deploy: source toggle */
 .source-toggle { margin-bottom: 0.1rem; }
