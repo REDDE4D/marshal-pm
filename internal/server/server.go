@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -100,6 +101,14 @@ func (s *Server) Connect(stream pb.Fleet_ConnectServer) error {
 				return status.Error(codes.Unauthenticated, "unauthenticated connect")
 			}
 			s.reg.Open(name)
+			s.reg.SetMeta(name, AgentMeta{
+				Hostname:       m.Hello.GetHostname(),
+				IP:             peerIP(ctx),
+				OS:             m.Hello.GetOs(),
+				Arch:           m.Hello.GetArch(),
+				MarshalVersion: m.Hello.GetMarshalVersion(),
+				HostBootUnix:   m.Hello.GetHostBootUnix(),
+			})
 			sess = s.broker.register(name, stream.Send)
 			if s.stores != nil {
 				if st, err := s.stores.get(name); err == nil {
@@ -413,4 +422,16 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 		log.Printf("dashboard: serving on %s", httpAddr)
 	}
 	return Serve(ctx, lis, srv, cert)
+}
+
+// peerIP returns the agent's remote IP from the gRPC peer (port stripped), or "".
+func peerIP(ctx context.Context) string {
+	p, ok := peer.FromContext(ctx)
+	if !ok || p.Addr == nil {
+		return ""
+	}
+	if host, _, err := net.SplitHostPort(p.Addr.String()); err == nil {
+		return host
+	}
+	return p.Addr.String()
 }

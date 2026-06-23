@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -398,5 +399,27 @@ func TestConnectStoresLogBatchAndAcksWatermark(t *testing.T) {
 	got, _ := st.Tail("api#0", 10, logstore.StreamAny, "")
 	if len(got) != 2 || got[0].Text != "l1" || got[1].Text != "l2" {
 		t.Fatalf("stored = %+v, want l1,l2", got)
+	}
+}
+
+func TestConnectRecordsAgentMetadata(t *testing.T) {
+	reg := NewRegistry()
+	srv := NewServer(reg, newStores(t.TempDir()), nil, nil)
+	ctx := peer.NewContext(context.Background(), &peer.Peer{Addr: &net.TCPAddr{IP: net.ParseIP("203.0.113.7"), Port: 5555}})
+	st := &fakeConnectStream{ctx: ctx, recv: []*pb.AgentMessage{
+		{Msg: &pb.AgentMessage_Hello{Hello: &pb.Hello{
+			AgentName: "web-1", MarshalVersion: "v0.1.0", Hostname: "web-01", Os: "linux", Arch: "amd64", HostBootUnix: 1700000000,
+		}}},
+	}}
+	if err := srv.Connect(st); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	a := reg.List()[0]
+	if a.GetHostname() != "web-01" || a.GetOs() != "linux" || a.GetArch() != "amd64" ||
+		a.GetMarshalVersion() != "v0.1.0" || a.GetHostBootUnix() != 1700000000 {
+		t.Fatalf("metadata not recorded: %+v", a)
+	}
+	if a.GetIp() != "203.0.113.7" {
+		t.Fatalf("ip = %q, want 203.0.113.7", a.GetIp())
 	}
 }
