@@ -19,6 +19,8 @@ const (
 	EventRecovered   EventType = "recovered"
 )
 
+const defaultCoalesceWindowSeconds = 10
+
 // Event is a single detected condition. Process is "" for agent-level events.
 type Event struct {
 	Type    EventType
@@ -64,6 +66,13 @@ type Settings struct {
 	//           cooldown for that type). The map sidesteps the
 	//           int-zero-means-unset ambiguity that CooldownSeconds has.
 	CooldownOverrides map[EventType]int `json:"cooldown_overrides,omitempty"`
+	// CoalesceWindowSeconds sets how long a recoverable alert is buffered to see
+	// whether its recovery arrives — in which case the two are merged into one
+	// notice. Pointer/presence semantics, like CooldownOverrides:
+	//   nil        = use the default (defaultCoalesceWindowSeconds);
+	//   explicit 0 = disable coalescing (deliver immediately);
+	//   N          = an N-second window.
+	CoalesceWindowSeconds *int `json:"coalesce_window_seconds,omitempty"`
 }
 
 // cooldownFor returns the cooldown duration for an event type: the per-type
@@ -74,6 +83,15 @@ func (s Settings) cooldownFor(t EventType) time.Duration {
 		secs = v
 	}
 	return time.Duration(secs) * time.Second
+}
+
+// coalesceWindow returns the coalescing window: the explicit setting if present
+// (including an explicit 0, which disables coalescing), otherwise the default.
+func (s Settings) coalesceWindow() time.Duration {
+	if s.CoalesceWindowSeconds == nil {
+		return defaultCoalesceWindowSeconds * time.Second
+	}
+	return time.Duration(*s.CoalesceWindowSeconds) * time.Second
 }
 
 // Message is a rendered alert handed to a Sender.

@@ -49,3 +49,23 @@ func TestCooldownForPrecedence(t *testing.T) {
 		t.Errorf("nil overrides: want 120s, got %v", got)
 	}
 }
+
+func TestCoalesceWindowDefaultsWhenNil(t *testing.T) {
+	if got := (Settings{}).coalesceWindow(); got != 10*time.Second {
+		t.Fatalf("nil window should default to 10s, got %s", got)
+	}
+}
+
+func TestCoalesceWindowExplicitZeroDisables(t *testing.T) {
+	z := 0
+	if got := (Settings{CoalesceWindowSeconds: &z}).coalesceWindow(); got != 0 {
+		t.Fatalf("explicit 0 should be 0s (disabled), got %s", got)
+	}
+}
+
+func TestCoalesceWindowExplicitValue(t *testing.T) {
+	w := 25
+	if got := (Settings{CoalesceWindowSeconds: &w}).coalesceWindow(); got != 25*time.Second {
+		t.Fatalf("want 25s, got %s", got)
+	}
+}
