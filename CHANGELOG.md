@@ -13,6 +13,7 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 ## [Unreleased]
 
 ### Added
+- Agent host metadata (hostname, IP, OS/arch, marshal version, host uptime) on the fleet view (M-B).
 - Dashboard "Connect an agent": generates a ready-to-run command (with a freshly minted enroll token, the server fingerprint, and address) to enroll a new agent host.
 - Per-event-type cooldown overrides: each notification event type can have its own cooldown, falling back to the global cooldown when unset (`settings.cooldown_overrides`).
 - Alert/recovery coalescing: a transient crash-then-recover blip (within a
