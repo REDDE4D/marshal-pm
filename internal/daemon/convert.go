@@ -6,6 +6,7 @@ import (
 
 	"marshal/internal/config"
 	"marshal/internal/manager"
+	"marshal/internal/metrics"
 	"marshal/internal/pb"
 	"marshal/internal/supervisor"
 )
@@ -65,7 +66,7 @@ func appSpecToConfig(s *pb.AppSpec) (config.App, error) {
 }
 
 // snapshotToProc converts a manager snapshot + metrics into a wire ProcInfo.
-func snapshotToProc(s manager.InstanceSnapshot, cpu float64, mem uint64) *pb.ProcInfo {
+func snapshotToProc(s manager.InstanceSnapshot, sm metrics.Sample) *pb.ProcInfo {
 	var uptimeMs int64
 	if s.State == supervisor.StateOnline && !s.StartedAt.IsZero() {
 		uptimeMs = time.Since(s.StartedAt).Milliseconds()
@@ -78,10 +79,14 @@ func snapshotToProc(s manager.InstanceSnapshot, cpu float64, mem uint64) *pb.Pro
 		Pid:        int32(s.Pid),
 		UptimeMs:   uptimeMs,
 		Restarts:   int32(s.Restarts),
-		Cpu:        cpu,
-		Mem:        int64(mem),
+		Cpu:        sm.Cpu,
+		Mem:        int64(sm.Mem),
 		Source:     s.Source,
 		Credential: s.Credential,
+		Threads:    sm.Threads,
+		OpenFds:    sm.Fds,
+		ExitCode:   s.ExitCode,
+		ExitReason: s.ExitReason,
 	}
 }
 
@@ -89,14 +94,13 @@ func snapshotToProc(s manager.InstanceSnapshot, cpu float64, mem uint64) *pb.Pro
 func (srv *Server) procList(snaps []manager.InstanceSnapshot) *pb.ProcList {
 	procs := make([]*pb.ProcInfo, 0, len(snaps))
 	for _, s := range snaps {
-		var cpu float64
-		var mem uint64
+		sm := metrics.Sample{Fds: -1} // default: unavailable until first sample
 		if srv.metrics != nil {
-			if sm, ok := srv.metrics.Get(s.Label); ok {
-				cpu, mem = sm.Cpu, sm.Mem
+			if v, ok := srv.metrics.Get(s.Label); ok {
+				sm = v
 			}
 		}
-		procs = append(procs, snapshotToProc(s, cpu, mem))
+		procs = append(procs, snapshotToProc(s, sm))
 	}
 	return &pb.ProcList{Procs: procs}
 }

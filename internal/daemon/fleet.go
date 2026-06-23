@@ -3,6 +3,7 @@ package daemon
 import (
 	"marshal/internal/fleet"
 	"marshal/internal/logs"
+	"marshal/internal/metrics"
 	"marshal/internal/metricstore"
 	"marshal/internal/pb"
 )
@@ -15,14 +16,13 @@ func (s *Server) fleetSnapshot() fleet.SnapshotFunc {
 		snaps := s.mgr.List()
 		out := make([]*pb.ProcInfo, 0, len(snaps))
 		for _, sn := range snaps {
-			var cpu float64
-			var mem uint64
+			sm := metrics.Sample{Fds: -1} // default: unavailable until first sample
 			if s.metrics != nil {
-				if sm, ok := s.metrics.Get(sn.Label); ok {
-					cpu, mem = sm.Cpu, sm.Mem
+				if v, ok := s.metrics.Get(sn.Label); ok {
+					sm = v
 				}
 			}
-			out = append(out, snapshotToProc(sn, cpu, mem))
+			out = append(out, snapshotToProc(sn, sm))
 		}
 		if s.deployer != nil {
 			deploySnaps := s.deployer.Snapshots()
