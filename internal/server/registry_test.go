@@ -42,3 +42,14 @@ func TestRegistryCloseMarksOfflineImmediately(t *testing.T) {
 		t.Fatal("expected offline immediately after Close")
 	}
 }
+
+func TestRegistrySetMetaSurfacedInList(t *testing.T) {
+	reg := NewRegistry()
+	reg.Open("web-1")
+	reg.SetMeta("web-1", AgentMeta{Hostname: "web-01", IP: "203.0.113.7", OS: "linux", Arch: "amd64", MarshalVersion: "v0.1.0", HostBootUnix: 1700000000})
+	got := reg.List()[0]
+	if got.GetHostname() != "web-01" || got.GetIp() != "203.0.113.7" || got.GetOs() != "linux" ||
+		got.GetArch() != "amd64" || got.GetMarshalVersion() != "v0.1.0" || got.GetHostBootUnix() != 1700000000 {
+		t.Fatalf("metadata not surfaced: %+v", got)
+	}
+}

@@ -16,6 +16,12 @@ export type Agent = {
   connected: boolean;
   last_seen_unix: number;
   procs: Proc[];
+  hostname?: string;
+  ip?: string;
+  os?: string;
+  arch?: string;
+  marshal_version?: string;
+  host_boot_unix?: number;
 };
 
 export async function getSession(): Promise<string | null> {

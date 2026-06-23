@@ -22,10 +22,16 @@ type procView struct {
 }
 
 type agentView struct {
-	Name      string     `json:"name"`
-	Connected bool       `json:"connected"`
-	LastSeen  int64      `json:"last_seen_unix"`
-	Procs     []procView `json:"procs"`
+	Name           string     `json:"name"`
+	Connected      bool       `json:"connected"`
+	LastSeen       int64      `json:"last_seen_unix"`
+	Procs          []procView `json:"procs"`
+	Hostname       string     `json:"hostname,omitempty"`
+	IP             string     `json:"ip,omitempty"`
+	OS             string     `json:"os,omitempty"`
+	Arch           string     `json:"arch,omitempty"`
+	MarshalVersion string     `json:"marshal_version,omitempty"`
+	HostBootUnix   int64      `json:"host_boot_unix,omitempty"`
 }
 
 // fleetView maps the live registry state into JSON-friendly view structs.
@@ -49,10 +55,16 @@ func fleetView(l FleetLister) []agentView {
 			})
 		}
 		out = append(out, agentView{
-			Name:      a.GetAgentName(),
-			Connected: a.GetConnected(),
-			LastSeen:  a.GetLastSeenUnix(),
-			Procs:     procs,
+			Name:           a.GetAgentName(),
+			Connected:      a.GetConnected(),
+			LastSeen:       a.GetLastSeenUnix(),
+			Procs:          procs,
+			Hostname:       a.GetHostname(),
+			IP:             a.GetIp(),
+			OS:             a.GetOs(),
+			Arch:           a.GetArch(),
+			MarshalVersion: a.GetMarshalVersion(),
+			HostBootUnix:   a.GetHostBootUnix(),
 		})
 	}
 	return out
