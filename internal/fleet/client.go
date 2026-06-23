@@ -8,11 +8,14 @@ import (
 	"crypto/tls"
 	"errors"
 	"log"
+	"os"
+	"runtime"
 	"sync"
 	"time"
 
 	"marshal/internal/pb"
 
+	"github.com/shirou/gopsutil/v3/host"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
@@ -77,6 +80,19 @@ func WithTLS(cfg *tls.Config) Option { return func(c *Client) { c.tls = cfg } }
 // minted token after a successful enrollment.
 func WithAuth(token, enrollToken string, persist func(string) error) Option {
 	return func(c *Client) { c.token, c.enrollTok, c.persistTok = token, enrollToken, persist }
+}
+
+// buildHello gathers static host facts for the connect handshake. Each lookup is
+// best-effort: a failure leaves the field zero-valued (the dashboard shows "—").
+func buildHello(name, version string) *pb.Hello {
+	h := &pb.Hello{AgentName: name, MarshalVersion: version, Os: runtime.GOOS, Arch: runtime.GOARCH}
+	if hn, err := os.Hostname(); err == nil {
+		h.Hostname = hn
+	}
+	if bt, err := host.BootTime(); err == nil {
+		h.HostBootUnix = int64(bt)
+	}
+	return h
 }
 
 // New builds a fleet client. snap must be non-nil.
@@ -157,7 +173,7 @@ func (c *Client) connectOnce(ctx context.Context) (bool, error) {
 	}
 
 	if err := send(&pb.AgentMessage{Msg: &pb.AgentMessage_Hello{
-		Hello: &pb.Hello{AgentName: c.name, MarshalVersion: c.version},
+		Hello: buildHello(c.name, c.version),
 	}}); err != nil {
 		return false, err
 	}
