@@ -385,7 +385,8 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 		if cerr == nil {
 			cw = creds
 		}
-		// Notification service: detector polls the registry; dispatcher routes to channels.
+		// Notification service: detector polls the registry; the coalescer
+		// merges transient alert/recovery blips; the dispatcher routes to channels.
 		var notifStore *notify.Store
 		if box, berr := secretbox.Load(dataDir); berr != nil {
 			log.Printf("server: notifications disabled: %v", berr)
@@ -394,7 +395,9 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 		} else {
 			notifStore = ns
 			disp := notify.NewDispatcher(ns, channels.New)
-			det := notify.NewDetector(reg, disp, 2*time.Second)
+			co := notify.NewCoalescer(disp, ns)
+			det := notify.NewDetector(reg, co, 2*time.Second)
+			go co.Run(ctx)
 			go det.Run(ctx)
 		}
 		var nw dashboard.Notifications

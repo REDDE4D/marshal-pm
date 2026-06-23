@@ -323,6 +323,22 @@ func TestPutSettingsRoundTripsCooldownOverrides(t *testing.T) {
 	}
 }
 
+func TestPutSettingsRoundTripsCoalesceWindow(t *testing.T) {
+	n := &fakeNotifs{}
+	h := testHandlerWithNotifs(t, n)
+	w := 30
+	body, _ := json.Marshal(notify.Settings{CooldownSeconds: 60, CoalesceWindowSeconds: &w})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/notifications/settings", bytes.NewReader(body))
+	h.putSettings(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body %s", rec.Code, rec.Body)
+	}
+	if n.settings.CoalesceWindowSeconds == nil || *n.settings.CoalesceWindowSeconds != 30 {
+		t.Fatalf("coalesce_window_seconds not stored: %+v", n.settings)
+	}
+}
+
 func TestNotifsUnavailableIs503(t *testing.T) {
 	h := newHandler(nil, nil, nil, nil, nil, 0, "", "", nil) // h.notifs == nil
 	rec := httptest.NewRecorder()

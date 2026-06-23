@@ -15,6 +15,9 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 ### Added
 - Dashboard "Connect an agent": generates a ready-to-run command (with a freshly minted enroll token, the server fingerprint, and address) to enroll a new agent host.
 - Per-event-type cooldown overrides: each notification event type can have its own cooldown, falling back to the global cooldown when unset (`settings.cooldown_overrides`).
+- Alert/recovery coalescing: a transient crash-then-recover blip (within a
+  configurable window, default 10s; set to 0 to disable) is now delivered as a
+  single merged notice instead of a separate alert and recovery.
 
 ### Fixed
 - The notification cooldown map is now pruned of expired entries on each emit, so it stays bounded regardless of fleet size or uptime (previously grew unbounded).
