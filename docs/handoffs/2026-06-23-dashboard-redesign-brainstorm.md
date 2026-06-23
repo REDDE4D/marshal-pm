@@ -42,11 +42,21 @@ checklist, and implementation sequencing.
   empty `address/name` in `connectToken()`, `dashboard.Serve` doc-comment, dead `connectTokenReq`
   fields).
 
+## Program decision (2026-06-23, later same day)
+
+The user chose to **build the full mocked surface** — the redesign **plus** all the supporting
+data — and to sequence it **data-first, redesign last**. The feature freeze is **lifted** for this
+work. This is now a multi-milestone **program**; see
+`docs/superpowers/specs/2026-06-23-dashboard-program-roadmap.md` for the gap analysis and the
+ordered milestones (M-B metadata → M-D proc metrics → M-C host metrics → M-E restart history →
+M-G control additions → M-F errors subsystem → M-A full redesign).
+
 ## Concrete next step
 
-Get user decisions on the two open questions (Errors scope; which metrics are real), then run the
-**writing-plans** skill to turn the spec into an implementation plan, and execute on `ui-redesign`
-(TDD where logic changes; `make ui` + `make build` + `go test ./... -race` before finishing).
+Design **M-B (agent & host metadata)** — the first data milestone — via the normal
+brainstorm → spec → writing-plans flow, then implement on a branch off `dev`. The redesign (M-A)
+spec is parked and ready for last. (TDD where logic changes; `make ui` + `make build` +
+`go test ./... -race` before finishing each milestone.)
 
 ## Build / run / test
 
