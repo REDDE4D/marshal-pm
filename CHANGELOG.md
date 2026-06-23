@@ -13,6 +13,10 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 ## [Unreleased]
 
 ### Added
+- **Extended per-process metrics (M-D):** thread count and open file-descriptor
+  count (group-summed; FDs shown as `—` where the platform does not report them,
+  e.g. macOS), plus the last exit code and reason for each process, surfaced on
+  the process card and in `/api/fleet`.
 - Agent host metadata (hostname, IP, OS/arch, marshal version, host uptime) on the fleet view (M-B).
 - Dashboard "Connect an agent": generates a ready-to-run command (with a freshly minted enroll token, the server fingerprint, and address) to enroll a new agent host.
 - Per-event-type cooldown overrides: each notification event type can have its own cooldown, falling back to the global cooldown when unset (`settings.cooldown_overrides`).

@@ -9,7 +9,8 @@ import (
 )
 
 // fleetSnapshot returns a SnapshotFunc over the manager's current instances,
-// merging the sampler's latest cpu/mem (zero until the first sample tick).
+// merging the sampler's latest cpu/mem/threads/fds (cpu/mem/threads zero and
+// fds -1 until the first sample tick) and each instance's last exit code/reason.
 // It also appends synthetic deployer entries (in-flight / failed deploys).
 func (s *Server) fleetSnapshot() fleet.SnapshotFunc {
 	return func() []*pb.ProcInfo {
