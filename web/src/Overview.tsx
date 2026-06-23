@@ -8,6 +8,26 @@ import { ConnectAgentModal } from "./ConnectAgentModal";
 
 type Series = Record<string, Record<string, { cpu: number[]; mem: number[] }>>;
 
+function fmtUptime(bootUnix?: number): string {
+  if (!bootUnix) return "";
+  const s = Math.floor(Date.now() / 1000) - bootUnix;
+  if (s <= 0) return "";
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600);
+  return d > 0 ? `up ${d}d ${h}h` : `up ${h}h`;
+}
+
+function agentMeta(a: Agent): string {
+  const parts: string[] = [];
+  if (a.hostname) parts.push(a.hostname);
+  if (a.os || a.arch) parts.push([a.os, a.arch].filter(Boolean).join("/"));
+  if (a.marshal_version) parts.push(`marshal ${a.marshal_version}`);
+  if (a.ip) parts.push(a.ip);
+  const up = fmtUptime(a.host_boot_unix);
+  if (up) parts.push(up);
+  if (!a.connected) parts.unshift("offline");
+  return parts.join(" · ");
+}
+
 export function Overview({ onLogout }: { onLogout: () => void }) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [metrics, setMetrics] = useState<Series>({});
@@ -88,7 +108,7 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
           <div className="agent-head">
             <span className={`dot ${a.connected ? "online" : "stopped"}`}></span>
             <span className="name">{a.name}</span>
-            {!a.connected && <span className="seen">offline</span>}
+            <span className="seen">{agentMeta(a)}</span>
           </div>
           {a.procs.length === 0 && <p className="empty">no processes.</p>}
           {a.procs.map((p) => (
