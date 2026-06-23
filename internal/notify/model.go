@@ -26,6 +26,10 @@ type Event struct {
 	Process string
 	Detail  string
 	Time    time.Time
+	// ResolvedIn, when >0, marks a coalesced alert: the condition resolved
+	// within this duration, so it renders as a single "…then recovered" notice
+	// instead of a separate alert and recovery. Zero means a normal alert.
+	ResolvedIn time.Duration
 }
 
 // Channel is the non-secret config of a delivery destination.

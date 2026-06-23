@@ -1,6 +1,9 @@
 package notify
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 var eventTitles = map[EventType]string{
 	EventCrash:       "Process crashed",
@@ -20,6 +23,11 @@ func render(e Event) Message {
 	who := e.Agent
 	if e.Process != "" {
 		who = fmt.Sprintf("%s / %s", e.Agent, e.Process)
+	}
+	if e.ResolvedIn > 0 {
+		title += " then recovered"
+		body := fmt.Sprintf("[%s] %s: %s — recovered after %s", who, title, e.Detail, e.ResolvedIn.Round(time.Second))
+		return Message{Title: fmt.Sprintf("Marshal: %s (%s)", title, who), Body: body, Event: e}
 	}
 	body := fmt.Sprintf("[%s] %s: %s", who, title, e.Detail)
 	return Message{Title: fmt.Sprintf("Marshal: %s (%s)", title, who), Body: body, Event: e}
