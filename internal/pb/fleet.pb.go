@@ -335,6 +335,10 @@ type Hello struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	AgentName      string                 `protobuf:"bytes,1,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
 	MarshalVersion string                 `protobuf:"bytes,2,opt,name=marshal_version,json=marshalVersion,proto3" json:"marshal_version,omitempty"`
+	Hostname       string                 `protobuf:"bytes,3,opt,name=hostname,proto3" json:"hostname,omitempty"`                                // os.Hostname()
+	Os             string                 `protobuf:"bytes,4,opt,name=os,proto3" json:"os,omitempty"`                                            // runtime.GOOS
+	Arch           string                 `protobuf:"bytes,5,opt,name=arch,proto3" json:"arch,omitempty"`                                        // runtime.GOARCH
+	HostBootUnix   int64                  `protobuf:"varint,6,opt,name=host_boot_unix,json=hostBootUnix,proto3" json:"host_boot_unix,omitempty"` // host boot time; uptime = now - boot
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -381,6 +385,34 @@ func (x *Hello) GetMarshalVersion() string {
 		return x.MarshalVersion
 	}
 	return ""
+}
+
+func (x *Hello) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *Hello) GetOs() string {
+	if x != nil {
+		return x.Os
+	}
+	return ""
+}
+
+func (x *Hello) GetArch() string {
+	if x != nil {
+		return x.Arch
+	}
+	return ""
+}
+
+func (x *Hello) GetHostBootUnix() int64 {
+	if x != nil {
+		return x.HostBootUnix
+	}
+	return 0
 }
 
 type HelloAck struct {
@@ -568,13 +600,19 @@ func (x *ListFleetResponse) GetAgents() []*AgentState {
 }
 
 type AgentState struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AgentName     string                 `protobuf:"bytes,1,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
-	Connected     bool                   `protobuf:"varint,2,opt,name=connected,proto3" json:"connected,omitempty"`
-	LastSeenUnix  int64                  `protobuf:"varint,3,opt,name=last_seen_unix,json=lastSeenUnix,proto3" json:"last_seen_unix,omitempty"`
-	Procs         []*ProcInfo            `protobuf:"bytes,4,rep,name=procs,proto3" json:"procs,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	AgentName      string                 `protobuf:"bytes,1,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	Connected      bool                   `protobuf:"varint,2,opt,name=connected,proto3" json:"connected,omitempty"`
+	LastSeenUnix   int64                  `protobuf:"varint,3,opt,name=last_seen_unix,json=lastSeenUnix,proto3" json:"last_seen_unix,omitempty"`
+	Procs          []*ProcInfo            `protobuf:"bytes,4,rep,name=procs,proto3" json:"procs,omitempty"`
+	Hostname       string                 `protobuf:"bytes,5,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Ip             string                 `protobuf:"bytes,6,opt,name=ip,proto3" json:"ip,omitempty"` // server-derived from the gRPC peer
+	Os             string                 `protobuf:"bytes,7,opt,name=os,proto3" json:"os,omitempty"`
+	Arch           string                 `protobuf:"bytes,8,opt,name=arch,proto3" json:"arch,omitempty"`
+	MarshalVersion string                 `protobuf:"bytes,9,opt,name=marshal_version,json=marshalVersion,proto3" json:"marshal_version,omitempty"`
+	HostBootUnix   int64                  `protobuf:"varint,10,opt,name=host_boot_unix,json=hostBootUnix,proto3" json:"host_boot_unix,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *AgentState) Reset() {
@@ -633,6 +671,48 @@ func (x *AgentState) GetProcs() []*ProcInfo {
 		return x.Procs
 	}
 	return nil
+}
+
+func (x *AgentState) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *AgentState) GetIp() string {
+	if x != nil {
+		return x.Ip
+	}
+	return ""
+}
+
+func (x *AgentState) GetOs() string {
+	if x != nil {
+		return x.Os
+	}
+	return ""
+}
+
+func (x *AgentState) GetArch() string {
+	if x != nil {
+		return x.Arch
+	}
+	return ""
+}
+
+func (x *AgentState) GetMarshalVersion() string {
+	if x != nil {
+		return x.MarshalVersion
+	}
+	return ""
+}
+
+func (x *AgentState) GetHostBootUnix() int64 {
+	if x != nil {
+		return x.HostBootUnix
+	}
+	return 0
 }
 
 // One stored metric row, flattened to map 1:1 to a metricstore row.
@@ -2179,11 +2259,15 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"\rServerMessage\x123\n" +
 	"\thello_ack\x18\x01 \x01(\v2\x14.marshal.v1.HelloAckH\x00R\bhelloAck\x12/\n" +
 	"\acommand\x18\x02 \x01(\v2\x13.marshal.v1.CommandH\x00R\acommandB\x05\n" +
-	"\x03msg\"O\n" +
+	"\x03msg\"\xb5\x01\n" +
 	"\x05Hello\x12\x1d\n" +
 	"\n" +
 	"agent_name\x18\x01 \x01(\tR\tagentName\x12'\n" +
-	"\x0fmarshal_version\x18\x02 \x01(\tR\x0emarshalVersion\"{\n" +
+	"\x0fmarshal_version\x18\x02 \x01(\tR\x0emarshalVersion\x12\x1a\n" +
+	"\bhostname\x18\x03 \x01(\tR\bhostname\x12\x0e\n" +
+	"\x02os\x18\x04 \x01(\tR\x02os\x12\x12\n" +
+	"\x04arch\x18\x05 \x01(\tR\x04arch\x12$\n" +
+	"\x0ehost_boot_unix\x18\x06 \x01(\x03R\fhostBootUnix\"{\n" +
 	"\bHelloAck\x12)\n" +
 	"\x11last_metric_ts_ms\x18\x01 \x01(\x03R\x0elastMetricTsMs\x12#\n" +
 	"\x0elast_log_ts_ms\x18\x02 \x01(\x03R\vlastLogTsMs\x12\x1f\n" +
@@ -2193,14 +2277,21 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"\x05procs\x18\x01 \x03(\v2\x14.marshal.v1.ProcInfoR\x05procs\"\x12\n" +
 	"\x10ListFleetRequest\"C\n" +
 	"\x11ListFleetResponse\x12.\n" +
-	"\x06agents\x18\x01 \x03(\v2\x16.marshal.v1.AgentStateR\x06agents\"\x9b\x01\n" +
+	"\x06agents\x18\x01 \x03(\v2\x16.marshal.v1.AgentStateR\x06agents\"\xba\x02\n" +
 	"\n" +
 	"AgentState\x12\x1d\n" +
 	"\n" +
 	"agent_name\x18\x01 \x01(\tR\tagentName\x12\x1c\n" +
 	"\tconnected\x18\x02 \x01(\bR\tconnected\x12$\n" +
 	"\x0elast_seen_unix\x18\x03 \x01(\x03R\flastSeenUnix\x12*\n" +
-	"\x05procs\x18\x04 \x03(\v2\x14.marshal.v1.ProcInfoR\x05procs\"]\n" +
+	"\x05procs\x18\x04 \x03(\v2\x14.marshal.v1.ProcInfoR\x05procs\x12\x1a\n" +
+	"\bhostname\x18\x05 \x01(\tR\bhostname\x12\x0e\n" +
+	"\x02ip\x18\x06 \x01(\tR\x02ip\x12\x0e\n" +
+	"\x02os\x18\a \x01(\tR\x02os\x12\x12\n" +
+	"\x04arch\x18\b \x01(\tR\x04arch\x12'\n" +
+	"\x0fmarshal_version\x18\t \x01(\tR\x0emarshalVersion\x12$\n" +
+	"\x0ehost_boot_unix\x18\n" +
+	" \x01(\x03R\fhostBootUnix\"]\n" +
 	"\fMetricSample\x12\x13\n" +
 	"\x05ts_ms\x18\x01 \x01(\x03R\x04tsMs\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x10\n" +

@@ -38,8 +38,12 @@ message ServerMessage {
 }
 
 message Hello {
-  string agent_name = 1;
+  string agent_name      = 1;
   string marshal_version = 2;
+  string hostname        = 3; // os.Hostname()
+  string os              = 4; // runtime.GOOS
+  string arch            = 5; // runtime.GOARCH
+  int64  host_boot_unix  = 6; // host boot time; uptime = now - boot
 }
 
 message HelloAck {
@@ -55,10 +59,16 @@ message ListFleetRequest {}
 message ListFleetResponse { repeated AgentState agents = 1; }
 
 message AgentState {
-  string agent_name = 1;
-  bool connected = 2;
-  int64 last_seen_unix = 3;
+  string agent_name      = 1;
+  bool   connected       = 2;
+  int64  last_seen_unix  = 3;
   repeated ProcInfo procs = 4;
+  string hostname        = 5;
+  string ip              = 6; // server-derived from the gRPC peer
+  string os              = 7;
+  string arch            = 8;
+  string marshal_version = 9;
+  int64  host_boot_unix  = 10;
 }
 
 // One stored metric row, flattened to map 1:1 to a metricstore row.
