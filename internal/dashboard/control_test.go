@@ -152,3 +152,33 @@ func TestControlAgentErrorPassthrough(t *testing.T) {
 		t.Fatalf("agent-error body = %+v", got)
 	}
 }
+
+func TestControlOpReload(t *testing.T) {
+	op := controlOp("reload", "web")
+	if op == nil {
+		t.Fatal("controlOp(reload) = nil, want a ControlOp")
+	}
+	r, ok := op.GetOp().(*pb.ControlOp_Reload)
+	if !ok {
+		t.Fatalf("controlOp(reload) op type = %T, want *pb.ControlOp_Reload", op.GetOp())
+	}
+	if r.Reload.GetTarget() != "web" {
+		t.Fatalf("reload target = %q, want web", r.Reload.GetTarget())
+	}
+}
+
+func TestControlReloadHappyPath(t *testing.T) {
+	fc := &fakeController{res: &pb.ControlResult{Ok: true}}
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fc, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	defer srv.Close()
+	c := srv.Client()
+	cookie := loginCookie(t, c, srv.URL)
+
+	resp := postControl(t, c, srv.URL, cookie, `{"agent":"dev-1","selector":"web","action":"reload"}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("reload control = %d, want 200", resp.StatusCode)
+	}
+	if _, ok := fc.gotOp.GetOp().(*pb.ControlOp_Reload); !ok {
+		t.Fatalf("forwarded op type = %T, want *pb.ControlOp_Reload", fc.gotOp.GetOp())
+	}
+}

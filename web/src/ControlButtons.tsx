@@ -3,7 +3,7 @@ import { control } from "./api";
 
 // Backend ops are restart/stop. The UI "start" (shown when a process is
 // stopped/errored) issues a restart, which revives the managed process.
-type Op = "restart" | "stop";
+type Op = "restart" | "stop" | "reload";
 
 export function ControlButtons({ agent, proc, state, connected }: { agent: string; proc: string; state: string; connected: boolean }) {
   const [pending, setPending] = useState<{ op: Op; label: string } | null>(null);
@@ -37,6 +37,7 @@ export function ControlButtons({ agent, proc, state, connected }: { agent: strin
       {/* start: revive a stopped/errored proc via restart; no confirm (it's already down) */}
       <button className="ctl-btn" disabled={!connected || running} onClick={() => fire("restart")}>start</button>
       <button className="ctl-btn" disabled={!connected || !running} onClick={() => ask("restart", "restart")}>restart</button>
+      <button className="ctl-btn" disabled={!connected || !running} onClick={() => ask("reload", "reload")}>reload</button>
       <button className="ctl-btn danger" disabled={!connected || !running} onClick={() => ask("stop", "stop")}>stop</button>
       {msg && <span className="ctl-msg">{msg}</span>}
     </span>

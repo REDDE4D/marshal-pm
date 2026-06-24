@@ -326,6 +326,30 @@ func TestHandleFleetCommand_CommitCreate(t *testing.T) {
 	}
 }
 
+func TestHandleFleetCommandReload(t *testing.T) {
+	s := newCommandTestServer(t)
+	defer s.mgr.StopAll()
+
+	// Start an app so there is something to reload.
+	start := &pb.Command{RequestId: 1, Op: &pb.ControlOp{Op: &pb.ControlOp_Start{
+		Start: &pb.StartRequest{Apps: []*pb.AppSpec{sleepLongSpec("app1")}},
+	}}}
+	if res := s.handleFleetCommand(start); !res.GetOk() {
+		t.Fatalf("start: %s", res.GetError())
+	}
+
+	reload := &pb.Command{RequestId: 2, Op: &pb.ControlOp{Op: &pb.ControlOp_Reload{
+		Reload: &pb.Selector{Target: "app1"},
+	}}}
+	res := s.handleFleetCommand(reload)
+	if !res.GetOk() {
+		t.Fatalf("reload: expected Ok=true, got error: %s", res.GetError())
+	}
+	if len(res.GetProcs()) == 0 {
+		t.Fatal("reload: expected procs in result, got none")
+	}
+}
+
 func TestCredFromProtoSSH(t *testing.T) {
 	got := credFromProto(&pb.GitCredential{
 		Kind:       pb.CredentialKind_CRED_SSH,

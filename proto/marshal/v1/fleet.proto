@@ -200,6 +200,7 @@ message ControlOp {
     ListDirRequest  list_dir  = 7; // M23
     ReadFileRequest read_file = 8; // M23
     CommitRequest   commit    = 9; // M24
+    Selector        reload    = 10; // M-G, rolling graceful restart
   }
 }
 

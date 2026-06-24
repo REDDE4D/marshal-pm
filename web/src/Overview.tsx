@@ -5,6 +5,7 @@ import { ProcessCard } from "./ProcessCard";
 import { Logo } from "./Logo";
 import { AddAppModal } from "./AddAppModal";
 import { ConnectAgentModal } from "./ConnectAgentModal";
+import { RestartAllButton } from "./RestartAllButton";
 
 type Series = Record<string, Record<string, { cpu: number[]; mem: number[] }>>;
 
@@ -128,6 +129,7 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
             <span className="name">{a.name}</span>
             <span className="seen">{agentMeta(a)}</span>
             {hostMeta(a) && <span className="seen host-meta">{hostMeta(a)}</span>}
+            {a.procs.length > 0 && <RestartAllButton agent={a.name} connected={a.connected} />}
           </div>
           {a.procs.length === 0 && <p className="empty">no processes.</p>}
           {a.procs.map((p) => (
