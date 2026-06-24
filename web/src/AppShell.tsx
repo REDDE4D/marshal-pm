@@ -96,10 +96,7 @@ export function AppShell({ ctx, right, onLogout, children }: AppShellProps) {
           <span className="ctx">{ctx}</span>
           <div className="rt">
             {right}
-            {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
-            <span className="lnk" role="button" tabIndex={0} onClick={onLogout} onKeyDown={(e) => e.key === "Enter" && onLogout()}>
-              sign out
-            </span>
+            <button className="lnk" onClick={onLogout}>sign out</button>
           </div>
         </div>
 
