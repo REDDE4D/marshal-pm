@@ -327,6 +327,82 @@ func TestManagerWiresRestartSink(t *testing.T) {
 	}
 }
 
+func TestReloadRestartsAllInstances(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := New(ctx)
+	if _, err := m.Add(sleepApp("a", 2)); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if got := waitOnline(m, 2); got != 2 {
+		t.Fatalf("setup online = %d, want 2", got)
+	}
+
+	before := map[string]int{}
+	for _, s := range m.List() {
+		before[s.Label] = s.Pid
+	}
+
+	if _, err := m.Reload("a"); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
+	if got := waitOnline(m, 2); got != 2 {
+		t.Fatalf("after Reload online = %d, want 2", got)
+	}
+	for _, s := range m.List() {
+		if s.State != supervisor.StateOnline {
+			t.Fatalf("%s state = %s, want online", s.Label, s.State)
+		}
+		if s.Pid == before[s.Label] || s.Pid == 0 {
+			t.Fatalf("%s pid = %d (before %d); want a fresh non-zero pid", s.Label, s.Pid, before[s.Label])
+		}
+	}
+	m.StopAll()
+}
+
+func TestReloadIsRolling(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := New(ctx)
+	if _, err := m.Add(sleepApp("a", 2)); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	waitOnline(m, 2)
+
+	minOnline := 2
+	m.onReloadStep = func() {
+		online := 0
+		for _, s := range m.List() {
+			if s.State == supervisor.StateOnline {
+				online++
+			}
+		}
+		if online < minOnline {
+			minOnline = online
+		}
+	}
+
+	if _, err := m.Reload("a"); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
+	// A rolling reload takes at most one instance of a 2-instance app down at a
+	// time, so at every step (one instance stopped, replacement not yet started)
+	// at least one instance is still online.
+	if minOnline < 1 {
+		t.Fatalf("minOnline during reload = %d, want >= 1 (rolling)", minOnline)
+	}
+	m.StopAll()
+}
+
+func TestReloadUnknownSelector(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := New(ctx)
+	if _, err := m.Reload("nope"); err == nil {
+		t.Fatal("Reload of unknown selector: want error, got nil")
+	}
+}
+
 func TestWithLogsCapturesOutputAndRemovesOnDelete(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

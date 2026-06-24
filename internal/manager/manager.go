@@ -80,6 +80,10 @@ type Manager struct {
 	nextID      int
 	logs        LogProvider
 	restartSink RestartSink
+
+	// onReloadStep, when set, fires during Reload after an instance is stopped
+	// and before its replacement starts. Test seam only; nil in production.
+	onReloadStep func()
 }
 
 // New builds an empty manager rooted at ctx. Instances spawned by Add run until
@@ -195,6 +199,72 @@ func (m *Manager) Restart(sel string) ([]InstanceSnapshot, error) {
 	}
 	m.mu.Unlock()
 	return m.Describe(sel)
+}
+
+// reloadOnlineTimeout bounds the wait for a freshly started instance to come
+// online before a rolling reload proceeds to the next instance.
+const reloadOnlineTimeout = 10 * time.Second
+
+// Reload performs a rolling graceful restart of the selected apps: each app's
+// instances are restarted one at a time (stop, wait for exit, start, wait for
+// online), so a multi-instance app keeps at most one instance down at any moment.
+// A single-instance app degrades to an ordinary graceful restart.
+func (m *Manager) Reload(sel string) ([]InstanceSnapshot, error) {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+
+	m.mu.Lock()
+	apps, err := m.resolve(sel)
+	if err != nil {
+		m.mu.Unlock()
+		return nil, err
+	}
+	apps = append([]*managedApp(nil), apps...) // own the slice; we mutate per index below
+	m.mu.Unlock()
+
+	for _, a := range apps {
+		for idx := 0; idx < a.spec.Instances; idx++ {
+			m.mu.Lock()
+			var old *managedInstance
+			if idx < len(a.insts) {
+				old = a.insts[idx]
+			}
+			m.mu.Unlock()
+
+			if old != nil {
+				old.cancel()
+				<-old.done
+			}
+
+			if m.onReloadStep != nil {
+				m.onReloadStep()
+			}
+
+			m.mu.Lock()
+			fresh := m.startInstance(a.spec, idx)
+			if idx < len(a.insts) {
+				a.insts[idx] = fresh
+			} else {
+				a.insts = append(a.insts, fresh)
+			}
+			m.mu.Unlock()
+
+			waitInstanceOnline(fresh, reloadOnlineTimeout)
+		}
+	}
+	return m.Describe(sel)
+}
+
+// waitInstanceOnline polls until the instance reports Online or timeout elapses.
+// Best-effort: a never-online instance simply ends the wait so reload can finish.
+func waitInstanceOnline(in *managedInstance, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if in.inst.Snapshot().State == supervisor.StateOnline {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // Delete stops the selected apps and removes them from management.
