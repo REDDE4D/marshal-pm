@@ -16,7 +16,10 @@ describe("matchFilter", () => {
   it("empty → all", () => expect(matchFilter("anything", "")).toBe(true));
   it("substring ci", () => expect(matchFilter("GET /Jobs", "jobs")).toBe(true));
   it("regex", () => expect(matchFilter("GET /v1/jobs 200", "/\\d{3}/")).toBe(true));
-  it("bad regex falls back to literal", () => expect(matchFilter("a(b", "/a(b/")).toBe(true));
+  // invalid regex → whole query (slashes included) treated as case-insensitive literal substring
+  it("bad regex: whole query IS substring → true", () => expect(matchFilter("see /a(b/ here", "/a(b/")).toBe(true));
+  it("bad regex: whole query NOT substring → false", () => expect(matchFilter("a(b", "/a(b/")).toBe(false));
+  it("bad regex: case-insensitive fallback → true", () => expect(matchFilter("X /A(B/ y", "/a(b/")).toBe(true));
   // Additional cases from task brief
   it("no match → false", () => expect(matchFilter("hello", "xyz")).toBe(false));
   it("regex no match → false", () => expect(matchFilter("baz", "/fo+/")).toBe(false));

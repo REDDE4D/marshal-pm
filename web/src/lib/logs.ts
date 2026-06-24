@@ -21,8 +21,8 @@ export function matchFilter(text: string, query: string): boolean {
     try {
       return new RegExp(reMatch[1]).test(text);
     } catch {
-      // Invalid regex — fall back to literal substring search on the inner pattern
-      return text.includes(reMatch[1]);
+      // Invalid regex → treat the whole query (slashes included) as a case-insensitive literal substring
+      return text.toLowerCase().includes(query.toLowerCase());
     }
   }
 

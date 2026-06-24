@@ -35,7 +35,7 @@ export function LogPanel({ agent, proc }: { agent: string; proc: string }) {
     ? lines.filter((l) => matchFilter(l.text, filter))
     : lines;
 
-  const downloadUrl = logsDownloadURL(agent, proc, { stream, q: filter });
+  const downloadUrl = logsDownloadURL(agent, proc, { stream, q: "" });
 
   return (
     <div>
