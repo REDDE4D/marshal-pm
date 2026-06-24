@@ -369,8 +369,13 @@ func TestReloadIsRolling(t *testing.T) {
 	}
 	waitOnline(m, 2)
 
+	// minOnline starts at the instance count (2). A never-firing seam leaves it at
+	// 2, which fails the == 1 assertion below — catching a bulk-stop-then-restart
+	// implementation that never fires the seam mid-down-window.
 	minOnline := 2
+	steps := 0
 	m.onReloadStep = func() {
+		steps++
 		online := 0
 		for _, s := range m.List() {
 			if s.State == supervisor.StateOnline {
@@ -385,11 +390,17 @@ func TestReloadIsRolling(t *testing.T) {
 	if _, err := m.Reload("a"); err != nil {
 		t.Fatalf("Reload: %v", err)
 	}
-	// A rolling reload takes at most one instance of a 2-instance app down at a
-	// time, so at every step (one instance stopped, replacement not yet started)
-	// at least one instance is still online.
-	if minOnline < 1 {
-		t.Fatalf("minOnline during reload = %d, want >= 1 (rolling)", minOnline)
+	// The seam must have fired at least once.
+	if steps == 0 {
+		t.Fatal("onReloadStep never fired; seam not called during reload")
+	}
+	// A rolling reload of a 2-instance app takes exactly one instance down at a
+	// time. At the tightest observed point, exactly 1 instance must be online
+	// (i.e. exactly 1 down). If minOnline == 2 the seam fired before any
+	// instance was stopped; if minOnline == 0 two instances were down at once —
+	// both indicate a non-rolling implementation.
+	if minOnline != 1 {
+		t.Fatalf("minOnline during reload = %d, want == 1 (exactly one down at a time)", minOnline)
 	}
 	m.StopAll()
 }
