@@ -123,7 +123,7 @@ func (s *Server) Connect(stream pb.Fleet_ConnectServer) error {
 			_ = sess.sendMsg(&pb.ServerMessage{Msg: &pb.ServerMessage_HelloAck{HelloAck: ack}})
 		case *pb.AgentMessage_Snapshot:
 			if name != "" {
-				s.reg.Update(name, m.Snapshot.GetProcs())
+				s.reg.Update(name, m.Snapshot.GetProcs(), m.Snapshot.GetHost())
 			}
 		case *pb.AgentMessage_Metrics:
 			if name != "" && s.stores != nil {

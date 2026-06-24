@@ -14,6 +14,7 @@ type agentEntry struct {
 	streamOpen bool
 	lastSeen   time.Time
 	meta       AgentMeta
+	host       *pb.HostMetrics
 }
 
 // AgentMeta is per-agent host metadata captured on Hello.
@@ -71,12 +72,13 @@ func (r *Registry) Open(name string) {
 	e.lastSeen = r.now()
 }
 
-// Update records a fresh snapshot and bumps last-seen.
-func (r *Registry) Update(name string, procs []*pb.ProcInfo) {
+// Update records a fresh snapshot (procs + host gauges) and bumps last-seen.
+func (r *Registry) Update(name string, procs []*pb.ProcInfo, host *pb.HostMetrics) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	e := r.entry(name)
 	e.procs = procs
+	e.host = host
 	e.streamOpen = true
 	e.lastSeen = r.now()
 }
@@ -116,6 +118,7 @@ func (r *Registry) List() []*pb.AgentState {
 			Arch:           e.meta.Arch,
 			MarshalVersion: e.meta.MarshalVersion,
 			HostBootUnix:   e.meta.HostBootUnix,
+			Host:           e.host,
 		})
 	}
 	return out
