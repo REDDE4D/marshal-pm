@@ -1,6 +1,9 @@
 package daemon
 
 import (
+	"time"
+
+	"marshal/internal/eventstore"
 	"marshal/internal/fleet"
 	"marshal/internal/logs"
 	"marshal/internal/metrics"
@@ -16,6 +19,10 @@ func (s *Server) fleetSnapshot() fleet.SnapshotFunc {
 	return func() []*pb.ProcInfo {
 		snaps := s.mgr.List()
 		out := make([]*pb.ProcInfo, 0, len(snaps))
+		var rollups map[string]eventstore.Rollup
+		if s.estore != nil {
+			rollups, _ = s.estore.Rollups(time.Now().UnixMilli() - 24*60*60*1000)
+		}
 		for _, sn := range snaps {
 			sm := metrics.Sample{Fds: -1} // default: unavailable until first sample
 			if s.metrics != nil {
@@ -23,7 +30,7 @@ func (s *Server) fleetSnapshot() fleet.SnapshotFunc {
 					sm = v
 				}
 			}
-			out = append(out, snapshotToProc(sn, sm))
+			out = append(out, snapshotToProc(sn, sm, rollups[sn.Label]))
 		}
 		if s.deployer != nil {
 			deploySnaps := s.deployer.Snapshots()

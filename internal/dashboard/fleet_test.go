@@ -19,6 +19,7 @@ func TestFleetView(t *testing.T) {
 		Procs: []*pb.ProcInfo{{
 			Name: "ticker", State: "running", Pid: 99, UptimeMs: 1000, Restarts: 2, Cpu: 1.5, Mem: 2048,
 			Source: "command", Threads: 8, OpenFds: -1, ExitCode: 1, ExitReason: "exit status 1",
+			Restarts24H: 5, LastRestartUnix: 1700000000,
 		}, {
 			Name: "gitapp", State: "failed", Source: "git", Detail: "build failed: exit status 1",
 		}},
@@ -57,6 +58,9 @@ func TestFleetView(t *testing.T) {
 	}
 	if p.ExitCode != 1 || p.ExitReason != "exit status 1" {
 		t.Fatalf("exit = (%d, %q), want (1, \"exit status 1\")", p.ExitCode, p.ExitReason)
+	}
+	if p.Restarts24h != 5 || p.LastRestartUnix != 1700000000 {
+		t.Fatalf("restart rollup = %d/%d, want 5/1700000000", p.Restarts24h, p.LastRestartUnix)
 	}
 	// M21: git source + deploy detail must survive serialization (drives the
 	// redeploy button and the failed-card reason in the dashboard).

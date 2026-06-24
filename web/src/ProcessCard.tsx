@@ -35,6 +35,16 @@ export function ProcessCard({ agent, proc, connected, cpuSeries, memSeries, erro
   const fds = proc.open_fds < 0 ? "—" : String(proc.open_fds);
   const stats = `${proc.threads} thr · ${fds} fds`;
 
+  function ago(unix?: number): string {
+    if (!unix) return "—";
+    const s = Math.max(0, Math.floor(Date.now() / 1000 - unix));
+    if (s < 60) return `${s}s ago`;
+    if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+    return `${Math.floor(s / 86400)}d ago`;
+  }
+  const restartStats = `${proc.restarts_24h}/24h · last ${ago(proc.last_restart_unix)}`;
+
   const isDeploying = state === "cloning" || state === "building";
   const isFailed = state === "failed";
 
@@ -87,7 +97,7 @@ export function ProcessCard({ agent, proc, connected, cpuSeries, memSeries, erro
       {isFailed && proc.detail && (
         <div className="pcard-failed-detail">{proc.detail}</div>
       )}
-      <div className="pcard-meta">{meta}{state === "online" && ` · ${stats}`}</div>
+      <div className="pcard-meta">{meta}{state === "online" && ` · ${stats}`}{state === "online" && ` · ${restartStats}`}</div>
       {proc.exit_reason && (
         <div className="pcard-meta pcard-exit">last exit: {proc.exit_reason}</div>
       )}

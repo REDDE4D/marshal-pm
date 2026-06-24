@@ -9,20 +9,22 @@ type FleetLister interface {
 }
 
 type procView struct {
-	Name       string  `json:"name"`
-	State      string  `json:"state"`
-	PID        int32   `json:"pid"`
-	UptimeMs   int64   `json:"uptime_ms"`
-	Restarts   int32   `json:"restarts"`
-	CPU        float64 `json:"cpu"`
-	Mem        int64   `json:"mem"`
-	Source     string  `json:"source"`               // "command" | "git" — drives the redeploy button (M21)
-	Detail     string  `json:"detail"`               // status summary for in-flight/failed deploys (M21)
-	Credential string  `json:"credential,omitempty"` // M22 credential name (drives redeploy)
-	Threads    int32   `json:"threads"`
-	OpenFds    int32   `json:"open_fds"` // -1 = unavailable on this platform
-	ExitCode   int32   `json:"exit_code"`
-	ExitReason string  `json:"exit_reason,omitempty"` // "" = never exited
+	Name            string  `json:"name"`
+	State           string  `json:"state"`
+	PID             int32   `json:"pid"`
+	UptimeMs        int64   `json:"uptime_ms"`
+	Restarts        int32   `json:"restarts"`
+	CPU             float64 `json:"cpu"`
+	Mem             int64   `json:"mem"`
+	Source          string  `json:"source"`               // "command" | "git" — drives the redeploy button (M21)
+	Detail          string  `json:"detail"`               // status summary for in-flight/failed deploys (M21)
+	Credential      string  `json:"credential,omitempty"` // M22 credential name (drives redeploy)
+	Threads         int32   `json:"threads"`
+	OpenFds         int32   `json:"open_fds"` // -1 = unavailable on this platform
+	ExitCode        int32   `json:"exit_code"`
+	ExitReason      string  `json:"exit_reason,omitempty"` // "" = never exited
+	Restarts24h     int32   `json:"restarts_24h"`
+	LastRestartUnix int64   `json:"last_restart_unix,omitempty"`
 }
 
 type hostView struct {
@@ -59,20 +61,22 @@ func fleetView(l FleetLister) []agentView {
 		procs := make([]procView, 0, len(a.GetProcs()))
 		for _, p := range a.GetProcs() {
 			procs = append(procs, procView{
-				Name:       p.GetName(),
-				State:      p.GetState(),
-				PID:        p.GetPid(),
-				UptimeMs:   p.GetUptimeMs(),
-				Restarts:   p.GetRestarts(),
-				CPU:        p.GetCpu(),
-				Mem:        p.GetMem(),
-				Source:     p.GetSource(),
-				Detail:     p.GetDetail(),
-				Credential: p.GetCredential(),
-				Threads:    p.GetThreads(),
-				OpenFds:    p.GetOpenFds(),
-				ExitCode:   p.GetExitCode(),
-				ExitReason: p.GetExitReason(),
+				Name:            p.GetName(),
+				State:           p.GetState(),
+				PID:             p.GetPid(),
+				UptimeMs:        p.GetUptimeMs(),
+				Restarts:        p.GetRestarts(),
+				CPU:             p.GetCpu(),
+				Mem:             p.GetMem(),
+				Source:          p.GetSource(),
+				Detail:          p.GetDetail(),
+				Credential:      p.GetCredential(),
+				Threads:         p.GetThreads(),
+				OpenFds:         p.GetOpenFds(),
+				ExitCode:        p.GetExitCode(),
+				ExitReason:      p.GetExitReason(),
+				Restarts24h:     p.GetRestarts24H(),
+				LastRestartUnix: p.GetLastRestartUnix(),
 			})
 		}
 		var host *hostView

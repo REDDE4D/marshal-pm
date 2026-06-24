@@ -45,11 +45,23 @@ type Instance struct {
 	startedAt  time.Time
 	exitCode   int32  // last observed exit code
 	exitReason string // last observed exit reason ("" until first exit)
+	onRestart  func() // M-E: fired once per genuine restart (nil if unset)
 }
 
+// Option configures an Instance.
+type Option func(*Instance)
+
+// WithOnRestart registers a hook fired once per genuine restart (not on a clean
+// stop, operator stop, or no-restart path).
+func WithOnRestart(fn func()) Option { return func(i *Instance) { i.onRestart = fn } }
+
 // NewInstance builds an instance supervisor. Call Run to start it.
-func NewInstance(spec proc.Spec, policy Policy) *Instance {
-	return &Instance{spec: spec, policy: policy, state: StateStarting}
+func NewInstance(spec proc.Spec, policy Policy, opts ...Option) *Instance {
+	i := &Instance{spec: spec, policy: policy, state: StateStarting}
+	for _, o := range opts {
+		o(i)
+	}
+	return i
 }
 
 // Snapshot returns the current observable state.
@@ -171,6 +183,10 @@ func (i *Instance) handleExit(ctx context.Context, started time.Time, waitErr er
 	}
 	unstable := i.unstable
 	i.mu.Unlock()
+
+	if i.onRestart != nil {
+		i.onRestart() // M-E: count this restart
+	}
 
 	if unstable > i.policy.MaxRestarts {
 		i.set(StateErrored, 0, time.Time{})
