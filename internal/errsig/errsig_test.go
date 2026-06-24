@@ -16,6 +16,11 @@ func TestIsError(t *testing.T) {
 		{"[INFO] listening on :8080", false},
 		{"level=warn retrying", false},
 		{"DEBUG cache miss", false},
+		{"INFO listening", false},
+		{"connection pool info failed to allocate", true}, // "info" mid-message, no leading level
+		{"retry warning backoff exceeded", true},          // "warning" mid-message
+		{"disk space info: 0 bytes remaining", true},      // "info" mid-message
+		{"ERROR: warn subsystem down", true},              // error marker wins despite "warn"
 	}
 	for _, c := range cases {
 		if got := IsError(c.text); got != c.want {

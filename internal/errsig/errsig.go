@@ -14,8 +14,13 @@ import (
 var infoWarnMarkers = []string{
 	"level=info", "level=debug", "level=trace", "level=warn", "level=warning",
 	"[info]", "[debug]", "[trace]", "[warn]", "[warning]", "[notice]",
-	"info ", " info ", "debug ", " debug ", "trace ", " trace ", "warn ", " warn ", "warning ",
 }
+
+// reLevelPrefix matches lines where a log level word appears at the start
+// (optionally preceded by whitespace or a bracket). Used to catch bare-word
+// level prefixes like "DEBUG cache miss" or "INFO listening" without
+// false-matching level words buried in the middle of a message.
+var reLevelPrefix = regexp.MustCompile(`^\s*\[?(?:debug|info|notice|trace|warn|warning)\b`)
 
 // errorMarkers force a line to count as an error even if it also matches an
 // info/warn token. Lowercased substring match.
@@ -38,6 +43,9 @@ func IsError(text string) bool {
 		if strings.Contains(l, m) {
 			return false
 		}
+	}
+	if reLevelPrefix.MatchString(l) {
+		return false
 	}
 	return true
 }
