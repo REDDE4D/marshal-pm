@@ -13,6 +13,10 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 ## [Unreleased]
 
 ### Added
+- **Restart history (M-E):** each process now shows how many times it restarted
+  in the last 24h and when it last restarted, recorded from real supervisor
+  restart events in a local SQLite event store (7-day retention) and surfaced on
+  the process card and in `/api/fleet`.
 - **Host system metrics (M-C):** each agent now reports current-value host
   gauges — CPU%, load average (1/5/15), memory (used/total/percent), and
   network I/O rate (bytes/sec) — shipped with the periodic state push and shown

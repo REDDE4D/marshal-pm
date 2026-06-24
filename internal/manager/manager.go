@@ -75,9 +75,9 @@ type Manager struct {
 	// blocking stop cannot interleave with another mutator and orphan goroutines.
 	opMu sync.Mutex
 
-	mu     sync.Mutex
-	apps   []*managedApp
-	nextID int
+	mu          sync.Mutex
+	apps        []*managedApp
+	nextID      int
 	logs        LogProvider
 	restartSink RestartSink
 }
