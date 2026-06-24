@@ -132,6 +132,7 @@ export function LiveLogModal({
           href={downloadURL}
           download
           title="download logs"
+          aria-label="download logs"
         >
           ⤓
         </a>
@@ -143,7 +144,7 @@ export function LiveLogModal({
           const lvl = classifyLevel(l);
           const spanClass = lvl === "error" ? "er" : lvl === "warn" ? "warn" : "tx";
           return (
-            <div key={i}>
+            <div key={`${l.ts}-${i}`}>
               <span className="ts">{fmtTime(l.ts)}</span>{" "}
               <span className={spanClass}>{l.text}</span>
             </div>

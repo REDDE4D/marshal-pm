@@ -127,7 +127,7 @@ select.inp{ font-family:var(--i); }
 
 .logbar{ display:flex; align-items:center; gap:8px; padding:12px 20px; }
 .logbox{ margin:0 22px 20px; background:#070809; border:1px solid var(--line); border-radius:4px; padding:12px 15px; font-family:var(--m); font-size:12.5px; line-height:1.9; max-height:380px; overflow:auto; }
-.logbox .ts{ color:var(--faint); } .logbox .er{ color:var(--rose); } .logbox .ok{ color:var(--olive); } .logbox .tx{ color:#9AA1AD; }
+.logbox .ts{ color:var(--faint); } .logbox .er{ color:var(--rose); } .logbox .ok{ color:var(--olive); } .logbox .tx{ color:#9AA1AD; } .logbox .warn{ color:var(--amber); }
 .cur{ display:inline-block; width:7px; height:13px; background:var(--teal); vertical-align:middle; animation:bl 1s steps(2) infinite; }
 @keyframes bl{ 0%,50%{opacity:1} 51%,100%{opacity:0} }
 
@@ -186,3 +186,28 @@ select.inp{ font-family:var(--i); }
 }
 .fb-rowactions{ margin-left:auto; display:flex; gap:6px; }
 .fbrow.sel{ background:var(--row); }
+
+/* ── Narrow-viewport responsiveness (Task 19) ────────────────────────────── */
+@media (max-width: 720px) {
+  /* Rail: shrink to icon-only slim bar */
+  .rail{ width:48px; flex:0 0 48px; }
+  .rail .lb{ display:none; }
+  .rail .mk{ width:30px; height:30px; font-size:13px; }
+  .ri{ padding:9px 0; }
+  .ri .badge{ right:4px; }
+
+  /* Metric clusters: wrap to 2 columns */
+  .c6{ grid-template-columns:repeat(2,1fr); }
+  .c4{ grid-template-columns:repeat(2,1fr); }
+
+  /* Ledger rows: allow horizontal scroll rather than squishing columns */
+  .lh, .lr{ min-width:640px; }
+  .content{ overflow-x:auto; }
+
+  /* Charts: stack vertically */
+  .charts{ grid-template-columns:1fr; }
+
+  /* Context bar: let right-side items wrap */
+  .top{ flex-wrap:wrap; height:auto; padding:10px 14px; gap:8px; }
+  .top .rt{ margin-left:0; width:100%; justify-content:flex-end; }
+}

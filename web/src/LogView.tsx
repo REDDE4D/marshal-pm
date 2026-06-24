@@ -42,7 +42,7 @@ export function LogView({ lines }: { lines: LogLine[] }) {
           <div className="tx" style={{ color: "var(--dim)", padding: "4px 0" }}>No log lines.</div>
         ) : (
           lines.map((l, i) => (
-            <div key={i}>
+            <div key={`${l.ts}-${i}`}>
               <span className="ts">{fmtTime(l.ts)}</span>{" "}
               <span className={levelClass(l)}>{l.text}</span>
             </div>

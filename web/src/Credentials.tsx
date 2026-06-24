@@ -78,7 +78,7 @@ export function Credentials({ onLogout: _onLogout }: { onLogout: () => void }) {
   return (
     <>
       {/* ── 01 Stored ── */}
-      <SectionHeader index="01" title="Stored" count={`${creds.length} credentials`} />
+      <SectionHeader index="01" title="Stored" count={loading ? undefined : `${creds.length} credentials`} />
 
       {loading ? (
         <p className="sub" style={{ padding: "12px 22px" }}>loading…</p>

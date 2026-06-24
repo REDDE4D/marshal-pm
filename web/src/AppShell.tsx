@@ -38,7 +38,7 @@ export function AppShell({ ctx, right, onLogout, children }: AppShellProps) {
 
   return (
     <div className="shell">
-      <nav className="rail" role="navigation">
+      <nav className="rail">
         <div className="mk">m$</div>
 
         <button
