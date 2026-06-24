@@ -282,6 +282,51 @@ func TestListReportsGitSource(t *testing.T) {
 	}
 }
 
+// fakeSink records restart events for assertions.
+type fakeSink struct {
+	mu     sync.Mutex
+	events []string // labels
+}
+
+func (f *fakeSink) Record(label string, tsMs int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, label)
+	return nil
+}
+func (f *fakeSink) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.events)
+}
+
+func TestManagerWiresRestartSink(t *testing.T) {
+	sink := &fakeSink{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := New(ctx, WithRestartSink(sink))
+	// A crashing app under on-failure restarts a few times, then errors.
+	app := config.App{
+		Name: "crash", Cmd: "sh", Args: []string{"-c", "exit 1"},
+		Instances: 1, Restart: config.RestartOnFailure, MaxRestarts: 2,
+		KillTimeout: config.Duration{Duration: time.Second},
+	}
+	if _, err := m.Add(app); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	// Wait for the crash-restart cycle to produce at least one recorded restart.
+	deadline := time.Now().Add(5 * time.Second)
+	for sink.count() == 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if sink.count() < 1 {
+		t.Fatalf("sink recorded %d restarts, want >= 1", sink.count())
+	}
+	if sink.events[0] != "crash#0" {
+		t.Fatalf("label = %q, want crash#0", sink.events[0])
+	}
+}
+
 func TestWithLogsCapturesOutputAndRemovesOnDelete(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

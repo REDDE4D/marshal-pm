@@ -40,6 +40,16 @@ func WithLogs(lp LogProvider) Option {
 	return func(m *Manager) { m.logs = lp }
 }
 
+// RestartSink records a restart event for an instance label. M-E.
+type RestartSink interface {
+	Record(label string, tsMs int64) error
+}
+
+// WithRestartSink wires per-instance restart events to sink.
+func WithRestartSink(s RestartSink) Option {
+	return func(m *Manager) { m.restartSink = s }
+}
+
 // managedInstance is one running (or stopped) instance and its lifecycle handles.
 type managedInstance struct {
 	instanceID int
@@ -68,7 +78,8 @@ type Manager struct {
 	mu     sync.Mutex
 	apps   []*managedApp
 	nextID int
-	logs   LogProvider
+	logs        LogProvider
+	restartSink RestartSink
 }
 
 // New builds an empty manager rooted at ctx. Instances spawned by Add run until
@@ -99,7 +110,14 @@ func (m *Manager) startInstance(app config.App, idx int) *managedInstance {
 	if m.logs != nil {
 		spec.Stdout, spec.Stderr = m.logs.WriterPair(label)
 	}
-	inst := supervisor.NewInstance(spec, policyFor(app))
+	var sopts []supervisor.Option
+	if m.restartSink != nil {
+		l := label // capture this instance's "name#idx"
+		sopts = append(sopts, supervisor.WithOnRestart(func() {
+			_ = m.restartSink.Record(l, time.Now().UnixMilli())
+		}))
+	}
+	inst := supervisor.NewInstance(spec, policyFor(app), sopts...)
 	ictx, cancel := context.WithCancel(m.ctx)
 	done := make(chan struct{})
 	go func() {
