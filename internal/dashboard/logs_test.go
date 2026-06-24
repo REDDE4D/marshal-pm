@@ -2,18 +2,24 @@ package dashboard
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"marshal/internal/logstore"
 )
 
-type fakeLogs struct{ afters []int64 }
+type fakeLogs struct {
+	afters []int64
+	limits []int
+}
 
 func (f *fakeLogs) Since(agent, selector string, afterRowID int64, limit int, filter logstore.StreamFilter, text string) ([]logstore.StoredLine, int64, error) {
 	f.afters = append(f.afters, afterRowID)
+	f.limits = append(f.limits, limit)
 	return []logstore.StoredLine{
 		{RowID: 7, TsMs: 1000, Label: "web#0", Stderr: false, Text: "hello"},
 		{RowID: 8, TsMs: 1001, Label: "web#1", Stderr: true, Text: "oops"},
@@ -141,5 +147,54 @@ func TestLogStatsEndpoint(t *testing.T) {
 	}
 	if body.Counts["web#0"] != 4 || body.Counts["api#0"] != 1 {
 		t.Fatalf("counts = %v; want web#0:4 api#0:1", body.Counts)
+	}
+}
+
+func TestLogsDownload(t *testing.T) {
+	fl := &fakeLogs{}
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, fl, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	defer srv.Close()
+	c := srv.Client()
+	cookie := loginCookie(t, c, srv.URL)
+
+	req, _ := http.NewRequest("GET", srv.URL+"/api/logs/download?agent=dev-1&selector=web&stream=stderr&q=oops", nil)
+	req.AddCookie(cookie)
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("download = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+		t.Fatalf("Content-Type = %q, want text/plain", ct)
+	}
+	if cd := resp.Header.Get("Content-Disposition"); cd != `attachment; filename="dev-1-web.log"` {
+		t.Fatalf("Content-Disposition = %q", cd)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "hello") || !strings.Contains(string(body), "oops") {
+		t.Fatalf("body missing lines: %q", body)
+	}
+	// Full history: no limit passed to the store.
+	if len(fl.limits) != 1 || fl.limits[0] != 0 {
+		t.Fatalf("store limits = %v, want [0]", fl.limits)
+	}
+	if len(fl.afters) != 1 || fl.afters[0] != 0 {
+		t.Fatalf("store afters = %v, want [0]", fl.afters)
+	}
+}
+
+func TestLogsDownloadRequiresParams(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
+	defer srv.Close()
+	c := srv.Client()
+	cookie := loginCookie(t, c, srv.URL)
+	req, _ := http.NewRequest("GET", srv.URL+"/api/logs/download?agent=dev-1", nil)
+	req.AddCookie(cookie)
+	resp, _ := c.Do(req)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("missing selector = %d, want 400", resp.StatusCode)
 	}
 }
