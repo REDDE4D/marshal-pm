@@ -1,0 +1,77 @@
+// Package errsig turns raw stderr lines into deduplicated error signatures.
+// It is pure: no I/O, no DB, no wall-clock — all timestamps are passed in.
+package errsig
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"regexp"
+	"strings"
+)
+
+// infoWarnMarkers, when present and no error marker is present, mark a line as
+// NOT an error (info/warn/debug on stderr). Lowercased substring match.
+var infoWarnMarkers = []string{
+	"level=info", "level=debug", "level=trace", "level=warn", "level=warning",
+	"[info]", "[debug]", "[trace]", "[warn]", "[warning]", "[notice]",
+	"info ", " info ", "debug ", " debug ", "trace ", " trace ", "warn ", " warn ", "warning ",
+}
+
+// errorMarkers force a line to count as an error even if it also matches an
+// info/warn token. Lowercased substring match.
+var errorMarkers = []string{
+	"error", "fatal", "panic", "exception",
+	"traceback (most recent call last)", "level=error",
+}
+
+// IsError reports whether a stderr line should be grouped as an error. Explicit
+// error markers always count; recognized info/warn/debug markers are excluded;
+// everything else on stderr counts (stderr default).
+func IsError(text string) bool {
+	l := strings.ToLower(text)
+	for _, m := range errorMarkers {
+		if strings.Contains(l, m) {
+			return true
+		}
+	}
+	for _, m := range infoWarnMarkers {
+		if strings.Contains(l, m) {
+			return false
+		}
+	}
+	return true
+}
+
+var (
+	reTimestamp = regexp.MustCompile(`^\s*\[?\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?\]?\s*`)
+	reTimeOnly  = regexp.MustCompile(`^\s*\[?\d{2}:\d{2}:\d{2}(\.\d+)?\]?\s*`)
+	reQuoted    = regexp.MustCompile("\"[^\"]*\"|'[^']*'|`[^`]*`")
+	reUUID      = regexp.MustCompile(`\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b`)
+	reHex       = regexp.MustCompile(`0x[0-9a-fA-F]+|\b[0-9a-fA-F]{12,}\b`)
+	reAddr      = regexp.MustCompile(`\b\d{1,3}(\.\d{1,3}){3}(:\d+)?\b`)
+	rePath      = regexp.MustCompile(`(?:[A-Za-z]:\\|/|\./)[^\s:]+(?::\d+)?`)
+	reNum       = regexp.MustCompile(`(?i)\b\d+(\.\d+)?(ns|us|µs|ms|s|m|h|ki?b|mi?b|gi?b|b)?\b`)
+	reSpace     = regexp.MustCompile(`\s+`)
+)
+
+// Normalize canonicalizes a message for grouping: strip leading timestamp,
+// then replace quoted strings, UUIDs, hex/addresses, IPs, paths, and numbers
+// with placeholders; collapse whitespace; lowercase.
+func Normalize(text string) string {
+	s := reTimestamp.ReplaceAllString(text, "")
+	s = reTimeOnly.ReplaceAllString(s, "")
+	s = reQuoted.ReplaceAllString(s, "<str>")
+	s = reUUID.ReplaceAllString(s, "<uuid>")
+	s = reHex.ReplaceAllString(s, "<hex>")
+	s = reAddr.ReplaceAllString(s, "<addr>")
+	s = rePath.ReplaceAllString(s, "<path>")
+	s = reNum.ReplaceAllString(s, "<num>")
+	s = reSpace.ReplaceAllString(s, " ")
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+// Signature is a stable 12-hex-char id for a normalized message.
+func Signature(text string) string {
+	sum := sha256.Sum256([]byte(Normalize(text)))
+	return hex.EncodeToString(sum[:])[:12]
+}
