@@ -16,6 +16,9 @@ import (
 // enables the login audit log; "" disables it.
 // creds may be nil, which disables credential endpoints (they return 503).
 // notifs and notifBuild may be nil, which disables notification endpoints.
+// enroll may be nil, which disables the agent connect-token endpoint (returns 503);
+// when non-nil it mints and rotates the single shared enroll token used by
+// the Connect Agent modal to generate agent connect commands.
 func Serve(ctx context.Context, addr string, lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, cert tls.Certificate, sessionsPath, auditPath string, creds Credentials, notifs Notifications, notifBuild notify.BuildFunc, enroll EnrollMinter) error {
 	h := newHandler(lister, metrics, logs, controller, auth, 24*time.Hour, sessionsPath, auditPath, creds)
 	h.notifs = notifs

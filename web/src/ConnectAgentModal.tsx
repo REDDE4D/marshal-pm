@@ -41,9 +41,12 @@ export function ConnectAgentModal({ onClose }: { onClose: () => void }) {
       {cmd ? (
         <Button
           type="button"
-          onClick={async () => {
-            await navigator.clipboard.writeText(cmd);
-            setCopied(true);
+          onClick={() => {
+            navigator.clipboard.writeText(cmd).then(() => {
+              setCopied(true);
+            }).catch(() => {
+              setError("Copy failed — please copy the command manually.");
+            });
           }}
         >
           {copied ? "copied" : "copy command"}
