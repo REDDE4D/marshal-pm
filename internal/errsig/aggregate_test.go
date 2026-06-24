@@ -65,3 +65,28 @@ func TestAggregateIgnoresBeforeSince(t *testing.T) {
 		t.Fatalf("pre-since line counted: %+v", r.Cluster)
 	}
 }
+
+func TestAggregateSourceStopsAtAgentBoundary(t *testing.T) {
+	lines := []Line{
+		// agent A: error line, NO source in its own following lines
+		{TsMs: 1000, Label: "api#0", Text: "boom error", Agent: "edge-1"},
+		// agent B: SAME label, would be the "following line" if no agent guard;
+		// contains a Go source frame that must NOT be attributed to agent A.
+		{TsMs: 2000, Label: "api#0", Text: "\t/srv/b/worker.go:99 +0x1a", Agent: "edge-2"},
+	}
+	r := Aggregate(lines, 0, 10_000, 24)
+	// The "boom error" signature (agent edge-1) must have empty Source — the worker.go
+	// frame belongs to edge-2 and must not bleed across the agent boundary.
+	var boom *Sig
+	for idx := range r.Signatures {
+		if r.Signatures[idx].Sample == "boom error" {
+			boom = &r.Signatures[idx]
+		}
+	}
+	if boom == nil {
+		t.Fatal("expected a 'boom error' signature")
+	}
+	if boom.Source != "" {
+		t.Fatalf("Source bled across agent boundary: got %q, want empty", boom.Source)
+	}
+}
