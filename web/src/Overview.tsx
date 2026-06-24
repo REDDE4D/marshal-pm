@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Agent, AgentMetrics, control, getFleet, getLogStats, getMetrics } from "./api";
+import { Agent, AgentMetrics, control, getFleet, getMetrics } from "./api";
 import { AddAppModal } from "./AddAppModal";
 import { ConnectAgentModal } from "./ConnectAgentModal";
 import { RestartAllButton } from "./RestartAllButton";
@@ -36,12 +36,6 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
         const f = await getFleet();
         if (stop) return;
         setAgents(f);
-        // per-agent log stats (best-effort, errors swallowed)
-        for (const a of f.filter((x) => x.connected)) {
-          try {
-            await getLogStats(a.name);
-          } catch { /* best-effort */ }
-        }
       } catch { if (!stop) onLogout(); }
     }
     tick();
@@ -154,13 +148,8 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
             <SectionHeader
               index={idx}
               title={a.name}
-              right={
-                <>
-                  {/* Agent status glyph */}
-                  <span className={"glyph " + (agentErrored ? "g-er" : "g-on")} />
-                  <RestartAllButton agent={a.name} connected={a.connected} />
-                </>
-              }
+              glyph={<span className={"glyph " + (agentErrored ? "g-er" : "g-on")} />}
+              right={<RestartAllButton agent={a.name} connected={a.connected} />}
               count={`${a.procs.length} proc`}
             />
 

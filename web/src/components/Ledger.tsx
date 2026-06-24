@@ -32,17 +32,20 @@ function QuickActions({ actions }: { actions: QuickAction[] }) {
 export function SectionHeader({
   index,
   title,
+  glyph,
   right,
   count,
 }: {
   index: string;
   title: string;
+  glyph?: ReactNode;
   right?: ReactNode;
   count?: ReactNode;
 }) {
   return (
     <div className="sec">
       <span className="ix">{index}</span>
+      {glyph}
       <span className="t">{title}</span>
       <span className="rule"></span>
       {right}
