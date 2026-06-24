@@ -17,6 +17,7 @@ import (
 	"marshal/internal/deploy"
 	"marshal/internal/fleet"
 	"marshal/internal/fleetauth"
+	"marshal/internal/hostmetrics"
 	"marshal/internal/logs"
 	"marshal/internal/manager"
 	"marshal/internal/metrics"
@@ -275,6 +276,7 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 	}
 	mgr := manager.New(ctx, manager.WithLogs(reg))
 	sampler := metrics.NewSampler(cfg.sampleInterval)
+	hostSampler := hostmetrics.NewSampler()
 	mdb, err := metricstore.Open(st.MetricsDBPath())
 	if err != nil {
 		return fmt.Errorf("open metrics db: %w", err)
@@ -338,6 +340,7 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 				fleet.WithAuth(fleetTok, sc.Token, st.SaveFleetToken),
 				fleet.WithMetrics(metricsSince(mdb)),
 				fleet.WithLogs(logsSince(reg)),
+				fleet.WithHost(func() *pb.HostMetrics { return hostSampler.Sample() }),
 				fleet.WithCommands(srv.handleFleetCommand))
 			go fc.Run(serveCtx)
 		}
