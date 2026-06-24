@@ -1,13 +1,12 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { CredentialMeta, listCredentials, createCredential, createSSHCredential, deleteCredential } from "./api";
-import { Logo } from "./Logo";
+import { SectionHeader, LedgerHeader, LedgerRow } from "./components/Ledger";
+import { Segment, Field, Input, Button } from "./components/Controls";
+import { formatDateShort } from "./lib/format";
 
-function fmtDate(unixSec: number): string {
-  if (!unixSec) return "—";
-  return new Date(unixSec * 1000).toLocaleString();
-}
+const COLS = "1.4fr 1fr 1.2fr 0.6fr";
 
-export function Credentials({ onLogout }: { onLogout: () => void }) {
+export function Credentials({ onLogout: _onLogout }: { onLogout: () => void }) {
   const [creds, setCreds] = useState<CredentialMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [kind, setKind] = useState<"https-token" | "ssh-key">("https-token");
@@ -77,143 +76,147 @@ export function Credentials({ onLogout }: { onLogout: () => void }) {
   }
 
   return (
-    <div className="app">
-      <div className="topbar">
-        <Logo />
-        <div className="topbar-actions">
-          <button className="btn" onClick={() => { window.location.hash = ""; }}>← fleet</button>
-          <button className="btn" onClick={onLogout}>sign out</button>
-        </div>
-      </div>
+    <>
+      {/* ── 01 Stored ── */}
+      <SectionHeader index="01" title="Stored" count={`${creds.length} credentials`} />
 
-      <div className="cred-section">
-        <div className="cred-head">git credentials</div>
+      {loading ? (
+        <p className="sub" style={{ padding: "12px 22px" }}>loading…</p>
+      ) : creds.length === 0 ? (
+        <p className="sub" style={{ padding: "12px 22px" }}>no credentials stored.</p>
+      ) : (
+        <>
+          <LedgerHeader cols={COLS}>
+            <div>Name</div>
+            <div>Type</div>
+            <div>Added</div>
+            <div className="rr" />
+          </LedgerHeader>
 
-        {loading ? (
-          <p className="loading">loading…</p>
-        ) : creds.length === 0 ? (
-          <p className="empty">no credentials stored.</p>
-        ) : (
-          <div className="cred-list">
-            {creds.map((c) => (
-              <div className="cred-row card" key={c.name}>
-                <div className="cred-row-info">
-                  <span className="cred-name">{c.name}</span>
-                  <span className="cred-meta">
-                    {c.type === "ssh-key" ? "ssh-key" : `${c.username} · https-token`}
-                    {" · added "}{fmtDate(c.created_at)}
-                  </span>
-                  {c.type === "ssh-key" && c.public_key && (
-                    <div className="cred-pubkey">
-                      <div className="cred-pubkey-label">public key (deploy key)</div>
-                      <pre className="cred-pubkey-text">{c.public_key}</pre>
-                      <button
-                        className="btn"
-                        onClick={() => navigator.clipboard.writeText(c.public_key!)}
-                      >
-                        copy
-                      </button>
-                    </div>
-                  )}
+          {creds.map((c) => (
+            <div key={c.name}>
+              <LedgerRow cols={COLS}>
+                <div className="nm">{c.name}</div>
+                <div className={`v ${c.type === "ssh-key" ? "indigo" : "sky"}`}>
+                  {c.type === "ssh-key" ? "ssh-key" : `https · ${c.username}`}
                 </div>
-                <div className="ctl">
+                <div className="v" style={{ fontSize: "11px", color: "var(--dim)" }}>
+                  {formatDateShort(c.created_at)}
+                </div>
+                <div className="rr">
                   {deleteTarget === c.name ? (
-                    <>
-                      <button
-                        className="ctl-btn danger"
-                        onClick={() => handleDelete(c.name)}
-                      >
-                        confirm delete
-                      </button>
-                      <button className="ctl-btn" onClick={() => setDeleteTarget(null)}>cancel</button>
-                    </>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <Button variant="dgr" size="sm" onClick={() => handleDelete(c.name)}>
+                        confirm
+                      </Button>
+                      <Button size="sm" onClick={() => setDeleteTarget(null)}>
+                        cancel
+                      </Button>
+                    </div>
                   ) : (
-                    <button className="ctl-btn danger" onClick={() => handleDelete(c.name)}>delete</button>
+                    <Button variant="dgr" size="sm" onClick={() => setDeleteTarget(c.name)}>
+                      delete
+                    </Button>
                   )}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              </LedgerRow>
 
-        <form className="cred-form" onSubmit={handleCreate}>
-          <div className="cred-form-title">add credential</div>
-          <div className="field">
-            <label className="field-label">type</label>
-            <div className="cred-type-toggle">
-              <label>
-                <input
-                  type="radio"
-                  name="cred-kind"
-                  value="https-token"
-                  checked={kind === "https-token"}
-                  onChange={() => { setKind("https-token"); setNewPublicKey(""); setError(""); }}
-                />
-                {" "}HTTPS token
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="cred-kind"
-                  value="ssh-key"
-                  checked={kind === "ssh-key"}
-                  onChange={() => { setKind("ssh-key"); setNewPublicKey(""); setError(""); }}
-                />
-                {" "}SSH key
-              </label>
+              {/* SSH public-key display on stored credentials */}
+              {c.type === "ssh-key" && c.public_key && (
+                <div style={{ padding: "8px 20px 12px", borderBottom: "1px solid var(--line2)" }}>
+                  <div className="sub" style={{ marginBottom: "6px" }}>public key (deploy key)</div>
+                  <pre style={{ margin: "0 0 6px", fontSize: "11px", color: "var(--dim)", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                    {c.public_key}
+                  </pre>
+                  <Button size="sm" onClick={() => navigator.clipboard.writeText(c.public_key!)}>
+                    copy
+                  </Button>
+                </div>
+              )}
             </div>
-          </div>
-          <label className="field">
-            name
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-github" />
-          </label>
+          ))}
+        </>
+      )}
+
+      {/* ── 02 Add credential ── */}
+      <SectionHeader index="02" title="Add credential" />
+
+      <form onSubmit={handleCreate}>
+        <div style={{ padding: "8px 20px 0", maxWidth: "560px" }}>
+          <Field label="type">
+            <Segment<"https-token" | "ssh-key">
+              options={[
+                { value: "https-token", label: "https token" },
+                { value: "ssh-key", label: "ssh key" },
+              ]}
+              value={kind}
+              onChange={(v) => { setKind(v); setNewPublicKey(""); setError(""); }}
+            />
+          </Field>
+
+          <Field label="name">
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="my-github"
+            />
+          </Field>
+
           {kind === "https-token" && (
             <>
-              <label className="field">
-                username
-                <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="github-user" />
-              </label>
-              <label className="field">
-                token
-                <input
+              <Field label="username">
+                <Input
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="github-user"
+                />
+              </Field>
+              <Field label="token">
+                <Input
                   type="password"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
                   placeholder="ghp_…"
                   autoComplete="new-password"
                 />
-              </label>
+              </Field>
             </>
           )}
-          {error && <div className="modal-error">{error}</div>}
+
+          {error && (
+            <p className="sub" style={{ color: "var(--rose)", margin: "8px 0" }}>{error}</p>
+          )}
+
           {newPublicKey && (
-            <div className="cred-pubkey-new">
-              <div className="cred-pubkey-label">
+            <div style={{ margin: "12px 0" }}>
+              <div className="sub" style={{ marginBottom: "6px" }}>
                 generated public key — add this as a deploy key on your repo
                 (e.g. GitHub → Settings → Deploy keys → Add deploy key).
               </div>
               <textarea
-                className="cred-pubkey-text"
                 readOnly
                 rows={3}
                 value={newPublicKey}
+                style={{ width: "100%", resize: "vertical", boxSizing: "border-box" }}
               />
-              <button
+              <Button
                 type="button"
-                className="btn"
+                size="sm"
+                style={{ marginTop: "6px" }}
                 onClick={() => navigator.clipboard.writeText(newPublicKey)}
               >
                 copy
-              </button>
+              </Button>
             </div>
           )}
-          <div className="cred-form-foot">
-            <button type="submit" className="btn primary" disabled={!canSubmit}>
-              {busy ? "saving…" : kind === "ssh-key" ? "generate key" : "add credential"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+
+        <div className="actions">
+          <Button type="submit" disabled={!canSubmit}>
+            {busy ? "saving…" : kind === "ssh-key" ? "generate key" : "add credential"}
+          </Button>
+        </div>
+      </form>
+    </>
   );
 }
