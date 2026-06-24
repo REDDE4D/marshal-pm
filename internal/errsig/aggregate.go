@@ -72,11 +72,13 @@ func Aggregate(lines []Line, sinceMs, nowMs int64, nBuckets int) Result {
 		a := m[id]
 		if a == nil {
 			win := []string{ln.Text}
-			for j := i + 1; j < len(lines) && len(win) < 6; j++ {
-				if lines[j].Label != ln.Label || lines[j].Agent != ln.Agent {
-					break
+			if isTraceHeader(ln.Text) {
+				for j := i + 1; j < len(lines) && len(win) < 6; j++ {
+					if lines[j].Label != ln.Label || lines[j].Agent != ln.Agent {
+						break
+					}
+					win = append(win, lines[j].Text)
 				}
-				win = append(win, lines[j].Text)
 			}
 			a = &acc{
 				sig: &Sig{

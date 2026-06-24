@@ -1,6 +1,9 @@
 package errsig
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func mkLine(ts int64, label, text string) Line {
 	return Line{TsMs: ts, Label: label, Text: text, Agent: "edge-1"}
@@ -88,5 +91,32 @@ func TestAggregateSourceStopsAtAgentBoundary(t *testing.T) {
 	}
 	if boom.Source != "" {
 		t.Fatalf("Source bled across agent boundary: got %q, want empty", boom.Source)
+	}
+}
+
+func TestAggregateSourceOnlyFromTraceHeaders(t *testing.T) {
+	lines := []Line{
+		{TsMs: 1000, Label: "api#0", Agent: "a", Text: "ERROR: connection refused to db"},
+		{TsMs: 1001, Label: "api#0", Agent: "a", Text: "panic: nil pointer"},
+		{TsMs: 1002, Label: "api#0", Agent: "a", Text: "\t/srv/app/worker.go:142 +0x1a"},
+	}
+	r := Aggregate(lines, 0, 10_000, 24)
+	var conn, pan *Sig
+	for idx := range r.Signatures {
+		switch {
+		case strings.HasPrefix(r.Signatures[idx].Sample, "ERROR: connection"):
+			conn = &r.Signatures[idx]
+		case strings.HasPrefix(r.Signatures[idx].Sample, "panic:"):
+			pan = &r.Signatures[idx]
+		}
+	}
+	if conn == nil || pan == nil {
+		t.Fatalf("missing signatures: conn=%v pan=%v", conn, pan)
+	}
+	if conn.Source != "" {
+		t.Errorf("plain error stole a frame: Source=%q, want empty", conn.Source)
+	}
+	if pan.Source != "worker.go:142" {
+		t.Errorf("panic Source=%q, want worker.go:142", pan.Source)
 	}
 }

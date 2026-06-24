@@ -107,6 +107,17 @@ func Source(window []string) string {
 	return ""
 }
 
+// isTraceHeader reports whether a line begins a multi-line stack trace whose
+// source frame appears on following lines (Go panics, Python tracebacks).
+func isTraceHeader(text string) bool {
+	l := strings.ToLower(text)
+	return strings.HasPrefix(l, "panic:") ||
+		strings.HasPrefix(l, "goroutine ") ||
+		strings.HasPrefix(l, "fatal error:") ||
+		strings.Contains(l, "traceback (most recent call last)") ||
+		strings.Contains(l, "exception")
+}
+
 // baseName returns the last path element (handles / and \).
 func baseName(p string) string {
 	if i := strings.LastIndexAny(p, `/\`); i >= 0 {
