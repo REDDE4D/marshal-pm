@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -141,5 +142,38 @@ func TestInstanceRecordsCleanExit(t *testing.T) {
 	snap := i.Snapshot()
 	if snap.ExitCode != 0 || snap.ExitReason != "exit status 0" {
 		t.Fatalf("after clean exit: code=%d reason=%q, want 0 / \"exit status 0\"", snap.ExitCode, snap.ExitReason)
+	}
+}
+
+func TestOnRestartFiresOncePerRestart(t *testing.T) {
+	var n int32
+	// Crashing process under on-failure: restarts until the cap, then errored.
+	i := NewInstance(
+		proc.Spec{Cmd: "sh", Args: []string{"-c", "exit 1"}},
+		testPolicy(config.RestartOnFailure),
+		WithOnRestart(func() { atomic.AddInt32(&n, 1) }),
+	)
+	_, wait := runInstance(i)
+	wait()
+	if atomic.LoadInt32(&n) < 1 {
+		t.Fatalf("onRestart fired %d times, want >= 1", atomic.LoadInt32(&n))
+	}
+	if got := i.Snapshot().Restarts; int32(got) != atomic.LoadInt32(&n) {
+		t.Fatalf("hook count %d != restarts counter %d", atomic.LoadInt32(&n), got)
+	}
+}
+
+func TestOnRestartDoesNotFireWhenNoRestart(t *testing.T) {
+	var n int32
+	// RestartNo: the process exits once and is not restarted.
+	i := NewInstance(
+		proc.Spec{Cmd: "sh", Args: []string{"-c", "exit 1"}},
+		testPolicy(config.RestartNo),
+		WithOnRestart(func() { atomic.AddInt32(&n, 1) }),
+	)
+	_, wait := runInstance(i)
+	wait()
+	if atomic.LoadInt32(&n) != 0 {
+		t.Fatalf("onRestart fired %d times, want 0 (RestartNo)", atomic.LoadInt32(&n))
 	}
 }
