@@ -5,8 +5,6 @@ type BarSparklineProps = {
 
 const VB_W = 120;
 const VB_H = 22;
-const BAR_W = 6;
-const BAR_GAP = 10; // spacing between bar left edges
 
 export function BarSparkline({ points, color = "var(--rose)" }: BarSparklineProps) {
   const maxVal = points.length > 0 ? Math.max(...points) : 0;
@@ -23,11 +21,14 @@ export function BarSparkline({ points, color = "var(--rose)" }: BarSparklineProp
     );
   }
 
+  const step = VB_W / points.length;
+  const barW = Math.max(1, step - 1);
+
   const bars = points.map((v, i) => {
     const barH = Math.round((v / maxVal) * VB_H);
-    const bx = i * BAR_GAP + 2;
+    const bx = i * step;
     const by = VB_H - barH;
-    return <rect key={i} x={bx} y={by} width={BAR_W} height={barH} />;
+    return <rect key={i} x={bx} y={by} width={barW} height={barH} />;
   });
 
   return (
