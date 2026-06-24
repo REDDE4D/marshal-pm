@@ -93,3 +93,29 @@ func TestLogStoresErrorCounts(t *testing.T) {
 		t.Fatalf("unknown agent = (%v, %v); want ({}, nil)", g2, err)
 	}
 }
+
+func TestLogStoresStderrSince(t *testing.T) {
+	ls := newLogStores(t.TempDir())
+	st, err := ls.get("edge-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Append([]logstore.Line{
+		{TsMs: 100, Label: "api#0", Stderr: true, Text: "boom"},
+		{TsMs: 200, Label: "api#0", Stderr: false, Text: "ok"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ls.StderrSince("edge-1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Text != "boom" {
+		t.Fatalf("got %+v, want one stderr line", got)
+	}
+	// Unknown agent -> empty, no error.
+	got, err = ls.StderrSince("nope", 0)
+	if err != nil || got != nil {
+		t.Fatalf("unknown agent = (%+v, %v), want (nil, nil)", got, err)
+	}
+}
