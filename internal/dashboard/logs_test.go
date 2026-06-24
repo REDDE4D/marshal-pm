@@ -173,7 +173,10 @@ func TestLogsDownload(t *testing.T) {
 	if cd := resp.Header.Get("Content-Disposition"); cd != `attachment; filename="dev-1-web.log"` {
 		t.Fatalf("Content-Disposition = %q", cd)
 	}
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(body), "hello") || !strings.Contains(string(body), "oops") {
 		t.Fatalf("body missing lines: %q", body)
 	}
@@ -196,5 +199,12 @@ func TestLogsDownloadRequiresParams(t *testing.T) {
 	resp, _ := c.Do(req)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("missing selector = %d, want 400", resp.StatusCode)
+	}
+	defer resp.Body.Close()
+}
+
+func TestDownloadName(t *testing.T) {
+	if got := downloadName("a/b", `c"d`); got != "a-b-c-d.log" {
+		t.Fatalf("downloadName = %q, want a-b-c-d.log", got)
 	}
 }

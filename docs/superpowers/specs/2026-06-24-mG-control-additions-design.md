@@ -108,6 +108,15 @@ No proto/manager/daemon change.
 - **whole suite:** `go test ./... -race -count=1`, `go vet ./...`, `gofmt -l .` (clean),
   `make build`.
 
+## Known limitations
+
+- **Non-online replacement skipped without error.** If a freshly started instance does not reach
+  `online` within `reloadOnlineTimeout` (10 s), the rolling reload proceeds to the next instance
+  without treating this as a failure. `Reload` is a rolling restart, not a health gate (mirrors
+  `Restart`'s behavior). The one exception is manager-context cancellation (daemon shutdown): if
+  the context is canceled while waiting for an instance to come online, `Reload` aborts immediately
+  and returns `context.Canceled` rather than continuing to spin up doomed instances.
+
 ## Out of scope (deferred to M-A)
 
 - Polished button styling/placement and final UX (M-A redesign owns this).

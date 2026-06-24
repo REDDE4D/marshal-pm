@@ -209,6 +209,16 @@ const reloadOnlineTimeout = 10 * time.Second
 // instances are restarted one at a time (stop, wait for exit, start, wait for
 // online), so a multi-instance app keeps at most one instance down at any moment.
 // A single-instance app degrades to an ordinary graceful restart.
+//
+// Known behaviors:
+//  1. A replacement instance that does not reach online within reloadOnlineTimeout
+//     is skipped past without failing the reload — Reload is a rolling restart, not
+//     a health gate (mirrors Restart's behavior).
+//  2. Reload of a stopped app also starts its instances: it iterates spec.Instances
+//     and restarts each slot regardless of prior state.
+//  3. If the manager context is canceled mid-reload (e.g. daemon shutdown), Reload
+//     aborts after the current instance wait and returns context.Canceled rather than
+//     spinning up doomed instances and reporting success.
 func (m *Manager) Reload(sel string) ([]InstanceSnapshot, error) {
 	m.opMu.Lock()
 	defer m.opMu.Unlock()
@@ -249,21 +259,35 @@ func (m *Manager) Reload(sel string) ([]InstanceSnapshot, error) {
 			}
 			m.mu.Unlock()
 
-			waitInstanceOnline(fresh, reloadOnlineTimeout)
+			waitInstanceOnline(m.ctx, fresh, reloadOnlineTimeout)
+			if m.ctx.Err() != nil {
+				return nil, m.ctx.Err()
+			}
 		}
 	}
 	return m.Describe(sel)
 }
 
-// waitInstanceOnline polls until the instance reports Online or timeout elapses.
-// Best-effort: a never-online instance simply ends the wait so reload can finish.
-func waitInstanceOnline(in *managedInstance, timeout time.Duration) {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if in.inst.Snapshot().State == supervisor.StateOnline {
+// waitInstanceOnline waits until the instance reports Online, the timeout elapses,
+// or the manager context is canceled (daemon shutdown). Uses a ticker to avoid
+// busy-polling. Best-effort: a never-online instance simply ends the wait so
+// reload can proceed (or ctx.Err() is checked by the caller after return).
+func waitInstanceOnline(ctx context.Context, in *managedInstance, timeout time.Duration) {
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for {
+		select {
+		case <-ctx.Done():
 			return
+		case <-deadline.C:
+			return
+		case <-ticker.C:
+			if in.inst.Snapshot().State == supervisor.StateOnline {
+				return
+			}
 		}
-		time.Sleep(20 * time.Millisecond)
 	}
 }
 

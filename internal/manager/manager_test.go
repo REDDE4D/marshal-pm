@@ -414,6 +414,28 @@ func TestReloadUnknownSelector(t *testing.T) {
 	}
 }
 
+func TestReloadAbortsOnContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	m := New(ctx)
+	if _, err := m.Add(sleepApp("a", 2)); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	waitOnline(m, 2)
+	// Cancel the manager context the first time the reload seam fires (mid-reload),
+	// before the replacement for the first instance can come online.
+	m.onReloadStep = func() { cancel() }
+
+	start := time.Now()
+	_, err := m.Reload("a")
+	if err == nil {
+		t.Fatal("Reload after context cancel: want error, got nil")
+	}
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Fatalf("Reload took %v; must abort promptly on cancel, not spin the full per-instance timeout", elapsed)
+	}
+	m.StopAll()
+}
+
 func TestWithLogsCapturesOutputAndRemovesOnDelete(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
