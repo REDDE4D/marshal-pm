@@ -83,3 +83,34 @@ func Signature(text string) string {
 	sum := sha256.Sum256([]byte(Normalize(text)))
 	return hex.EncodeToString(sum[:])[:12]
 }
+
+var (
+	reSrcPy = regexp.MustCompile(`File "([^"]+)", line (\d+)`)
+	reSrcGo = regexp.MustCompile(`([\w./\\-]+\.(?:go|py|js|ts|rb|rs|java|c|cc|cpp|h|hpp|php|cs|kt|swift|scala|ex|exs)):(\d+)`)
+	reSrcAt = regexp.MustCompile(`\bat ([\w./\\-]+):(\d+)`)
+)
+
+// Source returns a best-effort "file:line" from the error line plus a few
+// following lines (a stack trace), or "" when nothing recognizable is found.
+func Source(window []string) string {
+	for _, ln := range window {
+		if m := reSrcPy.FindStringSubmatch(ln); m != nil {
+			return baseName(m[1]) + ":" + m[2]
+		}
+		if m := reSrcGo.FindStringSubmatch(ln); m != nil {
+			return baseName(m[1]) + ":" + m[2]
+		}
+		if m := reSrcAt.FindStringSubmatch(ln); m != nil {
+			return baseName(m[1]) + ":" + m[2]
+		}
+	}
+	return ""
+}
+
+// baseName returns the last path element (handles / and \).
+func baseName(p string) string {
+	if i := strings.LastIndexAny(p, `/\`); i >= 0 {
+		return p[i+1:]
+	}
+	return p
+}
