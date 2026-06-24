@@ -101,7 +101,7 @@ export function AppShell({ ctx, right, onLogout, children }: AppShellProps) {
         </div>
 
         <ErrorBoundary>
-          {children}
+          <div className="content">{children}</div>
         </ErrorBoundary>
       </div>
     </div>

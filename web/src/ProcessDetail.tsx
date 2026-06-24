@@ -18,7 +18,7 @@ const LOG_CAP = 5000;
 
 function mib(b: number): string { return b <= 0 ? "—" : `${(b / 1048576).toFixed(1)}`; }
 
-type Sub = "over" | "files" | "logs";
+type Sub = "over" | "files";
 
 export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: string; onLogout: () => void }) {
   const [p, setP] = useState<{
@@ -145,13 +145,13 @@ export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: 
   const showFiles = p?.source === "git";
 
   return (
-    <div className="content-body">
+    <>
       {/* Breadcrumb */}
       <div className="crumb">
         <a href="#/" onClick={(e) => { e.preventDefault(); navigate("#/"); }}>fleet</a>
-        <span className="sep">/</span>
+        <span className="s">/</span>
         <a href="#/" onClick={(e) => { e.preventDefault(); navigate("#/"); }}>{agent}</a>
-        <span className="sep">/</span>
+        <span className="s">/</span>
         <b>{proc}</b>
       </div>
 
@@ -275,6 +275,6 @@ export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: 
       )}
 
       {/* Logs subview: clicking the Logs subtab navigates away, so this never renders */}
-    </div>
+    </>
   );
 }
