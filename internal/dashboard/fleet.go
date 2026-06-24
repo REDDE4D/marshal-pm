@@ -25,6 +25,18 @@ type procView struct {
 	ExitReason string  `json:"exit_reason,omitempty"` // "" = never exited
 }
 
+type hostView struct {
+	CPUPercent float64 `json:"cpu_percent"`
+	Load1      float64 `json:"load1"`
+	Load5      float64 `json:"load5"`
+	Load15     float64 `json:"load15"`
+	MemTotal   uint64  `json:"mem_total"`
+	MemUsed    uint64  `json:"mem_used"`
+	MemUsedPct float64 `json:"mem_used_pct"`
+	NetRxBps   float64 `json:"net_rx_bps"`
+	NetTxBps   float64 `json:"net_tx_bps"`
+}
+
 type agentView struct {
 	Name           string     `json:"name"`
 	Connected      bool       `json:"connected"`
@@ -36,6 +48,7 @@ type agentView struct {
 	Arch           string     `json:"arch,omitempty"`
 	MarshalVersion string     `json:"marshal_version,omitempty"`
 	HostBootUnix   int64      `json:"host_boot_unix,omitempty"`
+	Host           *hostView  `json:"host,omitempty"`
 }
 
 // fleetView maps the live registry state into JSON-friendly view structs.
@@ -62,6 +75,20 @@ func fleetView(l FleetLister) []agentView {
 				ExitReason: p.GetExitReason(),
 			})
 		}
+		var host *hostView
+		if h := a.GetHost(); h != nil {
+			host = &hostView{
+				CPUPercent: h.GetCpuPercent(),
+				Load1:      h.GetLoad1(),
+				Load5:      h.GetLoad5(),
+				Load15:     h.GetLoad15(),
+				MemTotal:   h.GetMemTotal(),
+				MemUsed:    h.GetMemUsed(),
+				MemUsedPct: h.GetMemUsedPct(),
+				NetRxBps:   h.GetNetRxBps(),
+				NetTxBps:   h.GetNetTxBps(),
+			}
+		}
 		out = append(out, agentView{
 			Name:           a.GetAgentName(),
 			Connected:      a.GetConnected(),
@@ -73,6 +100,7 @@ func fleetView(l FleetLister) []agentView {
 			Arch:           a.GetArch(),
 			MarshalVersion: a.GetMarshalVersion(),
 			HostBootUnix:   a.GetHostBootUnix(),
+			Host:           host,
 		})
 	}
 	return out
