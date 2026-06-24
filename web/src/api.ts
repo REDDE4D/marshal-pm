@@ -13,6 +13,8 @@ export type Proc = {
   open_fds: number; // -1 = unavailable on this platform
   exit_code: number;
   exit_reason?: string; // "" / absent = never exited
+  restarts_24h: number;
+  last_restart_unix?: number; // unix seconds; absent/0 = none in retention
 };
 
 export type AgentHost = {
