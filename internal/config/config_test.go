@@ -243,6 +243,25 @@ func TestValidateAppNames(t *testing.T) {
 	}
 }
 
+// TestServerOnlyConfigIsValid verifies that a config with a valid server block
+// and zero apps is accepted — fleet agents start with no apps and receive them
+// later via fleet deploy.
+func TestServerOnlyConfigIsValid(t *testing.T) {
+	_, err := Parse([]byte("server:\n  address: srv:9000\n  fingerprint: deadbeef\n"))
+	if err != nil {
+		t.Fatalf("server-only config must be valid, got: %v", err)
+	}
+}
+
+// TestNoServerNoAppsIsInvalid verifies that a config with neither a server
+// block nor any apps still returns an error (standalone-mode guard preserved).
+func TestNoServerNoAppsIsInvalid(t *testing.T) {
+	_, err := Parse([]byte("{}"))
+	if err == nil {
+		t.Fatal("expected error for config with no server and no apps")
+	}
+}
+
 func TestGitSourceCredentialRoundTrip(t *testing.T) {
 	src := GitSource{Repo: "https://x/y.git", Credential: "gh-ci"}
 	b, err := json.Marshal(src)

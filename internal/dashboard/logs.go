@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 type LogsHistory interface {
 	Since(agent, selector string, afterRowID int64, limit int, filter logstore.StreamFilter, text string) ([]logstore.StoredLine, int64, error)
 	ErrorCounts(agent string, sinceMs int64) (map[string]int64, error)
+	StderrSince(agent string, sinceMs int64) ([]logstore.StoredLine, error)
 }
 
 type logLineView struct {
@@ -55,6 +57,47 @@ func (h *handler) logs(w http.ResponseWriter, r *http.Request) {
 		out.Lines = append(out.Lines, logLineView{Ts: ln.TsMs, Name: name, Instance: idx, Stderr: ln.Stderr, Text: ln.Text})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// logsDownload serves GET /api/logs/download: the full retained log history for
+// one agent/selector as a plain-text attachment, honoring the same stream/q
+// filters as /api/logs (no line limit).
+func (h *handler) logsDownload(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	agent := q.Get("agent")
+	selector := q.Get("selector")
+	if agent == "" || selector == "" {
+		http.Error(w, "agent and selector required", http.StatusBadRequest)
+		return
+	}
+	lines, _, err := h.logsHist.Since(agent, selector, 0, 0, streamFilterFor(q.Get("stream")), q.Get("q"))
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", downloadName(agent, selector)))
+	for _, ln := range lines {
+		stream := "out"
+		if ln.Stderr {
+			stream = "err"
+		}
+		ts := time.UnixMilli(ln.TsMs).UTC().Format(time.RFC3339)
+		fmt.Fprintf(w, "%s %s %s | %s\n", ts, stream, ln.Label, ln.Text)
+	}
+}
+
+// downloadName builds a filesystem-safe "<agent>-<selector>.log" attachment name.
+func downloadName(agent, selector string) string {
+	repl := func(s string) string {
+		return strings.Map(func(r rune) rune {
+			if r == '/' || r == '\\' || r == '"' {
+				return '-'
+			}
+			return r
+		}, s)
+	}
+	return repl(agent) + "-" + repl(selector) + ".log"
 }
 
 func streamFilterFor(s string) logstore.StreamFilter {

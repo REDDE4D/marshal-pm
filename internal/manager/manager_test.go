@@ -282,6 +282,160 @@ func TestListReportsGitSource(t *testing.T) {
 	}
 }
 
+// fakeSink records restart events for assertions.
+type fakeSink struct {
+	mu     sync.Mutex
+	events []string // labels
+}
+
+func (f *fakeSink) Record(label string, tsMs int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, label)
+	return nil
+}
+func (f *fakeSink) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.events)
+}
+
+func TestManagerWiresRestartSink(t *testing.T) {
+	sink := &fakeSink{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := New(ctx, WithRestartSink(sink))
+	// A crashing app under on-failure restarts a few times, then errors.
+	app := config.App{
+		Name: "crash", Cmd: "sh", Args: []string{"-c", "exit 1"},
+		Instances: 1, Restart: config.RestartOnFailure, MaxRestarts: 2,
+		KillTimeout: config.Duration{Duration: time.Second},
+	}
+	if _, err := m.Add(app); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	// Wait for the crash-restart cycle to produce at least one recorded restart.
+	deadline := time.Now().Add(5 * time.Second)
+	for sink.count() == 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if sink.count() < 1 {
+		t.Fatalf("sink recorded %d restarts, want >= 1", sink.count())
+	}
+	if sink.events[0] != "crash#0" {
+		t.Fatalf("label = %q, want crash#0", sink.events[0])
+	}
+}
+
+func TestReloadRestartsAllInstances(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := New(ctx)
+	if _, err := m.Add(sleepApp("a", 2)); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if got := waitOnline(m, 2); got != 2 {
+		t.Fatalf("setup online = %d, want 2", got)
+	}
+
+	before := map[string]int{}
+	for _, s := range m.List() {
+		before[s.Label] = s.Pid
+	}
+
+	if _, err := m.Reload("a"); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
+	if got := waitOnline(m, 2); got != 2 {
+		t.Fatalf("after Reload online = %d, want 2", got)
+	}
+	for _, s := range m.List() {
+		if s.State != supervisor.StateOnline {
+			t.Fatalf("%s state = %s, want online", s.Label, s.State)
+		}
+		if s.Pid == before[s.Label] || s.Pid == 0 {
+			t.Fatalf("%s pid = %d (before %d); want a fresh non-zero pid", s.Label, s.Pid, before[s.Label])
+		}
+	}
+	m.StopAll()
+}
+
+func TestReloadIsRolling(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := New(ctx)
+	if _, err := m.Add(sleepApp("a", 2)); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	waitOnline(m, 2)
+
+	// minOnline starts at the instance count (2). A never-firing seam leaves it at
+	// 2, which fails the == 1 assertion below — catching a bulk-stop-then-restart
+	// implementation that never fires the seam mid-down-window.
+	minOnline := 2
+	steps := 0
+	m.onReloadStep = func() {
+		steps++
+		online := 0
+		for _, s := range m.List() {
+			if s.State == supervisor.StateOnline {
+				online++
+			}
+		}
+		if online < minOnline {
+			minOnline = online
+		}
+	}
+
+	if _, err := m.Reload("a"); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
+	// The seam must have fired at least once.
+	if steps == 0 {
+		t.Fatal("onReloadStep never fired; seam not called during reload")
+	}
+	// A rolling reload of a 2-instance app takes exactly one instance down at a
+	// time. At the tightest observed point, exactly 1 instance must be online
+	// (i.e. exactly 1 down). If minOnline == 2 the seam fired before any
+	// instance was stopped; if minOnline == 0 two instances were down at once —
+	// both indicate a non-rolling implementation.
+	if minOnline != 1 {
+		t.Fatalf("minOnline during reload = %d, want == 1 (exactly one down at a time)", minOnline)
+	}
+	m.StopAll()
+}
+
+func TestReloadUnknownSelector(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := New(ctx)
+	if _, err := m.Reload("nope"); err == nil {
+		t.Fatal("Reload of unknown selector: want error, got nil")
+	}
+}
+
+func TestReloadAbortsOnContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	m := New(ctx)
+	if _, err := m.Add(sleepApp("a", 2)); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	waitOnline(m, 2)
+	// Cancel the manager context the first time the reload seam fires (mid-reload),
+	// before the replacement for the first instance can come online.
+	m.onReloadStep = func() { cancel() }
+
+	start := time.Now()
+	_, err := m.Reload("a")
+	if err == nil {
+		t.Fatal("Reload after context cancel: want error, got nil")
+	}
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Fatalf("Reload took %v; must abort promptly on cancel, not spin the full per-instance timeout", elapsed)
+	}
+	m.StopAll()
+}
+
 func TestWithLogsCapturesOutputAndRemovesOnDelete(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

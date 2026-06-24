@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -100,6 +101,14 @@ func (s *Server) Connect(stream pb.Fleet_ConnectServer) error {
 				return status.Error(codes.Unauthenticated, "unauthenticated connect")
 			}
 			s.reg.Open(name)
+			s.reg.SetMeta(name, AgentMeta{
+				Hostname:       m.Hello.GetHostname(),
+				IP:             peerIP(ctx),
+				OS:             m.Hello.GetOs(),
+				Arch:           m.Hello.GetArch(),
+				MarshalVersion: m.Hello.GetMarshalVersion(),
+				HostBootUnix:   m.Hello.GetHostBootUnix(),
+			})
 			sess = s.broker.register(name, stream.Send)
 			if s.stores != nil {
 				if st, err := s.stores.get(name); err == nil {
@@ -114,7 +123,7 @@ func (s *Server) Connect(stream pb.Fleet_ConnectServer) error {
 			_ = sess.sendMsg(&pb.ServerMessage{Msg: &pb.ServerMessage_HelloAck{HelloAck: ack}})
 		case *pb.AgentMessage_Snapshot:
 			if name != "" {
-				s.reg.Update(name, m.Snapshot.GetProcs())
+				s.reg.Update(name, m.Snapshot.GetProcs(), m.Snapshot.GetHost())
 			}
 		case *pb.AgentMessage_Metrics:
 			if name != "" && s.stores != nil {
@@ -385,7 +394,8 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 		if cerr == nil {
 			cw = creds
 		}
-		// Notification service: detector polls the registry; dispatcher routes to channels.
+		// Notification service: detector polls the registry; the coalescer
+		// merges transient alert/recovery blips; the dispatcher routes to channels.
 		var notifStore *notify.Store
 		if box, berr := secretbox.Load(dataDir); berr != nil {
 			log.Printf("server: notifications disabled: %v", berr)
@@ -394,19 +404,34 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 		} else {
 			notifStore = ns
 			disp := notify.NewDispatcher(ns, channels.New)
-			det := notify.NewDetector(reg, disp, 2*time.Second)
+			co := notify.NewCoalescer(disp, ns)
+			det := notify.NewDetector(reg, co, 2*time.Second)
+			go co.Run(ctx)
 			go det.Run(ctx)
 		}
 		var nw dashboard.Notifications
 		if notifStore != nil {
 			nw = notifStore
 		}
+		em := enrollMinter{auth: auth, fp: fp, fleetAddr: lis.Addr().String()}
 		go func() {
-			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath, auditPath, cw, nw, channels.New); err != nil {
+			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath, auditPath, cw, nw, channels.New, em); err != nil {
 				log.Printf("dashboard: %v", err)
 			}
 		}()
 		log.Printf("dashboard: serving on %s", httpAddr)
 	}
 	return Serve(ctx, lis, srv, cert)
+}
+
+// peerIP returns the agent's remote IP from the gRPC peer (port stripped), or "".
+func peerIP(ctx context.Context) string {
+	p, ok := peer.FromContext(ctx)
+	if !ok || p.Addr == nil {
+		return ""
+	}
+	if host, _, err := net.SplitHostPort(p.Addr.String()); err == nil {
+		return host
+	}
+	return p.Addr.String()
 }

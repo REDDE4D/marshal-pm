@@ -149,3 +149,64 @@ func TestDispatcherDeliversRecoveryWhenEnabled(t *testing.T) {
 		t.Fatalf("recovered should deliver when enabled, got %d", len(senders["tg"].sent))
 	}
 }
+
+func TestDispatcherPerTypeCooldownOverride(t *testing.T) {
+	st := &fakeStore{
+		channels: []Channel{{Name: "tg", Type: "telegram", Enabled: true}},
+		rules:    []Rule{{Name: "all", Enabled: true, Channels: []string{"tg"}}},
+		settings: Settings{CooldownSeconds: 300, CooldownOverrides: map[EventType]int{EventRecovered: 30}},
+	}
+	cur := time.Unix(1000, 0)
+	d, senders := newTestDispatcher(t, st, func() time.Time { return cur })
+	rec := Event{Type: EventRecovered, Agent: "dev-1", Process: "api"}
+	d.Emit(rec)
+	cur = cur.Add(60 * time.Second) // past the 30s override, within the 300s global
+	d.Emit(rec)
+	if n := len(senders["tg"].sent); n != 2 {
+		t.Fatalf("recovered should re-fire after its 30s override, got %d", n)
+	}
+	// A different type still uses the 300s global: a repeat within 60s is suppressed.
+	crash := Event{Type: EventCrash, Agent: "dev-1", Process: "api"}
+	d.Emit(crash)
+	cur = cur.Add(60 * time.Second)
+	d.Emit(crash)
+	if n := len(senders["tg"].sent); n != 3 {
+		t.Fatalf("crash should obey the 300s global (one extra send), got %d total", n)
+	}
+}
+
+func TestDispatcherZeroOverrideDisablesCooldown(t *testing.T) {
+	st := &fakeStore{
+		channels: []Channel{{Name: "tg", Type: "telegram", Enabled: true}},
+		rules:    []Rule{{Name: "all", Enabled: true, Channels: []string{"tg"}}},
+		settings: Settings{CooldownSeconds: 300, CooldownOverrides: map[EventType]int{EventCrash: 0}},
+	}
+	now := time.Unix(1000, 0)
+	d, senders := newTestDispatcher(t, st, func() time.Time { return now })
+	ev := Event{Type: EventCrash, Agent: "dev-1", Process: "api"}
+	d.Emit(ev)
+	d.Emit(ev) // same instant; zero cooldown ⇒ both allowed
+	if n := len(senders["tg"].sent); n != 2 {
+		t.Fatalf("zero override disables cooldown, want 2 sends, got %d", n)
+	}
+}
+
+func TestDispatcherPrunesExpiredEntries(t *testing.T) {
+	st := &fakeStore{
+		channels: []Channel{{Name: "tg", Type: "telegram", Enabled: true}},
+		rules:    []Rule{{Name: "all", Enabled: true, Channels: []string{"tg"}}},
+		settings: Settings{CooldownSeconds: 300},
+	}
+	cur := time.Unix(1000, 0)
+	d, _ := newTestDispatcher(t, st, func() time.Time { return cur })
+	d.Emit(Event{Type: EventCrash, Agent: "dev-1", Process: "api"})
+	d.Emit(Event{Type: EventCrash, Agent: "dev-2", Process: "api"}) // within cooldown: both retained
+	if n := len(d.last); n != 2 {
+		t.Fatalf("two live keys within cooldown, want 2, got %d", n)
+	}
+	cur = cur.Add(301 * time.Second) // both now past the 300s cooldown
+	d.Emit(Event{Type: EventCrash, Agent: "dev-3", Process: "api"})
+	if n := len(d.last); n != 1 {
+		t.Fatalf("expired entries should be pruned, want 1 (only dev-3), got %d", n)
+	}
+}

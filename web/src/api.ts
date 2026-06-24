@@ -9,6 +9,24 @@ export type Proc = {
   source?: "command" | "git";
   detail?: string;
   credential?: string;
+  threads: number;
+  open_fds: number; // -1 = unavailable on this platform
+  exit_code: number;
+  exit_reason?: string; // "" / absent = never exited
+  restarts_24h: number;
+  last_restart_unix?: number; // unix seconds; absent/0 = none in retention
+};
+
+export type AgentHost = {
+  cpu_percent: number;
+  load1: number;
+  load5: number;
+  load15: number;
+  mem_total: number;
+  mem_used: number;
+  mem_used_pct: number;
+  net_rx_bps: number;
+  net_tx_bps: number;
 };
 
 export type Agent = {
@@ -16,6 +34,13 @@ export type Agent = {
   connected: boolean;
   last_seen_unix: number;
   procs: Proc[];
+  hostname?: string;
+  ip?: string;
+  os?: string;
+  arch?: string;
+  marshal_version?: string;
+  host_boot_unix?: number;
+  host?: AgentHost;
 };
 
 export async function getSession(): Promise<string | null> {
@@ -123,7 +148,7 @@ export type ControlResult = { ok: boolean; error?: string };
 export async function control(
   agent: string,
   selector: string,
-  action: "restart" | "stop" | "delete",
+  action: "restart" | "stop" | "delete" | "reload",
 ): Promise<ControlResult> {
   const r = await fetch("/api/control", {
     method: "POST",
@@ -293,6 +318,13 @@ export async function readFile(agent: string, app: string, path: string): Promis
   return r.json();
 }
 
+// logsDownloadURL builds the GET /api/logs/download link for a proc, honoring the
+// current stream/search filters. Used as a plain <a href> (cookie auth applies).
+export function logsDownloadURL(agent: string, selector: string, opts: { stream: string; q: string }): string {
+  const q = new URLSearchParams({ agent, selector, stream: opts.stream, q: opts.q });
+  return `/api/logs/download?${q.toString()}`;
+}
+
 export function fileDownloadURL(agent: string, app: string, path: string): string {
   const q = new URLSearchParams({ path, raw: "1" });
   return `/api/fleet/${encodeURIComponent(agent)}/apps/${encodeURIComponent(app)}/file?${q}`;
@@ -370,7 +402,7 @@ export type NotifRule = {
   process: string;
   channels: string[];
 };
-export type NotifSettings = { cooldown_seconds: number; suppress_recovery?: boolean };
+export type NotifSettings = { cooldown_seconds: number; suppress_recovery?: boolean; cooldown_overrides?: Record<string, number>; coalesce_window_seconds?: number };
 export type NotifConfig = { channels: NotifChannel[]; rules: NotifRule[]; settings: NotifSettings };
 
 export async function getNotifications(): Promise<NotifConfig> {
@@ -429,4 +461,50 @@ export async function putNotifSettings(s: NotifSettings): Promise<{ ok: boolean 
     headers: { "Content-Type": "application/json" }, body: JSON.stringify(s),
   });
   return { ok: r.ok };
+}
+
+export type ConnectInfo = { token: string; fingerprint: string; default_address: string };
+
+export async function connectToken(address?: string, name?: string): Promise<ConnectInfo> {
+  const body: Record<string, string> = {};
+  if (address) body.address = address;
+  if (name) body.name = name;
+  const r = await fetch("/api/fleet/connect-token", {
+    method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`connect-token failed: ${r.status}`);
+  return (await r.json()) as ConnectInfo;
+}
+
+export type ErrSignature = {
+  id: string;
+  sample: string;
+  source?: string;
+  agent: string;
+  proc: string;
+  affected: string[];
+  count: number;
+  first_unix: number;
+  last_unix: number;
+  buckets: number[];
+};
+
+export type ErrorsResponse = {
+  range: string;
+  since: number;
+  now: number;
+  cluster: { errors: number; signatures: number; affected_procs: number; last_error_unix: number };
+  signatures: ErrSignature[];
+  truncated: boolean;
+};
+
+export async function getErrors(range: string, agent?: string): Promise<ErrorsResponse> {
+  const q = new URLSearchParams({ range });
+  if (agent) q.set("agent", agent);
+  const r = await fetch(`/api/errors?${q.toString()}`);
+  if (r.status === 401) throw new Error("unauthorized");
+  if (!r.ok) throw new Error(`errors ${r.status}`);
+  return (await r.json()) as ErrorsResponse;
 }

@@ -454,21 +454,27 @@ func (x *Selector) GetTarget() string {
 
 // ProcInfo mirrors a supervised instance snapshot. cpu/mem are reserved for M3.
 type ProcInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	InstanceId    int32                  `protobuf:"varint,3,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
-	State         string                 `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
-	Pid           int32                  `protobuf:"varint,5,opt,name=pid,proto3" json:"pid,omitempty"`
-	UptimeMs      int64                  `protobuf:"varint,6,opt,name=uptime_ms,json=uptimeMs,proto3" json:"uptime_ms,omitempty"`
-	Restarts      int32                  `protobuf:"varint,7,opt,name=restarts,proto3" json:"restarts,omitempty"`
-	Cpu           float64                `protobuf:"fixed64,8,opt,name=cpu,proto3" json:"cpu,omitempty"`              // M3
-	Mem           int64                  `protobuf:"varint,9,opt,name=mem,proto3" json:"mem,omitempty"`               // M3
-	Source        string                 `protobuf:"bytes,10,opt,name=source,proto3" json:"source,omitempty"`         // M21 "command" | "git" — drives the redeploy button
-	Detail        string                 `protobuf:"bytes,11,opt,name=detail,proto3" json:"detail,omitempty"`         // M21 status summary for synthetic deploy entries
-	Credential    string                 `protobuf:"bytes,12,opt,name=credential,proto3" json:"credential,omitempty"` // M22: credential name (non-secret) → drives redeploy resolution
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Id              int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name            string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	InstanceId      int32                  `protobuf:"varint,3,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	State           string                 `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	Pid             int32                  `protobuf:"varint,5,opt,name=pid,proto3" json:"pid,omitempty"`
+	UptimeMs        int64                  `protobuf:"varint,6,opt,name=uptime_ms,json=uptimeMs,proto3" json:"uptime_ms,omitempty"`
+	Restarts        int32                  `protobuf:"varint,7,opt,name=restarts,proto3" json:"restarts,omitempty"`
+	Cpu             float64                `protobuf:"fixed64,8,opt,name=cpu,proto3" json:"cpu,omitempty"`                                                  // M3
+	Mem             int64                  `protobuf:"varint,9,opt,name=mem,proto3" json:"mem,omitempty"`                                                   // M3
+	Source          string                 `protobuf:"bytes,10,opt,name=source,proto3" json:"source,omitempty"`                                             // M21 "command" | "git" — drives the redeploy button
+	Detail          string                 `protobuf:"bytes,11,opt,name=detail,proto3" json:"detail,omitempty"`                                             // M21 status summary for synthetic deploy entries
+	Credential      string                 `protobuf:"bytes,12,opt,name=credential,proto3" json:"credential,omitempty"`                                     // M22: credential name (non-secret) → drives redeploy resolution
+	Threads         int32                  `protobuf:"varint,13,opt,name=threads,proto3" json:"threads,omitempty"`                                          // M-D: thread count, summed over the process group
+	OpenFds         int32                  `protobuf:"varint,14,opt,name=open_fds,json=openFds,proto3" json:"open_fds,omitempty"`                           // M-D: open FD count; -1 = unavailable on this platform
+	ExitCode        int32                  `protobuf:"varint,15,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`                        // M-D: last exit code; -1 if signaled / spawn failure
+	ExitReason      string                 `protobuf:"bytes,16,opt,name=exit_reason,json=exitReason,proto3" json:"exit_reason,omitempty"`                   // M-D: last exit reason; "" = never exited
+	Restarts24H     int32                  `protobuf:"varint,17,opt,name=restarts24h,proto3" json:"restarts24h,omitempty"`                                  // M-E: restart events in the trailing 24h (JSON: restarts_24h)
+	LastRestartUnix int64                  `protobuf:"varint,18,opt,name=last_restart_unix,json=lastRestartUnix,proto3" json:"last_restart_unix,omitempty"` // M-E: unix seconds of the most recent restart (0 = none in retention)
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ProcInfo) Reset() {
@@ -583,6 +589,48 @@ func (x *ProcInfo) GetCredential() string {
 		return x.Credential
 	}
 	return ""
+}
+
+func (x *ProcInfo) GetThreads() int32 {
+	if x != nil {
+		return x.Threads
+	}
+	return 0
+}
+
+func (x *ProcInfo) GetOpenFds() int32 {
+	if x != nil {
+		return x.OpenFds
+	}
+	return 0
+}
+
+func (x *ProcInfo) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
+	}
+	return 0
+}
+
+func (x *ProcInfo) GetExitReason() string {
+	if x != nil {
+		return x.ExitReason
+	}
+	return ""
+}
+
+func (x *ProcInfo) GetRestarts24H() int32 {
+	if x != nil {
+		return x.Restarts24H
+	}
+	return 0
+}
+
+func (x *ProcInfo) GetLastRestartUnix() int64 {
+	if x != nil {
+		return x.LastRestartUnix
+	}
+	return 0
 }
 
 type ProcList struct {
@@ -1055,7 +1103,7 @@ const file_marshal_v1_daemon_proto_rawDesc = "" +
 	"\fStartRequest\x12'\n" +
 	"\x04apps\x18\x01 \x03(\v2\x13.marshal.v1.AppSpecR\x04apps\"\"\n" +
 	"\bSelector\x12\x16\n" +
-	"\x06target\x18\x01 \x01(\tR\x06target\"\xa4\x02\n" +
+	"\x06target\x18\x01 \x01(\tR\x06target\"\xe5\x03\n" +
 	"\bProcInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1f\n" +
@@ -1072,7 +1120,14 @@ const file_marshal_v1_daemon_proto_rawDesc = "" +
 	"\x06detail\x18\v \x01(\tR\x06detail\x12\x1e\n" +
 	"\n" +
 	"credential\x18\f \x01(\tR\n" +
-	"credential\"6\n" +
+	"credential\x12\x18\n" +
+	"\athreads\x18\r \x01(\x05R\athreads\x12\x19\n" +
+	"\bopen_fds\x18\x0e \x01(\x05R\aopenFds\x12\x1b\n" +
+	"\texit_code\x18\x0f \x01(\x05R\bexitCode\x12\x1f\n" +
+	"\vexit_reason\x18\x10 \x01(\tR\n" +
+	"exitReason\x12 \n" +
+	"\vrestarts24h\x18\x11 \x01(\x05R\vrestarts24h\x12*\n" +
+	"\x11last_restart_unix\x18\x12 \x01(\x03R\x0flastRestartUnix\"6\n" +
 	"\bProcList\x12*\n" +
 	"\x05procs\x18\x01 \x03(\v2\x14.marshal.v1.ProcInfoR\x05procs\"\x81\x01\n" +
 	"\n" +

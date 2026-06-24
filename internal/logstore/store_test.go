@@ -1,6 +1,7 @@
 package logstore
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -243,5 +244,32 @@ func TestErrorCounts(t *testing.T) {
 	}
 	if _, present := got["ghost#0"]; present {
 		t.Fatalf("ghost#0 should be absent, got %d", got["ghost#0"])
+	}
+}
+
+func TestStderrSince(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "logs.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.Append([]Line{
+		{TsMs: 100, Label: "a#0", Stderr: true, Text: "old"},  // before since
+		{TsMs: 200, Label: "a#0", Stderr: false, Text: "out"}, // stdout
+		{TsMs: 300, Label: "a#1", Stderr: true, Text: "b-err"},
+		{TsMs: 400, Label: "a#0", Stderr: true, Text: "a-err"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.StderrSince([]string{"a#0", "a#1"}, 150)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d rows, want 2: %+v", len(got), got)
+	}
+	// ordered by (label, ts): a#0/400 then a#1/300.
+	if got[0].Label != "a#0" || got[0].Text != "a-err" || got[1].Label != "a#1" {
+		t.Fatalf("order wrong: %+v", got)
 	}
 }

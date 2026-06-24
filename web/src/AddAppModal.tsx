@@ -1,7 +1,11 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { Agent, CommandSource, GitSource, CredentialMeta, addApp, listCredentials } from "./api";
+import { Modal } from "./components/Modal";
+import { Field, Input, Button, Segment } from "./components/Controls";
 
 type EnvRow = { key: string; value: string };
+
+const FORM_ID = "add-app-form";
 
 export function AddAppModal({
   agents,
@@ -86,102 +90,86 @@ export function AddAppModal({
     }
   }
 
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <div className="modal-head">
-          <span className="modal-title">add app</span>
-          <button type="button" className="ctl-btn" onClick={onClose}>✕</button>
-        </div>
+  const footer = (
+    <>
+      <Button variant="ghost" type="button" onClick={onClose}>cancel</Button>
+      <Button type="submit" form={FORM_ID} disabled={!canSubmit}>
+        {busy ? "adding…" : "add app"}
+      </Button>
+    </>
+  );
 
-        <label className="field">
-          target agent
+  return (
+    <Modal title="Add application" onClose={onClose} footer={footer}>
+      <form id={FORM_ID} onSubmit={submit}>
+        <Field label="target agent">
           {connected.length === 0 ? (
             <span className="hint">no agents connected</span>
           ) : (
-            <select value={agent} onChange={(e) => setAgent(e.target.value)}>
-              <option value="" disabled>
-                select…
-              </option>
+            <select className="inp" value={agent} onChange={(e) => setAgent(e.target.value)}>
+              <option value="" disabled>select…</option>
               {connected.map((a) => (
-                <option key={a.name} value={a.name}>
-                  {a.name}
-                </option>
+                <option key={a.name} value={a.name}>{a.name}</option>
               ))}
             </select>
           )}
-        </label>
+        </Field>
 
-        <div className="source-toggle seg">
-          <button
-            type="button"
-            className={sourceType === "command" ? "active" : ""}
-            onClick={() => setSourceType("command")}
-          >
-            command
-          </button>
-          <button
-            type="button"
-            className={sourceType === "git" ? "active" : ""}
-            onClick={() => setSourceType("git")}
-          >
-            from git
-          </button>
-        </div>
+        <Field label="source">
+          <Segment<"command" | "git">
+            options={[
+              { value: "command", label: "command" },
+              { value: "git", label: "from git" },
+            ]}
+            value={sourceType}
+            onChange={setSourceType}
+          />
+        </Field>
 
-        <label className="field">
-          name
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="web" />
-        </label>
+        <Field label="name">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="web" />
+        </Field>
 
         {sourceType === "git" && (
-          <label className="field">
-            repo
-            <input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="https://github.com/user/repo" />
-          </label>
+          <Field label="repo">
+            <Input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="https://github.com/user/repo" />
+          </Field>
         )}
         {sourceType === "git" && (
-          <label className="field">
-            ref
-            <input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="default branch" />
-          </label>
+          <Field label="ref">
+            <Input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="default branch" />
+          </Field>
         )}
         {sourceType === "git" && (
-          <label className="field">
-            build command
-            <input value={build} onChange={(e) => setBuild(e.target.value)} placeholder="auto-detect" />
-          </label>
+          <Field label="build command">
+            <Input value={build} onChange={(e) => setBuild(e.target.value)} placeholder="auto-detect" />
+          </Field>
         )}
         {sourceType === "git" && (
-          <label className="field">
-            credential
-            <select value={credential} onChange={(e) => setCredential(e.target.value)}>
+          <Field label="credential">
+            <select className="inp" value={credential} onChange={(e) => setCredential(e.target.value)}>
               <option value="">None (public repo / host auth)</option>
               {creds.map((c) => (
                 <option key={c.name} value={c.name}>{c.name} ({c.username})</option>
               ))}
             </select>
-          </label>
+          </Field>
         )}
 
-        <label className="field">
-          {sourceType === "git" ? "start command" : "command"}
-          <input value={cmd} onChange={(e) => setCmd(e.target.value)} placeholder="/usr/bin/node" />
-        </label>
-        <label className="field">
-          args
-          <input value={args} onChange={(e) => setArgs(e.target.value)} placeholder="server.js --port 3000" />
-        </label>
+        <Field label={sourceType === "git" ? "start command" : "command"}>
+          <Input value={cmd} onChange={(e) => setCmd(e.target.value)} placeholder="/usr/bin/node" />
+        </Field>
+        <Field label="args">
+          <Input value={args} onChange={(e) => setArgs(e.target.value)} placeholder="server.js --port 3000" />
+        </Field>
         {sourceType === "command" && (
-          <label className="field">
-            working dir
-            <input value={cwd} onChange={(e) => setCwd(e.target.value)} placeholder="/srv/app" />
-          </label>
+          <Field label="working dir">
+            <Input value={cwd} onChange={(e) => setCwd(e.target.value)} placeholder="/srv/app" />
+          </Field>
         )}
-        <label className="field">
-          instances
-          <input value={instances} onChange={(e) => setInstances(e.target.value)} placeholder="1" inputMode="numeric" />
-        </label>
+        <Field label="instances">
+          <Input value={instances} onChange={(e) => setInstances(e.target.value)} placeholder="1" inputMode="numeric" />
+        </Field>
 
         <button type="button" className="adv-toggle" onClick={() => setShowAdv((v) => !v)}>
           {showAdv ? "▾" : "▸"} advanced
@@ -189,23 +177,22 @@ export function AddAppModal({
         {showAdv && (
           <div className="adv">
             {sourceType === "git" && (
-              <label className="field">
-                subdir
-                <input value={subdir} onChange={(e) => setSubdir(e.target.value)} placeholder="packages/server" />
-              </label>
+              <Field label="subdir">
+                <Input value={subdir} onChange={(e) => setSubdir(e.target.value)} placeholder="packages/server" />
+              </Field>
             )}
             <div className="field">
-              env
+              <label>env</label>
               {env.map((row, i) => (
                 <div className="env-row" key={i}>
-                  <input
+                  <Input
                     placeholder="KEY"
                     value={row.key}
                     onChange={(e) =>
                       setEnv((rs) => rs.map((r, j) => (j === i ? { ...r, key: e.target.value } : r)))
                     }
                   />
-                  <input
+                  <Input
                     placeholder="value"
                     value={row.value}
                     onChange={(e) =>
@@ -221,39 +208,28 @@ export function AddAppModal({
                 + env var
               </button>
             </div>
-            <label className="field">
-              restart
-              <select value={restart} onChange={(e) => setRestart(e.target.value)}>
+            <Field label="restart">
+              <select className="inp" value={restart} onChange={(e) => setRestart(e.target.value)}>
                 <option value="always">always</option>
                 <option value="on-failure">on-failure</option>
                 <option value="no">no</option>
               </select>
-            </label>
+            </Field>
             {sourceType === "command" && (
               <>
-                <label className="field">
-                  max restarts
-                  <input value={maxRestarts} onChange={(e) => setMaxRestarts(e.target.value)} placeholder="16" inputMode="numeric" />
-                </label>
-                <label className="field">
-                  kill timeout
-                  <input value={killTimeout} onChange={(e) => setKillTimeout(e.target.value)} placeholder="5s" />
-                </label>
+                <Field label="max restarts">
+                  <Input value={maxRestarts} onChange={(e) => setMaxRestarts(e.target.value)} placeholder="16" inputMode="numeric" />
+                </Field>
+                <Field label="kill timeout">
+                  <Input value={killTimeout} onChange={(e) => setKillTimeout(e.target.value)} placeholder="5s" />
+                </Field>
               </>
             )}
           </div>
         )}
 
         {error && <div className="modal-error">{error}</div>}
-        <div className="modal-foot">
-          <button type="button" className="btn" onClick={onClose}>
-            cancel
-          </button>
-          <button type="submit" className="btn primary" disabled={!canSubmit}>
-            {busy ? "adding…" : "add app"}
-          </button>
-        </div>
       </form>
-    </div>
+    </Modal>
   );
 }

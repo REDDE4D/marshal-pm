@@ -47,6 +47,9 @@ func (s *Store) LogsDir() string { return filepath.Join(s.base, "logs") }
 // MetricsDBPath is the SQLite file holding metric history.
 func (s *Store) MetricsDBPath() string { return filepath.Join(s.base, "metrics.db") }
 
+// RestartsDBPath is the SQLite file holding restart-event history.
+func (s *Store) RestartsDBPath() string { return filepath.Join(s.base, "restarts.db") }
+
 // EnsureLogsDir creates the logs directory (0700) if it does not exist.
 func (s *Store) EnsureLogsDir() error { return os.MkdirAll(s.LogsDir(), 0o700) }
 

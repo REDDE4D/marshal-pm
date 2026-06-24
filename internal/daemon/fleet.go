@@ -1,28 +1,36 @@
 package daemon
 
 import (
+	"time"
+
+	"marshal/internal/eventstore"
 	"marshal/internal/fleet"
 	"marshal/internal/logs"
+	"marshal/internal/metrics"
 	"marshal/internal/metricstore"
 	"marshal/internal/pb"
 )
 
 // fleetSnapshot returns a SnapshotFunc over the manager's current instances,
-// merging the sampler's latest cpu/mem (zero until the first sample tick).
+// merging the sampler's latest cpu/mem/threads/fds (cpu/mem/threads zero and
+// fds -1 until the first sample tick) and each instance's last exit code/reason.
 // It also appends synthetic deployer entries (in-flight / failed deploys).
 func (s *Server) fleetSnapshot() fleet.SnapshotFunc {
 	return func() []*pb.ProcInfo {
 		snaps := s.mgr.List()
 		out := make([]*pb.ProcInfo, 0, len(snaps))
+		var rollups map[string]eventstore.Rollup
+		if s.estore != nil {
+			rollups, _ = s.estore.Rollups(time.Now().UnixMilli() - 24*60*60*1000)
+		}
 		for _, sn := range snaps {
-			var cpu float64
-			var mem uint64
+			sm := metrics.Sample{Fds: -1} // default: unavailable until first sample
 			if s.metrics != nil {
-				if sm, ok := s.metrics.Get(sn.Label); ok {
-					cpu, mem = sm.Cpu, sm.Mem
+				if v, ok := s.metrics.Get(sn.Label); ok {
+					sm = v
 				}
 			}
-			out = append(out, snapshotToProc(sn, cpu, mem))
+			out = append(out, snapshotToProc(sn, sm, rollups[sn.Label]))
 		}
 		if s.deployer != nil {
 			deploySnaps := s.deployer.Snapshots()

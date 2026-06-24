@@ -59,7 +59,7 @@ export function FileBrowser({ agent, app, credential }: { agent: string; app: st
     setBusy(true); setErr(null); setNote(null);
     try {
       const res = await writeFile(agent, app, open.path, draft, msg || `Update ${open.path}`, credential);
-      setNote(`Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
+      setNote(`✓ Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
       setOpen({ ...open, content: draft });
       setReload((n) => n + 1);
     } catch (e: any) { setErr(String(e.message || e)); }
@@ -73,7 +73,7 @@ export function FileBrowser({ agent, app, credential }: { agent: string; app: st
     setBusy(true); setErr(null); setNote(null);
     try {
       const res = await createFile(agent, app, rel, "", `Create ${rel}`, credential);
-      setNote(`Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
+      setNote(`✓ Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
       setReload((n) => n + 1);
     } catch (e: any) { setErr(String(e.message || e)); }
     finally { setBusy(false); }
@@ -85,7 +85,7 @@ export function FileBrowser({ agent, app, credential }: { agent: string; app: st
     setBusy(true); setErr(null); setNote(null);
     try {
       const res = await deleteFile(agent, app, rel, `Delete ${rel}`, credential);
-      setNote(`Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
+      setNote(`✓ Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
       if (open?.path === rel) setOpen(null);
       setReload((n) => n + 1);
     } catch (e2: any) { setErr(String(e2.message || e2)); }
@@ -100,7 +100,7 @@ export function FileBrowser({ agent, app, credential }: { agent: string; app: st
     setBusy(true); setErr(null); setNote(null);
     try {
       const res = await renameFile(agent, app, from, dest, `Rename ${from} → ${dest}`, credential);
-      setNote(`Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
+      setNote(`✓ Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
       if (open?.path === from) setOpen(null);
       setReload((n) => n + 1);
     } catch (e2: any) { setErr(String(e2.message || e2)); }
@@ -110,38 +110,45 @@ export function FileBrowser({ agent, app, credential }: { agent: string; app: st
   const crumbs = path ? path.split("/") : [];
   return (
     <div className="filebrowser">
-      <div className="fb-note">
+      <div className="fbnote">
         Editing commits &amp; pushes to origin per change. Redeploy to apply changes to the running app.
       </div>
-      <div className="crumb fb-crumb">
+      <div className="fbcrumb">
         <a href="#" onClick={(ev) => { ev.preventDefault(); setOpen(null); setPath(""); }}>{app}</a>
         {crumbs.map((c, i) => {
           const sub = crumbs.slice(0, i + 1).join("/");
-          return <span key={sub}><span className="sep">/</span>
+          return <span key={sub}><span className="s">/</span>
             <a href="#" onClick={(ev) => { ev.preventDefault(); setOpen(null); setPath(sub); }}>{c}</a></span>;
         })}
-        <button className="fb-action" disabled={busy} onClick={onNewFile} style={{ marginLeft: "auto" }}>+ New file</button>
+        <button className="btn ghost sm" disabled={busy} onClick={onNewFile} style={{ marginLeft: "auto" }}>+ new file</button>
       </div>
       {err && <div className="fb-err">{err}</div>}
-      {note && <div className="fb-note">{note}</div>}
-      <div className="fb-body">
-        <ul className="fb-list">
+      {note && <div className="pushnote">{note}</div>}
+      <div className="fbbody">
+        <div className="fblist">
           {path !== "" && (
-            <li className="fb-row" onClick={() => { setOpen(null); setPath(parentPath(path)); }}>
-              <span className="fb-name">../</span></li>
+            <div className="fbrow" onClick={() => { setOpen(null); setPath(parentPath(path)); }}>
+              <span>📁</span><span className="nm2 sky">../</span>
+            </div>
           )}
           {entries.map((e) => (
-            <li key={e.name} className="fb-row">
-              <span className="fb-name" onClick={() => onEntry(e)}>{e.is_dir ? "📁 " : "📄 "}{e.name}</span>
-              <span className="fb-size">{e.is_dir ? "" : `${e.size} B`}</span>
-              <span className="fb-rowactions">
-                <button className="fb-action" disabled={busy} onClick={() => onRename(e)}>Rename</button>
-                {!e.is_dir && <button className="fb-action" disabled={busy} onClick={() => onDelete(e)}>Delete</button>}
+            <div key={e.name} className={`fbrow${open?.path === joinPath(path, e.name) ? " sel" : ""}`}>
+              <span>{e.is_dir ? "📁" : "📄"}</span>
+              <span
+                className={`nm2${e.is_dir ? " sky" : ""}`}
+                onClick={() => onEntry(e)}
+              >
+                {e.name}
               </span>
-            </li>
+              {!e.is_dir && <span className="sz">{e.size} B</span>}
+              <span className="fb-rowactions">
+                <button className="btn ghost sm" disabled={busy} onClick={() => onRename(e)}>rename</button>
+                {!e.is_dir && <button className="btn ghost sm" disabled={busy} onClick={() => onDelete(e)}>delete</button>}
+              </span>
+            </div>
           ))}
-        </ul>
-        <div className="fb-view">
+        </div>
+        <div className="fbview">
           {!open && <div className="fb-empty">Select a file to view or edit.</div>}
           {open && open.binary && (
             <div className="fb-empty">
@@ -150,13 +157,24 @@ export function FileBrowser({ agent, app, credential }: { agent: string; app: st
           )}
           {open && !open.binary && (
             <>
-              {open.truncated && <div className="fb-note">Showing first 1 MiB of {open.size} B — too large to edit. <a href={fileDownloadURL(agent, app, open.path)} download>Download first 1 MiB</a></div>}
-              <CodeMirror value={editable ? draft : open.content} editable={editable} readOnly={!editable}
-                onChange={editable ? setDraft : undefined} extensions={langFor(open.path)} theme="dark" />
+              {open.truncated && (
+                <div className="fbnote">
+                  Showing first 1 MiB of {open.size} B — too large to edit.{" "}
+                  <a href={fileDownloadURL(agent, app, open.path)} download>Download first 1 MiB</a>
+                </div>
+              )}
+              <CodeMirror
+                value={editable ? draft : open.content}
+                editable={editable}
+                readOnly={!editable}
+                onChange={editable ? setDraft : undefined}
+                extensions={langFor(open.path)}
+                theme="dark"
+              />
               {editable && (
-                <div className="fb-saverow">
-                  <input className="fb-msg" value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Commit message" />
-                  <button className="fb-action" disabled={busy || draft === open.content} onClick={onSave}>Save &amp; push</button>
+                <div className="saverow">
+                  <input className="inp" style={{ flex: 1 }} value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Commit message" />
+                  <button className="btn" disabled={busy || draft === open.content} onClick={onSave}>save &amp; push</button>
                 </div>
               )}
             </>

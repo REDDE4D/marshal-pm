@@ -51,6 +51,9 @@ func (s *Server) handleFleetCommand(cmd *pb.Command) *pb.ControlResult {
 	case *pb.ControlOp_Restart:
 		snaps, err = s.mgr.Restart(v.Restart.GetTarget())
 
+	case *pb.ControlOp_Reload:
+		snaps, err = s.mgr.Reload(v.Reload.GetTarget())
+
 	case *pb.ControlOp_Delete:
 		snaps, err = s.mgr.Delete(v.Delete.GetTarget())
 		forgot := false

@@ -8,11 +8,14 @@ import (
 	"crypto/tls"
 	"errors"
 	"log"
+	"os"
+	"runtime"
 	"sync"
 	"time"
 
 	"marshal/internal/pb"
 
+	"github.com/shirou/gopsutil/v3/host"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
@@ -30,6 +33,9 @@ type LogsFunc func(sinceTsMs int64) []*pb.LogShipLine
 // CommandFunc executes a control command and returns its result.
 type CommandFunc func(*pb.Command) *pb.ControlResult
 
+// HostFunc returns the agent's current host gauges, or nil if unavailable.
+type HostFunc func() *pb.HostMetrics
+
 // Client maintains one outbound stream to the central server.
 type Client struct {
 	addr       string
@@ -39,6 +45,7 @@ type Client struct {
 	metrics    MetricsFunc
 	logs       LogsFunc
 	commands   CommandFunc
+	host       HostFunc
 	interval   time.Duration
 	minBO      time.Duration
 	maxBO      time.Duration
@@ -68,6 +75,9 @@ func WithLogs(fn LogsFunc) Option { return func(c *Client) { c.logs = fn } }
 // WithCommands enables down-stream command handling sourced from fn.
 func WithCommands(fn CommandFunc) Option { return func(c *Client) { c.commands = fn } }
 
+// WithHost enables host-gauge shipping sourced from fn (sent with each snapshot).
+func WithHost(fn HostFunc) Option { return func(c *Client) { c.host = fn } }
+
 // WithTLS sets the client TLS config (pinned fingerprint or CA). Required in
 // fleet mode; there is no insecure fallback.
 func WithTLS(cfg *tls.Config) Option { return func(c *Client) { c.tls = cfg } }
@@ -77,6 +87,19 @@ func WithTLS(cfg *tls.Config) Option { return func(c *Client) { c.tls = cfg } }
 // minted token after a successful enrollment.
 func WithAuth(token, enrollToken string, persist func(string) error) Option {
 	return func(c *Client) { c.token, c.enrollTok, c.persistTok = token, enrollToken, persist }
+}
+
+// buildHello gathers static host facts for the connect handshake. Each lookup is
+// best-effort: a failure leaves the field zero-valued (the dashboard shows "—").
+func buildHello(name, version string) *pb.Hello {
+	h := &pb.Hello{AgentName: name, MarshalVersion: version, Os: runtime.GOOS, Arch: runtime.GOARCH}
+	if hn, err := os.Hostname(); err == nil {
+		h.Hostname = hn
+	}
+	if bt, err := host.BootTime(); err == nil {
+		h.HostBootUnix = int64(bt)
+	}
+	return h
 }
 
 // New builds a fleet client. snap must be non-nil.
@@ -157,7 +180,7 @@ func (c *Client) connectOnce(ctx context.Context) (bool, error) {
 	}
 
 	if err := send(&pb.AgentMessage{Msg: &pb.AgentMessage_Hello{
-		Hello: &pb.Hello{AgentName: c.name, MarshalVersion: c.version},
+		Hello: buildHello(c.name, c.version),
 	}}); err != nil {
 		return false, err
 	}
@@ -227,9 +250,11 @@ func (c *Client) connectOnce(ctx context.Context) (bool, error) {
 }
 
 func (c *Client) pushSnapshot(send func(*pb.AgentMessage) error) error {
-	return send(&pb.AgentMessage{Msg: &pb.AgentMessage_Snapshot{
-		Snapshot: &pb.StateSnapshot{Procs: c.snapshot()},
-	}})
+	snap := &pb.StateSnapshot{Procs: c.snapshot()}
+	if c.host != nil {
+		snap.Host = c.host()
+	}
+	return send(&pb.AgentMessage{Msg: &pb.AgentMessage_Snapshot{Snapshot: snap}})
 }
 
 // pushMetrics ships local rows newer than *watermark; on success advances it to

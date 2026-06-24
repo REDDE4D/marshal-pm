@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"marshal/internal/config"
+	"marshal/internal/eventstore"
 	"marshal/internal/manager"
+	"marshal/internal/metrics"
 	"marshal/internal/pb"
 	"marshal/internal/supervisor"
 )
@@ -64,39 +66,52 @@ func appSpecToConfig(s *pb.AppSpec) (config.App, error) {
 	return cfg.Apps[0], nil
 }
 
-// snapshotToProc converts a manager snapshot + metrics into a wire ProcInfo.
-func snapshotToProc(s manager.InstanceSnapshot, cpu float64, mem uint64) *pb.ProcInfo {
+// snapshotToProc converts a manager snapshot + metrics + restart rollup into a wire ProcInfo.
+func snapshotToProc(s manager.InstanceSnapshot, sm metrics.Sample, rs eventstore.Rollup) *pb.ProcInfo {
 	var uptimeMs int64
 	if s.State == supervisor.StateOnline && !s.StartedAt.IsZero() {
 		uptimeMs = time.Since(s.StartedAt).Milliseconds()
 	}
+	var lastRestartUnix int64
+	if rs.LastMs > 0 {
+		lastRestartUnix = rs.LastMs / 1000
+	}
 	return &pb.ProcInfo{
-		Id:         int32(s.ID),
-		Name:       s.Name,
-		InstanceId: int32(s.InstanceID),
-		State:      string(s.State),
-		Pid:        int32(s.Pid),
-		UptimeMs:   uptimeMs,
-		Restarts:   int32(s.Restarts),
-		Cpu:        cpu,
-		Mem:        int64(mem),
-		Source:     s.Source,
-		Credential: s.Credential,
+		Id:              int32(s.ID),
+		Name:            s.Name,
+		InstanceId:      int32(s.InstanceID),
+		State:           string(s.State),
+		Pid:             int32(s.Pid),
+		UptimeMs:        uptimeMs,
+		Restarts:        int32(s.Restarts),
+		Cpu:             sm.Cpu,
+		Mem:             int64(sm.Mem),
+		Source:          s.Source,
+		Credential:      s.Credential,
+		Threads:         sm.Threads,
+		OpenFds:         sm.Fds,
+		ExitCode:        s.ExitCode,
+		ExitReason:      s.ExitReason,
+		Restarts24H:     rs.Count24h,
+		LastRestartUnix: lastRestartUnix,
 	}
 }
 
 // procList renders snapshots as a ProcList, merging in the latest metrics.
 func (srv *Server) procList(snaps []manager.InstanceSnapshot) *pb.ProcList {
 	procs := make([]*pb.ProcInfo, 0, len(snaps))
+	var rollups map[string]eventstore.Rollup
+	if srv.estore != nil {
+		rollups, _ = srv.estore.Rollups(time.Now().UnixMilli() - 24*60*60*1000)
+	}
 	for _, s := range snaps {
-		var cpu float64
-		var mem uint64
+		sm := metrics.Sample{Fds: -1} // default: unavailable until first sample
 		if srv.metrics != nil {
-			if sm, ok := srv.metrics.Get(s.Label); ok {
-				cpu, mem = sm.Cpu, sm.Mem
+			if v, ok := srv.metrics.Get(s.Label); ok {
+				sm = v
 			}
 		}
-		procs = append(procs, snapshotToProc(s, cpu, mem))
+		procs = append(procs, snapshotToProc(s, sm, rollups[s.Label]))
 	}
 	return &pb.ProcList{Procs: procs}
 }

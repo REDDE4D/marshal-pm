@@ -13,6 +13,18 @@ type agentEntry struct {
 	procs      []*pb.ProcInfo
 	streamOpen bool
 	lastSeen   time.Time
+	meta       AgentMeta
+	host       *pb.HostMetrics
+}
+
+// AgentMeta is per-agent host metadata captured on Hello.
+type AgentMeta struct {
+	Hostname       string
+	IP             string
+	OS             string
+	Arch           string
+	MarshalVersion string
+	HostBootUnix   int64
 }
 
 // Registry holds the live fleet state, keyed by agent name.
@@ -60,12 +72,13 @@ func (r *Registry) Open(name string) {
 	e.lastSeen = r.now()
 }
 
-// Update records a fresh snapshot and bumps last-seen.
-func (r *Registry) Update(name string, procs []*pb.ProcInfo) {
+// Update records a fresh snapshot (procs + host gauges) and bumps last-seen.
+func (r *Registry) Update(name string, procs []*pb.ProcInfo, host *pb.HostMetrics) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	e := r.entry(name)
 	e.procs = procs
+	e.host = host
 	e.streamOpen = true
 	e.lastSeen = r.now()
 }
@@ -79,6 +92,13 @@ func (r *Registry) Close(name string) {
 	}
 }
 
+// SetMeta records host metadata for an agent (called on Hello).
+func (r *Registry) SetMeta(name string, m AgentMeta) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.entry(name).meta = m
+}
+
 // List snapshots every known agent and computes its connected flag.
 func (r *Registry) List() []*pb.AgentState {
 	r.mu.Lock()
@@ -88,10 +108,17 @@ func (r *Registry) List() []*pb.AgentState {
 	for name, e := range r.agents {
 		connected := e.streamOpen && now.Sub(e.lastSeen) <= r.offlineAfter
 		out = append(out, &pb.AgentState{
-			AgentName:    name,
-			Connected:    connected,
-			LastSeenUnix: e.lastSeen.Unix(),
-			Procs:        e.procs,
+			AgentName:      name,
+			Connected:      connected,
+			LastSeenUnix:   e.lastSeen.Unix(),
+			Procs:          e.procs,
+			Hostname:       e.meta.Hostname,
+			Ip:             e.meta.IP,
+			Os:             e.meta.OS,
+			Arch:           e.meta.Arch,
+			MarshalVersion: e.meta.MarshalVersion,
+			HostBootUnix:   e.meta.HostBootUnix,
+			Host:           e.host,
 		})
 	}
 	return out

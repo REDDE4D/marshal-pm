@@ -63,6 +63,8 @@ func controlOp(action, selector string) *pb.ControlOp {
 	switch action {
 	case "restart":
 		return &pb.ControlOp{Op: &pb.ControlOp_Restart{Restart: &pb.Selector{Target: selector}}}
+	case "reload":
+		return &pb.ControlOp{Op: &pb.ControlOp_Reload{Reload: &pb.Selector{Target: selector}}}
 	case "stop":
 		return &pb.ControlOp{Op: &pb.ControlOp_Stop{Stop: &pb.Selector{Target: selector}}}
 	case "delete":

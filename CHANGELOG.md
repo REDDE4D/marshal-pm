@@ -12,6 +12,56 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-24
+
+### Changed
+- **Dashboard "Marshal Instrument" redesign (M-A):** the entire web dashboard has been
+  rebuilt in a new instrument/ledger design language — a left **icon rail** + top context
+  bar shell replaces the per-page topbar; **metric clusters** (semantic, colour-per-metric)
+  and dense **hairline ledgers** (numbered rows, hover quick-actions ▤ Log · ▸ Restart ·
+  ⟲ Reload · ■ Stop) replace the old cards. Every page is restyled: Fleet overview,
+  Process detail (Overview/Files sub-tabs), Errors, Notifications (rewritten with toggles
+  and event chips), Credentials, Login, and the Add-app / Connect-agent modals. Adds a
+  **live-log modal** (stream/level/text-regex filtering, pause) and a dedicated **Logs page**
+  (`#/logs`). Every cell is backed by the real data shipped in M-B…M-G/M-F (host metrics,
+  extended per-process metrics, restart history, error signatures); no mocked values.
+  Inter is now bundled alongside JetBrains Mono. Includes a hardening pass (loading/empty/
+  error states, focus rings, keyboard-accessible controls, icon-button aria-labels, a React
+  error boundary around page content, and narrow-viewport responsiveness).
+
+### Added
+- **Errors/exceptions subsystem (M-F):** server-side error-signature grouping — stderr is
+  normalized and deduplicated into signatures with occurrence counts, first/last-seen, affected
+  processes, best-effort source location, and a 24-bucket occurrence trend. New `GET /api/errors`
+  endpoint (range `24h`/`7d`/`all`, optional `agent` filter) and a transitional Errors page
+  (`#/errors`).
+- **Control additions (M-G):** graceful **reload** (rolling per-instance restart, distinct from
+  restart), a per-agent **restart all** action, and a **log download** endpoint
+  (`GET /api/logs/download`, plain-text full history honoring the stream/search filters).
+- **Restart history (M-E):** each process now shows how many times it restarted
+  in the last 24h and when it last restarted, recorded from real supervisor
+  restart events in a local SQLite event store (7-day retention) and surfaced on
+  the process card and in `/api/fleet`.
+- **Host system metrics (M-C):** each agent now reports current-value host
+  gauges — CPU%, load average (1/5/15), memory (used/total/percent), and
+  network I/O rate (bytes/sec) — shipped with the periodic state push and shown
+  on the agent band and in `/api/fleet`.
+- **Extended per-process metrics (M-D):** thread count and open file-descriptor
+  count (group-summed; FDs shown as `—` where the platform does not report them,
+  e.g. macOS), plus the last exit code and reason for each process, surfaced on
+  the process card and in `/api/fleet`.
+- Agent host metadata (hostname, IP, OS/arch, marshal version, host uptime) on the fleet view (M-B).
+- Dashboard "Connect an agent": generates a ready-to-run command (with a freshly minted enroll token, the server fingerprint, and address) to enroll a new agent host.
+- Per-event-type cooldown overrides: each notification event type can have its own cooldown, falling back to the global cooldown when unset (`settings.cooldown_overrides`).
+- Alert/recovery coalescing: a transient crash-then-recover blip (within a
+  configurable window, default 10s; set to 0 to disable) is now delivered as a
+  single merged notice instead of a separate alert and recovery.
+
+### Fixed
+- The notification cooldown map is now pruned of expired entries on each emit, so it stays bounded regardless of fleet size or uptime (previously grew unbounded).
+- A `marshal.yaml` with a `server:` block and no `apps:` is now valid; `marshal start` previously rejected it with "config has no apps", preventing fleet agents (which start with zero apps and receive them later via fleet deploy) from enrolling.
+- "Connect an agent" modal: the generated command no longer overflows the modal — the command block now wraps/contains long token and fingerprint lines, and the rotation warning is styled.
+
 ## [0.2.0] - 2026-06-22
 
 ### Added
@@ -67,6 +117,7 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/REDDE4D/marshal-pm/releases/tag/v0.1.0

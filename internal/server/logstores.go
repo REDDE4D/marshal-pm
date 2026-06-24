@@ -117,3 +117,20 @@ func (s *logStores) ErrorCounts(agent string, sinceMs int64) (map[string]int64, 
 	}
 	return st.ErrorCounts(labels, sinceMs)
 }
+
+// StderrSince returns one agent's stderr lines with ts >= sinceMs across all
+// its labels, ordered by (label, ts). Unknown agent yields (nil, nil).
+func (s *logStores) StderrSince(agent string, sinceMs int64) ([]logstore.StoredLine, error) {
+	if !s.has(agent) {
+		return nil, nil
+	}
+	st, err := s.get(agent)
+	if err != nil {
+		return nil, err
+	}
+	labels, err := st.Labels()
+	if err != nil {
+		return nil, err
+	}
+	return st.StderrSince(labels, sinceMs)
+}

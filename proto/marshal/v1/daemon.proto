@@ -72,6 +72,12 @@ message ProcInfo {
   string source     = 10; // M21 "command" | "git" — drives the redeploy button
   string detail     = 11; // M21 status summary for synthetic deploy entries
   string credential = 12; // M22: credential name (non-secret) → drives redeploy resolution
+  int32  threads     = 13; // M-D: thread count, summed over the process group
+  int32  open_fds    = 14; // M-D: open FD count; -1 = unavailable on this platform
+  int32  exit_code   = 15; // M-D: last exit code; -1 if signaled / spawn failure
+  string exit_reason = 16; // M-D: last exit reason; "" = never exited
+  int32 restarts24h       = 17; // M-E: restart events in the trailing 24h (JSON: restarts_24h)
+  int64 last_restart_unix = 18; // M-E: unix seconds of the most recent restart (0 = none in retention)
 }
 
 message ProcList { repeated ProcInfo procs = 1; }

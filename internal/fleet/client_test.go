@@ -1,15 +1,16 @@
-package fleet_test
+package fleet
 
 import (
 	"context"
 	"crypto/tls"
 	"io"
 	"net"
+	"os"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
 
-	"marshal/internal/fleet"
 	"marshal/internal/fleetauth"
 	"marshal/internal/pb"
 	"marshal/internal/server"
@@ -18,6 +19,22 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 )
+
+func TestBuildHello(t *testing.T) {
+	h := buildHello("web-1", "v0.1.0")
+	if h.GetAgentName() != "web-1" || h.GetMarshalVersion() != "v0.1.0" {
+		t.Fatalf("name/version wrong: %+v", h)
+	}
+	if h.GetOs() != runtime.GOOS || h.GetArch() != runtime.GOARCH {
+		t.Fatalf("os/arch wrong: got %s/%s", h.GetOs(), h.GetArch())
+	}
+	if hn, _ := os.Hostname(); h.GetHostname() != hn {
+		t.Fatalf("hostname = %q, want %q", h.GetHostname(), hn)
+	}
+	if h.GetHostBootUnix() < 0 {
+		t.Fatalf("boot unix negative: %d", h.GetHostBootUnix())
+	}
+}
 
 func waitFor(t *testing.T, cond func() bool) {
 	t.Helper()
@@ -57,10 +74,10 @@ func TestClientHelloAndPeriodicPush(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := fleet.New(lis.Addr().String(), "web-1", "test", snap,
-		fleet.WithTLS(tlsCfg),
-		fleet.WithInterval(20*time.Millisecond), fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond),
-		fleet.WithAuth("", secrets.EnrollToken, func(string) error { return nil }))
+	c := New(lis.Addr().String(), "web-1", "test", snap,
+		WithTLS(tlsCfg),
+		WithInterval(20*time.Millisecond), WithBackoff(10*time.Millisecond, 40*time.Millisecond),
+		WithAuth("", secrets.EnrollToken, func(string) error { return nil }))
 	cctx, ccancel := context.WithCancel(context.Background())
 	defer ccancel()
 	go c.Run(cctx)
@@ -95,10 +112,10 @@ func TestClientReconnectsWhenServerStartsLate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := fleet.New(addr, "web-1", "test", snap,
-		fleet.WithTLS(tlsCfg),
-		fleet.WithInterval(20*time.Millisecond), fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond),
-		fleet.WithAuth("", secrets.EnrollToken, func(string) error { return nil }))
+	c := New(addr, "web-1", "test", snap,
+		WithTLS(tlsCfg),
+		WithInterval(20*time.Millisecond), WithBackoff(10*time.Millisecond, 40*time.Millisecond),
+		WithAuth("", secrets.EnrollToken, func(string) error { return nil }))
 	cctx, ccancel := context.WithCancel(context.Background())
 	defer ccancel()
 	go c.Run(cctx) // retries against a dead address
@@ -238,9 +255,9 @@ func TestClientSeedsWatermarkFromAckAndBackfills(t *testing.T) {
 		return out
 	}
 
-	c := fleet.New(fs.addr, "web-1", "test", func() []*pb.ProcInfo { return nil },
-		fleet.WithTLS(fs.tlsCfg),
-		fleet.WithInterval(20*time.Millisecond), fleet.WithMetrics(metrics))
+	c := New(fs.addr, "web-1", "test", func() []*pb.ProcInfo { return nil },
+		WithTLS(fs.tlsCfg),
+		WithInterval(20*time.Millisecond), WithMetrics(metrics))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go c.Run(ctx)
@@ -279,11 +296,11 @@ func TestClientExecutesCommandAndRepliesResult(t *testing.T) {
 	defer gs.Stop()
 
 	executed := make(chan string, 1)
-	c := fleet.New(lis.Addr().String(), "web-1", "test",
+	c := New(lis.Addr().String(), "web-1", "test",
 		func() []*pb.ProcInfo { return nil },
-		fleet.WithTLS(tlsCfg),
-		fleet.WithInterval(20*time.Millisecond),
-		fleet.WithCommands(func(cmd *pb.Command) *pb.ControlResult {
+		WithTLS(tlsCfg),
+		WithInterval(20*time.Millisecond),
+		WithCommands(func(cmd *pb.Command) *pb.ControlResult {
 			executed <- cmd.GetOp().GetRestart().GetTarget()
 			return &pb.ControlResult{Ok: true, Procs: []*pb.ProcInfo{{Name: "api"}}}
 		}))
@@ -389,11 +406,11 @@ func TestClientEnrollmentAndPersistence(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	c := fleet.New(lis.Addr().String(), "web-1", "test", snap,
-		fleet.WithTLS(tlsClientCfg),
-		fleet.WithInterval(20*time.Millisecond),
-		fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond),
-		fleet.WithAuth("", enrollToken, persist))
+	c := New(lis.Addr().String(), "web-1", "test", snap,
+		WithTLS(tlsClientCfg),
+		WithInterval(20*time.Millisecond),
+		WithBackoff(10*time.Millisecond, 40*time.Millisecond),
+		WithAuth("", enrollToken, persist))
 	go c.Run(ctx)
 
 	// Wait until the server recorded an enrollment and the persist callback ran.
@@ -417,11 +434,11 @@ func TestClientEnrollmentAndPersistence(t *testing.T) {
 	// Phase 2: reconnect using the minted token — server must accept it.
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
-	c2 := fleet.New(lis.Addr().String(), "web-1", "test", snap,
-		fleet.WithTLS(tlsClientCfg),
-		fleet.WithInterval(20*time.Millisecond),
-		fleet.WithBackoff(10*time.Millisecond, 40*time.Millisecond),
-		fleet.WithAuth(mintedToken, "", func(string) error { return nil }))
+	c2 := New(lis.Addr().String(), "web-1", "test", snap,
+		WithTLS(tlsClientCfg),
+		WithInterval(20*time.Millisecond),
+		WithBackoff(10*time.Millisecond, 40*time.Millisecond),
+		WithAuth(mintedToken, "", func(string) error { return nil }))
 	go c2.Run(ctx2)
 
 	waitFor(t, func() bool {
@@ -494,13 +511,37 @@ func TestClientShipsLogsAndSeedsLogWatermark(t *testing.T) {
 		return out
 	}
 
-	c := fleet.New(fs.addr, "web-1", "test", func() []*pb.ProcInfo { return nil },
-		fleet.WithTLS(fs.tlsCfg),
-		fleet.WithInterval(20*time.Millisecond), fleet.WithLogs(logs))
+	c := New(fs.addr, "web-1", "test", func() []*pb.ProcInfo { return nil },
+		WithTLS(fs.tlsCfg),
+		WithInterval(20*time.Millisecond), WithLogs(logs))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go c.Run(ctx)
 
 	waitFor(t, func() bool { return fs.sawLine("fresh") && !fs.sawLine("old") })
 	cancel()
+}
+
+func TestPushSnapshotIncludesHostWhenConfigured(t *testing.T) {
+	// With WithHost: the sent snapshot carries the host metrics.
+	c := New("", "agent", "v", func() []*pb.ProcInfo { return nil },
+		WithHost(func() *pb.HostMetrics { return &pb.HostMetrics{CpuPercent: 42, MemTotal: 2048} }))
+	var got *pb.AgentMessage
+	if err := c.pushSnapshot(func(m *pb.AgentMessage) error { got = m; return nil }); err != nil {
+		t.Fatalf("pushSnapshot: %v", err)
+	}
+	h := got.GetSnapshot().GetHost()
+	if h == nil || h.GetCpuPercent() != 42 || h.GetMemTotal() != 2048 {
+		t.Fatalf("host = %+v, want cpu=42 mem=2048", h)
+	}
+
+	// Without WithHost: host is nil.
+	c2 := New("", "agent", "v", func() []*pb.ProcInfo { return nil })
+	var got2 *pb.AgentMessage
+	if err := c2.pushSnapshot(func(m *pb.AgentMessage) error { got2 = m; return nil }); err != nil {
+		t.Fatalf("pushSnapshot: %v", err)
+	}
+	if got2.GetSnapshot().GetHost() != nil {
+		t.Fatalf("host = %+v, want nil when WithHost not set", got2.GetSnapshot().GetHost())
+	}
 }
