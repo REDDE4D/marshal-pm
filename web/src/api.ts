@@ -474,3 +474,34 @@ export async function connectToken(address?: string, name?: string): Promise<Con
   if (!r.ok) throw new Error(`connect-token failed: ${r.status}`);
   return (await r.json()) as ConnectInfo;
 }
+
+export type ErrSignature = {
+  id: string;
+  sample: string;
+  source?: string;
+  agent: string;
+  proc: string;
+  affected: string[];
+  count: number;
+  first_unix: number;
+  last_unix: number;
+  buckets: number[];
+};
+
+export type ErrorsResponse = {
+  range: string;
+  since: number;
+  now: number;
+  cluster: { errors: number; signatures: number; affected_procs: number; last_error_unix: number };
+  signatures: ErrSignature[];
+  truncated: boolean;
+};
+
+export async function getErrors(range: string, agent?: string): Promise<ErrorsResponse> {
+  const q = new URLSearchParams({ range });
+  if (agent) q.set("agent", agent);
+  const r = await fetch(`/api/errors?${q.toString()}`);
+  if (r.status === 401) throw new Error("unauthorized");
+  if (!r.ok) throw new Error(`errors ${r.status}`);
+  return (await r.json()) as ErrorsResponse;
+}

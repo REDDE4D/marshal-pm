@@ -176,3 +176,15 @@ button { font-family: var(--mono); cursor: pointer; }
 .fb-size { color: var(--dim); font-variant-numeric: tabular-nums; }
 .fb-view { overflow: auto; }
 .fb-empty { color: var(--dim); font-size: 13px; padding: 12px; }
+
+/* errors page */
+.btn.btn-active { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }
+.range-tabs { display: inline-flex; gap: 4px; margin-bottom: 1rem; }
+.cluster-bar { display: flex; gap: 1.5rem; flex-wrap: wrap; font-size: 12px; color: var(--dim); margin-bottom: 1rem; padding: 10px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); }
+.cluster-bar b { color: #F2F3F7; }
+.err-ledger { width: 100%; border-collapse: collapse; font-size: 11px; }
+.err-ledger th { text-align: left; color: var(--dim); font-weight: 500; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.err-ledger td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
+.err-ledger tr:last-child td { border-bottom: none; }
+.err-sample { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--danger); }
+.err-mono { font-family: var(--mono); font-size: 10px; color: var(--faint); }
