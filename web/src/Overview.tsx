@@ -1,59 +1,36 @@
 import { useEffect, useState } from "react";
-import { Agent, AgentMetrics, getFleet, getLogStats, getMetrics, logout } from "./api";
-import { SummaryCards } from "./SummaryCards";
-import { ProcessCard } from "./ProcessCard";
-import { Logo } from "./Logo";
+import { Agent, AgentMetrics, control, getFleet, getMetrics } from "./api";
 import { AddAppModal } from "./AddAppModal";
 import { ConnectAgentModal } from "./ConnectAgentModal";
+import { LiveLogModal } from "./LiveLogModal";
 import { RestartAllButton } from "./RestartAllButton";
+import { MetricCluster, Cell } from "./components/Cluster";
+import {
+  SectionHeader,
+  LedgerHeader,
+  LedgerRow,
+  QuickAction,
+} from "./components/Ledger";
+import { StatusGlyph } from "./components/StatusGlyph";
+import { Sparkline } from "./Sparkline";
+import { fleetSummary } from "./lib/fleet";
+import { statusOf } from "./lib/status";
+import { relativeTime, formatBytes } from "./lib/format";
+import { navigate, procHref } from "./router";
 
 type Series = Record<string, Record<string, { cpu: number[]; mem: number[] }>>;
 
-function fmtUptime(bootUnix?: number): string {
-  if (!bootUnix) return "";
-  const s = Math.floor(Date.now() / 1000) - bootUnix;
-  if (s <= 0) return "";
-  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600);
-  return d > 0 ? `up ${d}d ${h}h` : `up ${h}h`;
-}
-
-function agentMeta(a: Agent): string {
-  const parts: string[] = [];
-  if (a.hostname) parts.push(a.hostname);
-  if (a.os || a.arch) parts.push([a.os, a.arch].filter(Boolean).join("/"));
-  if (a.marshal_version) parts.push(`marshal ${a.marshal_version}`);
-  if (a.ip) parts.push(a.ip);
-  const up = fmtUptime(a.host_boot_unix);
-  if (up) parts.push(up);
-  if (!a.connected) parts.unshift("offline");
-  return parts.join(" · ");
-}
-
-function fmtBps(bps: number): string {
-  if (bps < 1024) return `${bps.toFixed(0)} B/s`;
-  if (bps < 1024 * 1024) return `${(bps / 1024).toFixed(1)} KB/s`;
-  return `${(bps / (1024 * 1024)).toFixed(1)} MB/s`;
-}
-
-function hostMeta(a: Agent): string | null {
-  const h = a.host;
-  if (!h) return null;
-  const gb = (b: number) => (b / (1024 * 1024 * 1024)).toFixed(1);
-  return [
-    `cpu ${h.cpu_percent.toFixed(0)}%`,
-    `load ${h.load1.toFixed(2)}/${h.load5.toFixed(2)}/${h.load15.toFixed(2)}`,
-    `mem ${gb(h.mem_used)}/${gb(h.mem_total)}gb (${h.mem_used_pct.toFixed(0)}%)`,
-    `↓${fmtBps(h.net_rx_bps)} ↑${fmtBps(h.net_tx_bps)}`,
-  ].join(" · ");
-}
+// PCOLS matches the demo3 process ledger column layout (9 columns)
+const PCOLS = "26px 1.5fr 0.95fr 0.55fr 0.6fr 0.75fr 0.8fr 0.45fr 1fr";
 
 export function Overview({ onLogout }: { onLogout: () => void }) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [metrics, setMetrics] = useState<Series>({});
-  const [errors, setErrors] = useState<Record<string, Record<string, number>>>({});
   const [showAdd, setShowAdd] = useState(false);
   const [showConnect, setShowConnect] = useState(false);
+  const [liveLog, setLiveLog] = useState<{ agent: string; proc: string } | null>(null);
 
+  // 2s fleet poll
   useEffect(() => {
     let stop = false;
     async function tick() {
@@ -61,19 +38,6 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
         const f = await getFleet();
         if (stop) return;
         setAgents(f);
-        const errMap: Record<string, Record<string, number>> = {};
-        for (const a of f.filter((x) => x.connected)) {
-          try {
-            const counts = await getLogStats(a.name);
-            const per: Record<string, number> = {};
-            for (const [label, c] of Object.entries(counts)) {
-              const name = label.includes("#") ? label.slice(0, label.lastIndexOf("#")) : label;
-              per[name] = (per[name] ?? 0) + c;
-            }
-            errMap[a.name] = per;
-          } catch { /* best-effort */ }
-        }
-        if (!stop) setErrors(errMap);
       } catch { if (!stop) onLogout(); }
     }
     tick();
@@ -81,6 +45,7 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
     return () => { stop = true; clearInterval(id); };
   }, [onLogout]);
 
+  // 10s metrics poll — builds per-agent/proc CPU+mem series
   useEffect(() => {
     let stop = false;
     async function tick() {
@@ -90,7 +55,11 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
         const next: Series = {};
         for (const a of data) {
           next[a.agent] = {};
-          for (const p of a.procs) next[a.agent][p.name] = { cpu: p.buckets.map((b) => b.cpu_avg), mem: p.buckets.map((b) => b.mem_avg) };
+          for (const p of a.procs)
+            next[a.agent][p.name] = {
+              cpu: p.buckets.map((b) => b.cpu_avg),
+              mem: p.buckets.map((b) => b.mem_avg),
+            };
         }
         setMetrics(next);
       } catch { /* best-effort */ }
@@ -100,19 +69,239 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
     return () => { stop = true; clearInterval(id); };
   }, []);
 
+  const fs = fleetSummary(agents);
+
+  // Restarts-24h sub: count of procs with restarts_24h > 0
+  const procsWithRestarts = agents
+    .flatMap((a) => a.procs)
+    .filter((p) => p.restarts_24h > 0).length;
+
   return (
-    <div className="app">
-      <div className="topbar">
-        <Logo />
-        <div className="topbar-actions">
-          <button className="btn" onClick={() => setShowAdd(true)}>+ add app</button>
-          <button className="btn" onClick={() => setShowConnect(true)}>+ connect agent</button>
-          <button className="btn" onClick={() => { window.location.hash = "#/credentials"; }}>credentials</button>
-          <button className="btn" onClick={() => { window.location.hash = "#/notifications"; }}>notifications</button>
-          <button className="btn" onClick={() => { window.location.hash = "#/errors"; }}>errors</button>
-          <button className="btn" onClick={async () => { await logout(); onLogout(); }}>sign out</button>
-        </div>
+    <>
+      {/* Action row: add app / connect agent — kept in Overview (not the shell context-bar)
+          because these modals depend on Overview's agents state. Intentional deviation from
+          demo bar placement; restyled in Task 17. */}
+      <div className="actions" style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginBottom: "0.75rem" }}>
+        <button className="lnk" onClick={() => setShowAdd(true)}>+ add app</button>
+        <button className="lnk" onClick={() => setShowConnect(true)}>+ connect agent</button>
       </div>
+
+      {/* Fleet cluster */}
+      <MetricCluster cols={6}>
+        <Cell
+          label="Agents"
+          value={fs.agents}
+          sub={`${fs.online} online · ${fs.errored} errored`}
+        />
+        <Cell
+          label="Running"
+          value={fs.running}
+          sub={`of ${fs.totalProcs} processes`}
+        />
+        <Cell
+          label="Errored"
+          value={fs.errored}
+          color="rose"
+          sub={fs.erroredName ?? "none"}
+        />
+        <Cell
+          label="Avg CPU"
+          value={fs.avgCpu === null ? "—" : Math.round(fs.avgCpu)}
+          unit={fs.avgCpu === null ? undefined : "%"}
+          color="teal"
+          sub="across fleet"
+        />
+        <Cell
+          label="Total Mem"
+          value={fs.memUsed === null ? "—" : formatBytes(fs.memUsed)}
+          color="indigo"
+          sub={fs.memTotal === null ? "" : "of " + formatBytes(fs.memTotal)}
+        />
+        <Cell
+          label="Restarts 24h"
+          value={fs.restarts24h}
+          color="amber"
+          sub={`${procsWithRestarts} proc${procsWithRestarts !== 1 ? "s" : ""}`}
+        />
+      </MetricCluster>
+
+      {/* Empty fleet */}
+      {agents.length === 0 && (
+        <p className="empty" style={{ textAlign: "center", marginTop: "2rem" }}>
+          no agents connected.
+        </p>
+      )}
+
+      {/* Per-agent sections */}
+      {agents.map((a, ai) => {
+        const idx = String(ai + 1).padStart(2, "0");
+        const agentErrored = a.procs.some((p) => statusOf(p.state).kind === "errored");
+
+        // Build agent meta line — drop empty pieces, no leading/trailing " · "
+        const metaParts: string[] = [];
+        if (a.ip) metaParts.push(a.ip);
+        const osParts = [a.os, a.arch].filter(Boolean);
+        if (osParts.length) metaParts.push(osParts.join("/"));
+        if (a.last_seen_unix) metaParts.push(`seen ${relativeTime(a.last_seen_unix)}`);
+        const metaLine = metaParts.join(" · ");
+
+        return (
+          <div key={a.name}>
+            <SectionHeader
+              index={idx}
+              title={a.name}
+              glyph={<span className={"glyph " + (agentErrored ? "g-er" : "g-on")} />}
+              right={<RestartAllButton agent={a.name} connected={a.connected} />}
+              count={`${a.procs.length} proc`}
+            />
+
+            {metaLine && (
+              <div
+                className="d"
+                style={{ marginLeft: "calc(26px + 0.75rem)", marginTop: "-0.25rem", marginBottom: "0.5rem", fontSize: "0.72rem" }}
+              >
+                {metaLine}
+              </div>
+            )}
+
+            {a.procs.length === 0 && (
+              <p className="empty" style={{ marginLeft: "calc(26px + 0.75rem)" }}>
+                no processes.
+              </p>
+            )}
+
+            {a.procs.length > 0 && (
+              <>
+                <LedgerHeader cols={PCOLS}>
+                  <span />
+                  <span>Process</span>
+                  <span>Status</span>
+                  <span className="rr">PID</span>
+                  <span className="rr">CPU</span>
+                  <span className="rr">MEM</span>
+                  <span className="rr">Uptime</span>
+                  <span className="rr">↻</span>
+                  <span>Trend</span>
+                </LedgerHeader>
+
+                {a.procs.map((proc, pi) => {
+                  const isErrored = statusOf(proc.state).kind === "errored";
+                  const cpuSeries = metrics[a.name]?.[proc.name]?.cpu ?? [];
+
+                  const rowActions: QuickAction[] = [
+                    {
+                      icon: "▤",
+                      label: "Log",
+                      onClick: () => setLiveLog({ agent: a.name, proc: proc.name }),
+                    },
+                    {
+                      icon: "▸",
+                      label: "Restart",
+                      onClick: () => control(a.name, proc.name, "restart").catch(() => {}),
+                    },
+                    {
+                      icon: "⟲",
+                      label: "Reload",
+                      variant: "warn",
+                      onClick: () => control(a.name, proc.name, "reload").catch(() => {}),
+                    },
+                    {
+                      icon: "■",
+                      label: "Stop",
+                      variant: "dgr",
+                      onClick: () => control(a.name, proc.name, "stop").catch(() => {}),
+                    },
+                  ];
+
+                  // proc.mem is in bytes; display in MiB
+                  const memMB = proc.mem > 0 ? (proc.mem / 1048576).toFixed(1) : null;
+                  // proc.cpu is 0–1 fraction; display as integer %
+                  const cpuPct = (proc.cpu * 100).toFixed(0);
+                  // uptime: proc.uptime_ms → seconds since boot for relativeTime
+                  const uptimeSec = Math.floor(Date.now() / 1000) - Math.floor(proc.uptime_ms / 1000);
+
+                  return (
+                    <LedgerRow
+                      key={`${proc.name}-${proc.pid}`}
+                      cols={PCOLS}
+                      onClick={() => navigate(procHref(a.name, proc.name))}
+                      actions={rowActions}
+                    >
+                      {/* Index */}
+                      <span className="ix">{String(pi + 1).padStart(2, "0")}</span>
+
+                      {/* Process name + source/detail */}
+                      <div>
+                        <div className="nm">{proc.name}</div>
+                        <div className="sub">
+                          {proc.source}
+                          {proc.detail ? ` · ${proc.detail}` : ""}
+                        </div>
+                      </div>
+
+                      {/* Status glyph */}
+                      <StatusGlyph state={proc.state} />
+
+                      {/* PID */}
+                      <span className="rr">
+                        <span className="v">{isErrored ? <span className="d">—</span> : (proc.pid || "—")}</span>
+                      </span>
+
+                      {/* CPU */}
+                      <span className="rr">
+                        {isErrored
+                          ? <span className="v d">—</span>
+                          : (
+                            <span className="v teal">
+                              {cpuPct}<span className="un">%</span>
+                            </span>
+                          )}
+                      </span>
+
+                      {/* MEM */}
+                      <span className="rr">
+                        {isErrored
+                          ? <span className="v d">—</span>
+                          : (
+                            <span className="v indigo">
+                              {memMB ?? "—"}{memMB && <span className="un">MB</span>}
+                            </span>
+                          )}
+                      </span>
+
+                      {/* Uptime */}
+                      <span className="rr">
+                        {isErrored
+                          ? <span className="v d">—</span>
+                          : (
+                            <span className="v olive">
+                              {proc.uptime_ms > 0 ? relativeTime(uptimeSec) : "—"}
+                            </span>
+                          )}
+                      </span>
+
+                      {/* Restarts 24h */}
+                      <span className="rr">
+                        <span className={"v" + (proc.restarts_24h > 0 ? " amber" : "")}>
+                          {proc.restarts_24h}
+                        </span>
+                      </span>
+
+                      {/* CPU Sparkline (trend) */}
+                      <Sparkline
+                        points={cpuSeries}
+                        color={isErrored ? "var(--rose)" : "var(--teal)"}
+                      />
+                    </LedgerRow>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Modals — kept inside Overview; they depend on agents state */}
       {showAdd && (
         <AddAppModal
           agents={agents}
@@ -121,25 +310,13 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
         />
       )}
       {showConnect && <ConnectAgentModal onClose={() => setShowConnect(false)} />}
-      <SummaryCards agents={agents} />
-      {agents.length === 0 && <p className="empty">no agents connected.</p>}
-      {agents.map((a) => (
-        <div key={a.name}>
-          <div className="agent-head">
-            <span className={`dot ${a.connected ? "online" : "stopped"}`}></span>
-            <span className="name">{a.name}</span>
-            <span className="seen">{agentMeta(a)}</span>
-            {hostMeta(a) && <span className="seen host-meta">{hostMeta(a)}</span>}
-            {a.procs.length > 0 && <RestartAllButton agent={a.name} connected={a.connected} />}
-          </div>
-          {a.procs.length === 0 && <p className="empty">no processes.</p>}
-          {a.procs.map((p) => (
-            <ProcessCard key={`${p.name}-${p.pid}`} agent={a.name} proc={p} connected={a.connected}
-              cpuSeries={metrics[a.name]?.[p.name]?.cpu ?? []} memSeries={metrics[a.name]?.[p.name]?.mem ?? []}
-              errors={errors[a.name]?.[p.name] ?? 0} />
-          ))}
-        </div>
-      ))}
-    </div>
+      {liveLog && (
+        <LiveLogModal
+          agent={liveLog.agent}
+          proc={liveLog.proc}
+          onClose={() => setLiveLog(null)}
+        />
+      )}
+    </>
   );
 }

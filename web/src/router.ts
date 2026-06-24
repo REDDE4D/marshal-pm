@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 
-export type Route = { name: "overview" } | { name: "detail"; agent: string; proc: string } | { name: "credentials" } | { name: "notifications" } | { name: "errors" };
+export type Route = { name: "overview" } | { name: "detail"; agent: string; proc: string } | { name: "credentials" } | { name: "notifications" } | { name: "errors" } | { name: "logs"; agent?: string; proc?: string };
 
 export function parseHash(hash: string): Route {
   if (hash === "#/errors") return { name: "errors" };
   if (hash === "#/notifications") return { name: "notifications" };
   if (hash === "#/credentials") return { name: "credentials" };
+  if (hash === "#/logs") return { name: "logs" };
+  const ml = hash.match(/^#\/logs\/([^/]+)\/([^/]+)$/);
+  if (ml) return { name: "logs", agent: decodeURIComponent(ml[1]), proc: decodeURIComponent(ml[2]) };
   const m = hash.match(/^#\/a\/([^/]+)\/p\/([^/]+)$/);
   if (m) return { name: "detail", agent: decodeURIComponent(m[1]), proc: decodeURIComponent(m[2]) };
   return { name: "overview" };
@@ -24,4 +27,10 @@ export function useRoute(): Route {
 export function navigate(hash: string) { window.location.hash = hash; }
 export function procHref(agent: string, proc: string) {
   return `#/a/${encodeURIComponent(agent)}/p/${encodeURIComponent(proc)}`;
+}
+export function logsHref(agent?: string, proc?: string): string {
+  if (agent !== undefined && proc !== undefined) {
+    return `#/logs/${encodeURIComponent(agent)}/${encodeURIComponent(proc)}`;
+  }
+  return "#/logs";
 }

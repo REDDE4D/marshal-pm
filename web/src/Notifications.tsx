@@ -4,6 +4,8 @@ import {
   putRule, deleteRule, putNotifSettings,
   type NotifConfig, type NotifChannel, type NotifRule,
 } from "./api";
+import { SectionHeader, LedgerHeader, LedgerRow } from "./components/Ledger";
+import { Toggle, Chip, Field, Input, Button } from "./components/Controls";
 
 const EVENT_TYPES = ["crash", "restart_loop", "agent_down", "agent_up", "deploy_fail", "recovered"];
 const CHANNEL_TYPES = ["webhook", "telegram", "slack", "email"];
@@ -22,6 +24,27 @@ const SECRET_FIELDS: Record<string, string[]> = {
   email: ["password"],
 };
 
+// Color classes for channel types
+const CHANNEL_COLOR: Record<string, string> = {
+  webhook: "indigo",
+  telegram: "teal",
+  slack: "sky",
+  email: "amber",
+};
+
+// Color classes for event types
+const EVENT_COLOR: Record<string, string> = {
+  crash: "rose",
+  restart_loop: "amber",
+  agent_down: "sky",
+  agent_up: "teal",
+  deploy_fail: "indigo",
+  recovered: "olive",
+};
+
+const CHANNEL_COLS = "1.4fr 0.7fr 0.6fr 0.6fr 1fr";
+const RULE_COLS = "1fr 1.5fr 0.9fr 1fr 0.5fr";
+
 export function Notifications() {
   const [cfg, setCfg] = useState<NotifConfig | null>(null);
   const [err, setErr] = useState("");
@@ -37,18 +60,31 @@ export function Notifications() {
     reload();
   }, []);
 
-  if (!cfg) return <div className="panel">Loading… {err}</div>;
+  if (!cfg) {
+    return (
+      <p className="sub" style={{ padding: "12px 22px" }}>
+        {err ? `Error: ${err}` : "Loading…"}
+      </p>
+    );
+  }
 
   return (
-    <div className="panel">
-      <h2>Notifications</h2>
-      {err && <div className="error">{err}</div>}
+    <>
+      {err && (
+        <p className="sub" style={{ padding: "12px 22px", color: "var(--rose)" }}>
+          {err}
+        </p>
+      )}
       <ChannelSection cfg={cfg} onChange={reload} />
       <RuleSection cfg={cfg} onChange={reload} />
       <SettingsSection cfg={cfg} onChange={reload} />
-    </div>
+    </>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Channels
+// ---------------------------------------------------------------------------
 
 function ChannelSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => void }) {
   const [type, setType] = useState("webhook");
@@ -71,40 +107,135 @@ function ChannelSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => v
     }
   }
 
+  const allFields = [...CONFIG_FIELDS[type], ...SECRET_FIELDS[type]];
+
   return (
-    <section>
-      <h3>Channels</h3>
-      <ul>
-        {cfg.channels.map((c: NotifChannel) => (
-          <li key={c.name}>
-            <strong>{c.name}</strong> ({c.type}) {c.enabled ? "on" : "off"}{" "}
-            {c.has_secret ? "🔒" : ""}
-            <button onClick={async () => { const r = await testChannel(c.name); setMsg(r.ok ? "test sent" : r.error ?? "test failed"); }}>Test</button>
-            <button onClick={async () => { await deleteChannel(c.name); onChange(); }}>Delete</button>
-          </li>
-        ))}
-      </ul>
-      <div>
-        <select value={type} onChange={(e) => { setType(e.target.value); setFields({}); }}>
-          {CHANNEL_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <input placeholder="name" value={name} onChange={(e) => setName(e.target.value)} />
-        <label><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> enabled</label>
-        {[...CONFIG_FIELDS[type], ...SECRET_FIELDS[type]].map((f) => (
-          <input
-            key={f}
-            placeholder={f}
-            type={SECRET_FIELDS[type].includes(f) ? "password" : "text"}
-            value={fields[f] ?? ""}
-            onChange={(e) => setFields({ ...fields, [f]: e.target.value })}
+    <>
+      <SectionHeader
+        index="01"
+        title="Channels"
+        count={`${cfg.channels.length} configured`}
+      />
+
+      {cfg.channels.length > 0 && (
+        <>
+          <LedgerHeader cols={CHANNEL_COLS}>
+            <div>Name</div>
+            <div>Type</div>
+            <div>State</div>
+            <div>Secret</div>
+            <div className="rr">Actions</div>
+          </LedgerHeader>
+
+          {cfg.channels.map((c: NotifChannel) => (
+            <LedgerRow
+              key={c.name}
+              cols={CHANNEL_COLS}
+              actions={[
+                {
+                  icon: "◎",
+                  label: "test",
+                  variant: undefined,
+                  onClick: async () => {
+                    const r = await testChannel(c.name);
+                    setMsg(r.ok ? "test sent" : r.error ?? "test failed");
+                  },
+                },
+                {
+                  icon: "✕",
+                  label: "delete",
+                  variant: "dgr",
+                  onClick: async () => {
+                    await deleteChannel(c.name);
+                    onChange();
+                  },
+                },
+              ]}
+            >
+              <div className="nm">{c.name}</div>
+              <div className={`v ${CHANNEL_COLOR[c.type] ?? ""}`}>{c.type}</div>
+              <div className="st">
+                <span className={`sq ${c.enabled ? "on" : "st"}`} />
+                <span className={c.enabled ? "on-t" : "stp-t"}>
+                  {c.enabled ? "enabled" : "disabled"}
+                </span>
+              </div>
+              <div className={c.has_secret ? "v olive" : "v"}>
+                {c.has_secret ? "🔒 set" : "—"}
+              </div>
+            </LedgerRow>
+          ))}
+        </>
+      )}
+
+      {/* Add channel form */}
+      <div className="actions" style={{ display: "block", padding: "16px 20px 4px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: "14px", maxWidth: "560px" }}>
+          <Field label="type">
+            <select
+              className="inp"
+              value={type}
+              onChange={(e) => {
+                setType(e.target.value);
+                setFields({});
+              }}
+            >
+              {CHANNEL_TYPES.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="name">
+            <Input
+              placeholder="channel-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </Field>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", margin: "8px 0" }}>
+          <Toggle
+            on={enabled}
+            onChange={setEnabled}
+            label="Enabled"
           />
-        ))}
-        <button onClick={submit}>Save channel</button>
-        <span>{msg}</span>
+        </div>
+
+        {allFields.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "12px", maxWidth: "700px", marginBottom: "12px" }}>
+            {allFields.map((f) => (
+              <Field key={f} label={f}>
+                <Input
+                  placeholder={f}
+                  type={SECRET_FIELDS[type].includes(f) ? "password" : "text"}
+                  value={fields[f] ?? ""}
+                  onChange={(e) => setFields({ ...fields, [f]: e.target.value })}
+                  autoComplete={SECRET_FIELDS[type].includes(f) ? "new-password" : undefined}
+                />
+              </Field>
+            ))}
+          </div>
+        )}
       </div>
-    </section>
+
+      <div className="actions">
+        <Button onClick={submit} disabled={!name.trim()}>
+          + add channel
+        </Button>
+        {msg && (
+          <span className="sub" style={{ marginLeft: "12px", color: msg === "saved" || msg === "test sent" ? "var(--teal)" : "var(--rose)" }}>
+            {msg}
+          </span>
+        )}
+      </div>
+    </>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Rules
+// ---------------------------------------------------------------------------
 
 function RuleSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => void }) {
   const [name, setName] = useState("");
@@ -122,37 +253,167 @@ function RuleSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => void
     const rule: NotifRule = { name, enabled: true, events, agent, process, channels: chans };
     const res = await putRule(rule);
     setMsg(res.ok ? "saved" : res.error ?? "error");
-    if (res.ok) { setName(""); setEvents([]); setChans([]); onChange(); }
+    if (res.ok) {
+      setName("");
+      setEvents([]);
+      setChans([]);
+      onChange();
+    }
   }
 
   return (
-    <section>
-      <h3>Rules</h3>
-      <ul>
-        {cfg.rules.map((r: NotifRule) => (
-          <li key={r.name}>
-            <strong>{r.name}</strong>: {r.events.length ? r.events.join(",") : "any"} ·
-            {r.agent || "*"}/{r.process || "*"} → {r.channels.join(",")}
-            <button onClick={async () => { await deleteRule(r.name); onChange(); }}>Delete</button>
-          </li>
-        ))}
-      </ul>
-      <div>
-        <input placeholder="rule name" value={name} onChange={(e) => setName(e.target.value)} />
-        <div>{EVENT_TYPES.map((ev) => (
-          <label key={ev}><input type="checkbox" checked={events.includes(ev)} onChange={() => toggle(events, ev, setEvents)} /> {ev}</label>
-        ))}</div>
-        <input placeholder="agent (* = any)" value={agent} onChange={(e) => setAgent(e.target.value)} />
-        <input placeholder="process (* = any)" value={process} onChange={(e) => setProcess(e.target.value)} />
-        <div>{cfg.channels.map((c) => (
-          <label key={c.name}><input type="checkbox" checked={chans.includes(c.name)} onChange={() => toggle(chans, c.name, setChans)} /> {c.name}</label>
-        ))}</div>
-        <button onClick={submit}>Save rule</button>
-        <span>{msg}</span>
+    <>
+      <SectionHeader
+        index="02"
+        title="Rules"
+        count={`${cfg.rules.length} rule${cfg.rules.length !== 1 ? "s" : ""}`}
+      />
+
+      {cfg.rules.length > 0 && (
+        <>
+          <LedgerHeader cols={RULE_COLS}>
+            <div>Name</div>
+            <div>Events</div>
+            <div>Target</div>
+            <div>Channels</div>
+            <div className="rr" />
+          </LedgerHeader>
+
+          {cfg.rules.map((r: NotifRule) => (
+            <LedgerRow
+              key={r.name}
+              cols={RULE_COLS}
+              actions={[
+                {
+                  icon: "✕",
+                  label: "delete",
+                  variant: "dgr",
+                  onClick: async () => {
+                    await deleteRule(r.name);
+                    onChange();
+                  },
+                },
+              ]}
+            >
+              <div className="nm">{r.name}</div>
+              <div style={{ fontSize: "11px", display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center" }}>
+                {r.events.length === 0 ? (
+                  <span style={{ color: "var(--dim)" }}>any</span>
+                ) : (
+                  r.events.map((ev) => (
+                    <span key={ev} className={EVENT_COLOR[ev] ?? ""}>{ev}</span>
+                  ))
+                )}
+              </div>
+              <div className="v" style={{ fontSize: "11px", color: "var(--dim)" }}>
+                {r.agent || "*"} / {r.process || "*"}
+              </div>
+              <div className="v teal" style={{ fontSize: "11px" }}>
+                {r.channels.join(", ") || "—"}
+              </div>
+            </LedgerRow>
+          ))}
+        </>
+      )}
+
+      {/* Add rule form */}
+      <div style={{ padding: "16px 20px 4px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", maxWidth: "560px" }}>
+          <Field label="rule name">
+            <Input
+              placeholder="my-rule"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </Field>
+          <Field label="target (agent / process)">
+            <div style={{ display: "flex", gap: "8px" }}>
+              <Input
+                placeholder="agent (*)"
+                value={agent}
+                onChange={(e) => setAgent(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <Input
+                placeholder="process (*)"
+                value={process}
+                onChange={(e) => setProcess(e.target.value)}
+                style={{ flex: 1 }}
+              />
+            </div>
+          </Field>
+        </div>
+
+        <div style={{ marginTop: "12px" }}>
+          <label
+            style={{
+              fontSize: "10px",
+              letterSpacing: ".08em",
+              textTransform: "uppercase",
+              color: "var(--dim)",
+              display: "block",
+              marginBottom: "8px",
+            }}
+          >
+            events
+          </label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
+            {EVENT_TYPES.map((ev) => (
+              <Chip
+                key={ev}
+                label={ev}
+                on={events.includes(ev)}
+                onClick={() => toggle(events, ev, setEvents)}
+              />
+            ))}
+          </div>
+        </div>
+
+        {cfg.channels.length > 0 && (
+          <div style={{ marginTop: "14px" }}>
+            <label
+              style={{
+                fontSize: "10px",
+                letterSpacing: ".08em",
+                textTransform: "uppercase",
+                color: "var(--dim)",
+                display: "block",
+                marginBottom: "8px",
+              }}
+            >
+              channels
+            </label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
+              {cfg.channels.map((c) => (
+                <Chip
+                  key={c.name}
+                  label={c.name}
+                  on={chans.includes(c.name)}
+                  onClick={() => toggle(chans, c.name, setChans)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
-    </section>
+
+      <div className="actions">
+        <Button onClick={submit} disabled={!name.trim()}>
+          + add rule
+        </Button>
+        {msg && (
+          <span className="sub" style={{ marginLeft: "12px", color: msg === "saved" ? "var(--teal)" : "var(--rose)" }}>
+            {msg}
+          </span>
+        )}
+      </div>
+    </>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
 
 function SettingsSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => void }) {
   const [cooldown, setCooldown] = useState(cfg.settings.cooldown_seconds);
@@ -166,26 +427,108 @@ function SettingsSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => 
     }
     return init;
   });
+  const [msg, setMsg] = useState("");
+
+  async function save() {
+    const co: Record<string, number> = {};
+    for (const ev of EVENT_TYPES) {
+      if (overrides[ev] !== "") co[ev] = Number(overrides[ev]);
+    }
+    await putNotifSettings({
+      cooldown_seconds: cooldown,
+      suppress_recovery: !recovery,
+      cooldown_overrides: co,
+      coalesce_window_seconds: coalesce,
+    });
+    setMsg("saved");
+    onChange();
+  }
+
   return (
-    <section>
-      <h3>Settings</h3>
-      <label>Cooldown (seconds): <input type="number" value={cooldown} onChange={(e) => setCooldown(Number(e.target.value))} /></label>
-      <label><input type="checkbox" checked={recovery} onChange={(e) => setRecovery(e.target.checked)} /> Send recovery notices</label>
-      <label>Coalesce window (seconds, 0 = off): <input type="number" value={coalesce} onChange={(e) => setCoalesce(Number(e.target.value))} /></label>
-      <div>
-        <h4>Per-event cooldown (seconds)</h4>
-        {EVENT_TYPES.map((ev) => (
-          <label key={ev}>{ev}: <input type="number" placeholder={`${cooldown} (global)`} value={overrides[ev]} onChange={(e) => setOverrides({ ...overrides, [ev]: e.target.value })} /></label>
-        ))}
+    <>
+      <SectionHeader index="03" title="Settings" />
+
+      <div style={{ padding: "4px 20px 0" }}>
+        {/* Recovery toggle */}
+        <Toggle
+          on={recovery}
+          onChange={setRecovery}
+          label="Send recovery notices"
+          desc="Notify when a crashed process or downed agent comes back."
+        />
+
+        {/* Global cooldown + coalesce window */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "18px",
+            padding: "16px 0",
+            borderBottom: "1px solid var(--line2)",
+            maxWidth: "560px",
+          }}
+        >
+          <Field label="Global cooldown (seconds)">
+            <Input
+              type="number"
+              value={cooldown}
+              onChange={(e) => setCooldown(Number(e.target.value))}
+            />
+          </Field>
+          <Field label="Coalesce window (sec · 0 = off)">
+            <Input
+              type="number"
+              value={coalesce}
+              onChange={(e) => setCoalesce(Number(e.target.value))}
+            />
+          </Field>
+        </div>
+
+        {/* Per-event cooldown overrides */}
+        <div style={{ padding: "16px 0 6px" }}>
+          <label
+            style={{
+              fontSize: "10px",
+              letterSpacing: ".08em",
+              textTransform: "uppercase",
+              color: "var(--dim)",
+            }}
+          >
+            Per-event cooldown overrides
+          </label>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: "12px",
+            paddingBottom: "16px",
+            maxWidth: "700px",
+          }}
+        >
+          {EVENT_TYPES.map((ev) => (
+            <Field key={ev} label={ev}>
+              <Input
+                type="number"
+                placeholder={`${cooldown} (global)`}
+                value={overrides[ev]}
+                onChange={(e) =>
+                  setOverrides({ ...overrides, [ev]: e.target.value })
+                }
+              />
+            </Field>
+          ))}
+        </div>
       </div>
-      <button onClick={async () => {
-        const co: Record<string, number> = {};
-        for (const ev of EVENT_TYPES) {
-          if (overrides[ev] !== "") co[ev] = Number(overrides[ev]);
-        }
-        await putNotifSettings({ cooldown_seconds: cooldown, suppress_recovery: !recovery, cooldown_overrides: co, coalesce_window_seconds: coalesce });
-        onChange();
-      }}>Save</button>
-    </section>
+
+      <div className="actions">
+        <Button onClick={save}>save settings</Button>
+        {msg && (
+          <span className="sub" style={{ marginLeft: "12px", color: "var(--teal)" }}>
+            {msg}
+          </span>
+        )}
+      </div>
+    </>
   );
 }

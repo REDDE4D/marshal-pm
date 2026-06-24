@@ -6,6 +6,8 @@ import { ProcessDetail } from "./ProcessDetail";
 import { Credentials } from "./Credentials";
 import { Notifications } from "./Notifications";
 import { Errors } from "./Errors";
+import { Logs } from "./Logs";
+import { AppShell } from "./AppShell";
 import { useRoute } from "./router";
 
 export function App() {
@@ -15,9 +17,51 @@ export function App() {
   if (authed === null) return <div className="loading">loading…</div>;
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;
   const onLogout = () => setAuthed(false);
-  if (route.name === "detail") return <ProcessDetail agent={route.agent} proc={route.proc} onLogout={onLogout} />;
-  if (route.name === "credentials") return <Credentials onLogout={onLogout} />;
-  if (route.name === "notifications") return <Notifications />;
-  if (route.name === "errors") return <Errors />;
-  return <Overview onLogout={onLogout} />;
+
+  if (route.name === "detail") {
+    return (
+      <AppShell ctx="Fleet" onLogout={onLogout}>
+        <ProcessDetail agent={route.agent} proc={route.proc} onLogout={onLogout} />
+      </AppShell>
+    );
+  }
+
+  if (route.name === "credentials") {
+    return (
+      <AppShell ctx="Credentials" onLogout={onLogout}>
+        <Credentials onLogout={onLogout} />
+      </AppShell>
+    );
+  }
+
+  if (route.name === "notifications") {
+    return (
+      <AppShell ctx="Notifications" onLogout={onLogout}>
+        <Notifications />
+      </AppShell>
+    );
+  }
+
+  if (route.name === "errors") {
+    return (
+      <AppShell ctx="Errors" onLogout={onLogout}>
+        <Errors />
+      </AppShell>
+    );
+  }
+
+  if (route.name === "logs") {
+    return (
+      <AppShell ctx="Logs" onLogout={onLogout}>
+        <Logs agent={route.agent} proc={route.proc} />
+      </AppShell>
+    );
+  }
+
+  // overview (default)
+  return (
+    <AppShell ctx="Fleet" onLogout={onLogout}>
+      <Overview onLogout={onLogout} />
+    </AppShell>
+  );
 }

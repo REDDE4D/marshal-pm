@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { login } from "./api";
-import { Logo } from "./Logo";
+import { Field, Input, Button } from "./components/Controls";
 
 export function Login({ onLogin }: { onLogin: () => void }) {
-  const [user, setUser] = useState("admin");
+  const [user] = useState("admin");
   const [pass, setPass] = useState("");
   const [error, setError] = useState("");
 
@@ -15,13 +15,23 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   }
 
   return (
-    <div className="login">
-      <form onSubmit={submit}>
-        <Logo />
-        <label>username<input value={user} onChange={(e) => setUser(e.target.value)} autoFocus /></label>
-        <label>password<input type="password" value={pass} onChange={(e) => setPass(e.target.value)} /></label>
+    <div className="loginwrap">
+      <form className="loginbox" onSubmit={submit}>
+        <span className="wm">mar<b>$</b>hal</span>
+        <div className="tagline">self-hosted process fleet</div>
+        <Field label="password">
+          <Input
+            type="password"
+            value={pass}
+            onChange={(e) => setPass(e.target.value)}
+            placeholder="••••••••"
+            autoFocus
+          />
+        </Field>
         {error && <p className="error">{error}</p>}
-        <button type="submit">sign in</button>
+        <Button type="submit" style={{ width: "100%", padding: "9px", justifyContent: "center", marginTop: "6px" }}>
+          sign in
+        </Button>
       </form>
     </div>
   );

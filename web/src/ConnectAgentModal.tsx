@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { connectToken } from "./api";
+import { Modal } from "./components/Modal";
+import { Field, Input, Button } from "./components/Controls";
 
 export function ConnectAgentModal({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState("agent");
@@ -34,23 +36,51 @@ export function ConnectAgentModal({ onClose }: { onClose: () => void }) {
     }
   }
 
+  const footer = (
+    <>
+      {cmd ? (
+        <Button
+          type="button"
+          onClick={() => {
+            navigator.clipboard.writeText(cmd).then(() => {
+              setCopied(true);
+            }).catch(() => {
+              setError("Copy failed — please copy the command manually.");
+            });
+          }}
+        >
+          {copied ? "copied" : "copy command"}
+        </Button>
+      ) : (
+        <Button variant="ghost" type="button" onClick={onClose}>close</Button>
+      )}
+    </>
+  );
+
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Connect an agent</h3>
-        <label>agent name<input value={name} onChange={(e) => setName(e.target.value)} /></label>
-        <label>server address<input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="auto (host:fleet-port)" /></label>
-        <button className="btn" disabled={busy} onClick={generate}>Generate connect command</button>
-        {error && <p className="error">{error}</p>}
-        {cmd && (
-          <>
-            <p className="warn">Shown once. Generating rotated the enroll token — any previously generated, unused command no longer works. Already-connected agents are unaffected.</p>
-            <pre className="connect-cmd">{cmd}</pre>
-            <button className="btn" onClick={async () => { await navigator.clipboard.writeText(cmd); setCopied(true); }}>{copied ? "copied" : "copy"}</button>
-          </>
-        )}
-        <button className="btn" onClick={onClose}>close</button>
-      </div>
-    </div>
+    <Modal title="Connect agent" onClose={onClose} footer={footer}>
+      <Field label="agent name">
+        <Input value={name} onChange={(e) => setName(e.target.value)} />
+      </Field>
+      <Field label="server address">
+        <Input
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          placeholder="auto (host:fleet-port)"
+        />
+      </Field>
+      <Button type="button" disabled={busy} onClick={generate}>
+        generate connect command
+      </Button>
+      {error && <p className="error">{error}</p>}
+      {cmd && (
+        <>
+          <p className="warn" style={{ marginTop: "12px" }}>
+            Shown once. Generating rotated the enroll token — any previously generated, unused command no longer works. Already-connected agents are unaffected.
+          </p>
+          <pre className="connect-cmd">{cmd}</pre>
+        </>
+      )}
+    </Modal>
   );
 }

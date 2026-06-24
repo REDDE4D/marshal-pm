@@ -1,7 +1,6 @@
 package dashboard
 
 import (
-	"encoding/json"
 	"log"
 	"net"
 	"net/http"
@@ -16,11 +15,6 @@ type EnrollMinter interface {
 	FleetAddress() string // e.g. ":9000" or "0.0.0.0:9000"
 }
 
-type connectTokenReq struct {
-	Address string `json:"address"`
-	Name    string `json:"name"`
-}
-
 // connectToken serves POST /api/fleet/connect-token: mints a fresh enroll token
 // (rotating the single shared one), returning it ONCE with the cert fingerprint
 // and a default address (request host + fleet port) for assembling an agent
@@ -30,10 +24,6 @@ func (h *handler) connectToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "fleet enrollment unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	// Body is optional: address/name are non-secret hints the frontend may also
-	// fill locally, so a missing/!valid body is not an error.
-	var body connectTokenReq
-	_ = json.NewDecoder(r.Body).Decode(&body)
 
 	tok, err := h.enroll.RotateEnrollToken()
 	if err != nil {

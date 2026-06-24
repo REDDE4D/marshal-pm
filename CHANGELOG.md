@@ -12,6 +12,21 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Changed
+- **Dashboard "Marshal Instrument" redesign (M-A):** the entire web dashboard has been
+  rebuilt in a new instrument/ledger design language — a left **icon rail** + top context
+  bar shell replaces the per-page topbar; **metric clusters** (semantic, colour-per-metric)
+  and dense **hairline ledgers** (numbered rows, hover quick-actions ▤ Log · ▸ Restart ·
+  ⟲ Reload · ■ Stop) replace the old cards. Every page is restyled: Fleet overview,
+  Process detail (Overview/Files sub-tabs), Errors, Notifications (rewritten with toggles
+  and event chips), Credentials, Login, and the Add-app / Connect-agent modals. Adds a
+  **live-log modal** (stream/level/text-regex filtering, pause) and a dedicated **Logs page**
+  (`#/logs`). Every cell is backed by the real data shipped in M-B…M-G/M-F (host metrics,
+  extended per-process metrics, restart history, error signatures); no mocked values.
+  Inter is now bundled alongside JetBrains Mono. Includes a hardening pass (loading/empty/
+  error states, focus rings, keyboard-accessible controls, icon-button aria-labels, a React
+  error boundary around page content, and narrow-viewport responsiveness).
+
 ### Added
 - **Errors/exceptions subsystem (M-F):** server-side error-signature grouping — stderr is
   normalized and deduplicated into signatures with occurrence counts, first/last-seen, affected

@@ -7,9 +7,9 @@ type SparklineProps = {
 
 export function Sparkline({
   points,
-  width = 80,
-  height = 20,
-  color = "#4ade80",
+  width = 120,
+  height = 22,
+  color = "var(--teal)",
 }: SparklineProps) {
   if (points.length === 0) {
     return <svg width={width} height={height} className="sparkline" aria-label="no data" />;
@@ -32,7 +32,7 @@ export function Sparkline({
       preserveAspectRatio="none"
       role="img"
     >
-      <polyline points={coords.join(" ")} fill="none" stroke={color} strokeWidth={1.5} />
+      <polyline points={coords.join(" ")} fill="none" stroke={color} strokeWidth={1.4} />
     </svg>
   );
 }
