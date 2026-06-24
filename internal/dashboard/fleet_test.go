@@ -15,6 +15,7 @@ func TestFleetView(t *testing.T) {
 		AgentName:    "dev-1",
 		Connected:    true,
 		LastSeenUnix: 42,
+		Host:         &pb.HostMetrics{CpuPercent: 7.5, Load1: 1.5, MemTotal: 4096, MemUsed: 1024, MemUsedPct: 25, NetRxBps: 100, NetTxBps: 200},
 		Procs: []*pb.ProcInfo{{
 			Name: "ticker", State: "running", Pid: 99, UptimeMs: 1000, Restarts: 2, Cpu: 1.5, Mem: 2048,
 			Source: "command", Threads: 8, OpenFds: -1, ExitCode: 1, ExitReason: "exit status 1",
@@ -28,6 +29,18 @@ func TestFleetView(t *testing.T) {
 	}
 	if v[0].Name != "dev-1" || !v[0].Connected || v[0].LastSeen != 42 {
 		t.Fatalf("agent view = %+v", v[0])
+	}
+	if v[0].Host == nil {
+		t.Fatal("host view is nil, want populated")
+	}
+	if v[0].Host.CPUPercent != 7.5 || v[0].Host.Load1 != 1.5 {
+		t.Fatalf("host cpu/load = %v/%v, want 7.5/1.5", v[0].Host.CPUPercent, v[0].Host.Load1)
+	}
+	if v[0].Host.MemTotal != 4096 || v[0].Host.MemUsed != 1024 || v[0].Host.MemUsedPct != 25 {
+		t.Fatalf("host mem = %+v", v[0].Host)
+	}
+	if v[0].Host.NetRxBps != 100 || v[0].Host.NetTxBps != 200 {
+		t.Fatalf("host net = %v/%v, want 100/200", v[0].Host.NetRxBps, v[0].Host.NetTxBps)
 	}
 	if len(v[0].Procs) != 2 {
 		t.Fatalf("len procs = %d; want 2", len(v[0].Procs))

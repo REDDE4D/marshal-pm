@@ -28,6 +28,24 @@ function agentMeta(a: Agent): string {
   return parts.join(" · ");
 }
 
+function fmtBps(bps: number): string {
+  if (bps < 1024) return `${bps.toFixed(0)} B/s`;
+  if (bps < 1024 * 1024) return `${(bps / 1024).toFixed(1)} KB/s`;
+  return `${(bps / (1024 * 1024)).toFixed(1)} MB/s`;
+}
+
+function hostMeta(a: Agent): string | null {
+  const h = a.host;
+  if (!h) return null;
+  const gb = (b: number) => (b / (1024 * 1024 * 1024)).toFixed(1);
+  return [
+    `cpu ${h.cpu_percent.toFixed(0)}%`,
+    `load ${h.load1.toFixed(2)}/${h.load5.toFixed(2)}/${h.load15.toFixed(2)}`,
+    `mem ${gb(h.mem_used)}/${gb(h.mem_total)}gb (${h.mem_used_pct.toFixed(0)}%)`,
+    `↓${fmtBps(h.net_rx_bps)} ↑${fmtBps(h.net_tx_bps)}`,
+  ].join(" · ");
+}
+
 export function Overview({ onLogout }: { onLogout: () => void }) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [metrics, setMetrics] = useState<Series>({});
@@ -109,6 +127,7 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
             <span className={`dot ${a.connected ? "online" : "stopped"}`}></span>
             <span className="name">{a.name}</span>
             <span className="seen">{agentMeta(a)}</span>
+            {hostMeta(a) && <span className="seen host-meta">{hostMeta(a)}</span>}
           </div>
           {a.procs.length === 0 && <p className="empty">no processes.</p>}
           {a.procs.map((p) => (

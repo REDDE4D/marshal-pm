@@ -521,3 +521,27 @@ func TestClientShipsLogsAndSeedsLogWatermark(t *testing.T) {
 	waitFor(t, func() bool { return fs.sawLine("fresh") && !fs.sawLine("old") })
 	cancel()
 }
+
+func TestPushSnapshotIncludesHostWhenConfigured(t *testing.T) {
+	// With WithHost: the sent snapshot carries the host metrics.
+	c := New("", "agent", "v", func() []*pb.ProcInfo { return nil },
+		WithHost(func() *pb.HostMetrics { return &pb.HostMetrics{CpuPercent: 42, MemTotal: 2048} }))
+	var got *pb.AgentMessage
+	if err := c.pushSnapshot(func(m *pb.AgentMessage) error { got = m; return nil }); err != nil {
+		t.Fatalf("pushSnapshot: %v", err)
+	}
+	h := got.GetSnapshot().GetHost()
+	if h == nil || h.GetCpuPercent() != 42 || h.GetMemTotal() != 2048 {
+		t.Fatalf("host = %+v, want cpu=42 mem=2048", h)
+	}
+
+	// Without WithHost: host is nil.
+	c2 := New("", "agent", "v", func() []*pb.ProcInfo { return nil })
+	var got2 *pb.AgentMessage
+	if err := c2.pushSnapshot(func(m *pb.AgentMessage) error { got2 = m; return nil }); err != nil {
+		t.Fatalf("pushSnapshot: %v", err)
+	}
+	if got2.GetSnapshot().GetHost() != nil {
+		t.Fatalf("host = %+v, want nil when WithHost not set", got2.GetSnapshot().GetHost())
+	}
+}

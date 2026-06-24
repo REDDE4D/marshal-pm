@@ -52,7 +52,23 @@ message HelloAck {
   string agent_token = 3;      // M10: minted per-agent token (set only on enrollment)
 }
 
-message StateSnapshot { repeated ProcInfo procs = 1; } // ProcInfo from daemon.proto
+// HostMetrics — M-C: current-value host gauges (point-in-time, per agent).
+message HostMetrics {
+  double cpu_percent  = 1; // aggregate host CPU utilization %
+  double load1        = 2;
+  double load5        = 3;
+  double load15       = 4;
+  uint64 mem_total    = 5; // bytes
+  uint64 mem_used     = 6; // bytes
+  double mem_used_pct = 7;
+  double net_rx_bps   = 8; // bytes/sec received (rate)
+  double net_tx_bps   = 9; // bytes/sec sent (rate)
+}
+
+message StateSnapshot {
+  repeated ProcInfo procs = 1; // ProcInfo from daemon.proto
+  HostMetrics host = 2;        // M-C: current host gauges (nil if none)
+}
 
 message ListFleetRequest {}
 
@@ -69,6 +85,7 @@ message AgentState {
   string arch            = 8;
   string marshal_version = 9;
   int64  host_boot_unix  = 10;
+  HostMetrics host       = 11; // M-C: latest host gauges
 }
 
 // One stored metric row, flattened to map 1:1 to a metricstore row.

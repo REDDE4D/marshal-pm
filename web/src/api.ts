@@ -15,6 +15,18 @@ export type Proc = {
   exit_reason?: string; // "" / absent = never exited
 };
 
+export type AgentHost = {
+  cpu_percent: number;
+  load1: number;
+  load5: number;
+  load15: number;
+  mem_total: number;
+  mem_used: number;
+  mem_used_pct: number;
+  net_rx_bps: number;
+  net_tx_bps: number;
+};
+
 export type Agent = {
   name: string;
   connected: boolean;
@@ -26,6 +38,7 @@ export type Agent = {
   arch?: string;
   marshal_version?: string;
   host_boot_unix?: number;
+  host?: AgentHost;
 };
 
 export async function getSession(): Promise<string | null> {

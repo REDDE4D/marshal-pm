@@ -13,6 +13,10 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 ## [Unreleased]
 
 ### Added
+- **Host system metrics (M-C):** each agent now reports current-value host
+  gauges — CPU%, load average (1/5/15), memory (used/total/percent), and
+  network I/O rate (bytes/sec) — shipped with the periodic state push and shown
+  on the agent band and in `/api/fleet`.
 - **Extended per-process metrics (M-D):** thread count and open file-descriptor
   count (group-summed; FDs shown as `—` where the platform does not report them,
   e.g. macOS), plus the last exit code and reason for each process, surfaced on
