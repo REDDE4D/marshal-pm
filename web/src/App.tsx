@@ -6,6 +6,7 @@ import { ProcessDetail } from "./ProcessDetail";
 import { Credentials } from "./Credentials";
 import { Notifications } from "./Notifications";
 import { Errors } from "./Errors";
+import { Logs } from "./Logs";
 import { AppShell } from "./AppShell";
 import { useRoute } from "./router";
 
@@ -50,10 +51,9 @@ export function App() {
   }
 
   if (route.name === "logs") {
-    // TODO(Task12): real Logs page; route to Overview until then
     return (
-      <AppShell ctx="Fleet" onLogout={onLogout}>
-        <Overview onLogout={onLogout} />
+      <AppShell ctx="Logs" onLogout={onLogout}>
+        <Logs agent={route.agent} proc={route.proc} />
       </AppShell>
     );
   }
