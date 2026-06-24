@@ -24,6 +24,7 @@ live demo → handoff → `--no-ff` merge):
 | **M-C** | Host system metrics: CPU%, load avg, memory, network I/O **rate** | `2026-06-24-mC-host-system-metrics.md` |
 | **M-E** | Restart history rollups: `restarts_24h` + `last_restart` from a SQLite event store | `2026-06-24-mE-restart-history.md` |
 | **M-G** | Control additions: graceful rolling **reload** op, per-agent **restart-all** (UI), and a **log download** endpoint (`GET /api/logs/download`) | `2026-06-24-mG-control-additions.md` |
+| **M-F** | Errors/exceptions subsystem: server-side **error-signature ledger** (compute-on-read from mirrored stderr), `GET /api/errors`, transitional **Errors page** (`#/errors`) | `2026-06-24-mF-errors-subsystem.md` |
 
 M-B/M-C/M-D/M-E surface as **point-in-time fields** that ride the existing periodic fleet push
 (`StateSnapshot` / `AgentState`) → `/api/fleet` → the SPA, with **minimal transitional UI** on the
@@ -32,9 +33,6 @@ M-G adds control-plane ops (new `ControlOp.reload` = rolling per-instance restar
 endpoint; live-demo verified end-to-end on a real fleet (reload/restart-all/download).
 
 **Remaining** (roadmap order; M-A ships last):
-- **M-F · Errors / exceptions subsystem** (largest) — group stderr into error **signatures**
-  (dedupe by normalized message), store occurrence history + counts (reuse M-E's event-store
-  pattern), an errors API, and the **Errors page**. Today only `logstore.ErrorCounts` (last 5 min).
 - **M-A · Full redesign** (frontend; design already locked) — the "Marshal Instrument" restyle of
   every page, new shell, shared components, live-log modal, Notifications rewrite, Errors page —
   backed by the real data from B–F. Spec: `2026-06-23-dashboard-redesign-design.md`; prototype
