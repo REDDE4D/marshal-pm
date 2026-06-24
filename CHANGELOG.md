@@ -13,6 +13,11 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 ## [Unreleased]
 
 ### Added
+- **Errors/exceptions subsystem (M-F):** server-side error-signature grouping — stderr is
+  normalized and deduplicated into signatures with occurrence counts, first/last-seen, affected
+  processes, best-effort source location, and a 24-bucket occurrence trend. New `GET /api/errors`
+  endpoint (range `24h`/`7d`/`all`, optional `agent` filter) and a transitional Errors page
+  (`#/errors`).
 - **Control additions (M-G):** graceful **reload** (rolling per-instance restart, distinct from
   restart), a per-agent **restart all** action, and a **log download** endpoint
   (`GET /api/logs/download`, plain-text full history honoring the stream/search filters).

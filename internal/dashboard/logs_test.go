@@ -26,7 +26,8 @@ func (f *fakeLogs) Since(agent, selector string, afterRowID int64, limit int, fi
 	}, 8, nil
 }
 
-func (f *fakeLogs) ErrorCounts(string, int64) (map[string]int64, error) { return nil, nil }
+func (f *fakeLogs) ErrorCounts(string, int64) (map[string]int64, error)      { return nil, nil }
+func (f *fakeLogs) StderrSince(string, int64) ([]logstore.StoredLine, error) { return nil, nil }
 
 func TestLogsRequiresSession(t *testing.T) {
 	srv := httptest.NewServer(NewHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour))
@@ -107,7 +108,8 @@ func (r *recordingLogs) Since(agent, selector string, afterRowID int64, limit in
 	return []logstore.StoredLine{{RowID: 1, TsMs: 1, Label: "web#0", Stderr: false, Text: "x"}}, 1, nil
 }
 
-func (r *recordingLogs) ErrorCounts(string, int64) (map[string]int64, error) { return nil, nil }
+func (r *recordingLogs) ErrorCounts(string, int64) (map[string]int64, error)      { return nil, nil }
+func (r *recordingLogs) StderrSince(string, int64) ([]logstore.StoredLine, error) { return nil, nil }
 
 func TestLogsThreadsQueryFilter(t *testing.T) {
 	rl := &recordingLogs{}
@@ -128,7 +130,8 @@ type statLogs struct{ counts map[string]int64 }
 func (s statLogs) Since(string, string, int64, int, logstore.StreamFilter, string) ([]logstore.StoredLine, int64, error) {
 	return nil, 0, nil
 }
-func (s statLogs) ErrorCounts(string, int64) (map[string]int64, error) { return s.counts, nil }
+func (s statLogs) ErrorCounts(string, int64) (map[string]int64, error)      { return s.counts, nil }
+func (s statLogs) StderrSince(string, int64) ([]logstore.StoredLine, error) { return nil, nil }
 
 func TestLogStatsEndpoint(t *testing.T) {
 	sl := statLogs{counts: map[string]int64{"web#0": 4, "api#0": 1}}

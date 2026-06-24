@@ -5,6 +5,7 @@ import { Overview } from "./Overview";
 import { ProcessDetail } from "./ProcessDetail";
 import { Credentials } from "./Credentials";
 import { Notifications } from "./Notifications";
+import { Errors } from "./Errors";
 import { useRoute } from "./router";
 
 export function App() {
@@ -17,5 +18,6 @@ export function App() {
   if (route.name === "detail") return <ProcessDetail agent={route.agent} proc={route.proc} onLogout={onLogout} />;
   if (route.name === "credentials") return <Credentials onLogout={onLogout} />;
   if (route.name === "notifications") return <Notifications />;
+  if (route.name === "errors") return <Errors />;
   return <Overview onLogout={onLogout} />;
 }

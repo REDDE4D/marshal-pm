@@ -276,6 +276,40 @@ func (s *Store) ErrorCounts(labels []string, sinceMs int64) (map[string]int64, e
 	return out, rows.Err()
 }
 
+// StderrSince returns stderr lines (stderr = 1) for the given labels with
+// ts >= sinceMs, ordered by (label, ts) ascending so each proc's lines are
+// contiguous and time-ordered. An empty label set returns no rows.
+func (s *Store) StderrSince(labels []string, sinceMs int64) ([]StoredLine, error) {
+	if len(labels) == 0 {
+		return nil, nil
+	}
+	ph := make([]string, len(labels))
+	args := make([]any, 0, len(labels)+1)
+	for i, l := range labels {
+		ph[i] = "?"
+		args = append(args, l)
+	}
+	args = append(args, sinceMs)
+	q := `SELECT ts, label, stderr, text FROM log_line WHERE label IN (` + strings.Join(ph, ",") +
+		`) AND stderr = 1 AND ts >= ? ORDER BY label, ts`
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []StoredLine
+	for rows.Next() {
+		var ln StoredLine
+		var se int64
+		if err := rows.Scan(&ln.TsMs, &ln.Label, &se, &ln.Text); err != nil {
+			return nil, err
+		}
+		ln.Stderr = se != 0
+		out = append(out, ln)
+	}
+	return out, rows.Err()
+}
+
 // Prune deletes lines with ts < beforeMs, returning the count removed.
 func (s *Store) Prune(beforeMs int64) (int64, error) {
 	res, err := s.db.Exec(`DELETE FROM log_line WHERE ts < ?`, beforeMs)

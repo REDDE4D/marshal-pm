@@ -109,6 +109,7 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
           <button className="btn" onClick={() => setShowConnect(true)}>+ connect agent</button>
           <button className="btn" onClick={() => { window.location.hash = "#/credentials"; }}>credentials</button>
           <button className="btn" onClick={() => { window.location.hash = "#/notifications"; }}>notifications</button>
+          <button className="btn" onClick={() => { window.location.hash = "#/errors"; }}>errors</button>
           <button className="btn" onClick={async () => { await logout(); onLogout(); }}>sign out</button>
         </div>
       </div>

@@ -14,6 +14,7 @@ import (
 type LogsHistory interface {
 	Since(agent, selector string, afterRowID int64, limit int, filter logstore.StreamFilter, text string) ([]logstore.StoredLine, int64, error)
 	ErrorCounts(agent string, sinceMs int64) (map[string]int64, error)
+	StderrSince(agent string, sinceMs int64) ([]logstore.StoredLine, error)
 }
 
 type logLineView struct {
