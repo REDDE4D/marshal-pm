@@ -1,8 +1,9 @@
 # Dashboard redesign — "Marshal Instrument" design spec
 
-**Date:** 2026-06-23
-**Branch:** `ui-redesign` (off `dev`)
-**Status:** Design approved in brainstorming (visual companion). Not yet planned/implemented.
+**Date:** 2026-06-23 (planning decisions appended 2026-06-24)
+**Branch:** `mA-redesign` (off `dev`) — the M-A implementation branch.
+**Status:** Design approved in brainstorming. Open questions resolved (see *Planning decisions*);
+M-B…M-G data all landed — every cell is real. Ready for the implementation plan (writing-plans).
 **Supersedes:** the conformance-only "UI consistency pass" sketched in
 `docs/handoffs/2026-06-23-ui-consistency-production-readiness.md`. The user chose a **full
 redesign** (rethink the look), **full hardening**, and a **from-scratch Notifications rewrite**.
@@ -151,11 +152,29 @@ Per page, as a checklist during implementation:
 7. `make ui` (rebuild embedded `internal/dashboard/dist` — commit the bundle), `make build`,
    `go test ./... -race -count=1`, then an in-browser audit screenshotting every route/modal.
 
-## Open questions for planning
+## Planning decisions (resolved 2026-06-24)
 
-- **Errors page scope:** UI shell on existing counts now, or full signature-grouping backend
-  first, or defer the page entirely to a later milestone?
-- **Which mockup metrics are real?** Confirm the agent's actual metric surface and prune the
-  clusters accordingly before building.
-- **Version/changelog:** this is a feature-scale change — likely a minor bump with a sizable
-  `Changed` block; confirm whether it ships as one milestone or several.
+The three open questions below are now **resolved** — M-F (errors subsystem) and M-B…M-G
+(all the backing data) landed on `dev`, and the user made the structure/release calls:
+
+- **Errors page scope — RESOLVED: full, real data.** M-F shipped `GET /api/errors` (server-side
+  signature grouping: normalized message, occurrence count, first/last-seen, affected procs,
+  best-effort source, 24-bucket trend) plus a transitional `web/src/Errors.tsx`. M-A **restyles
+  the existing real Errors page** into the Instrument language — no UI-shell-on-counts compromise.
+- **Which mockup metrics are real? — RESOLVED: essentially all of them.** Every cell the mockups
+  show now has a real backend: host CPU%/load/mem/net I/O rate (M-C), threads/open-FDs/last-exit
+  (M-D, FDs `—` on macOS), restarts-24h + last-restart (M-E), agent hostname/IP/OS/arch/version/
+  uptime (M-B). Build the clusters as mocked; the only intentional `—` is FDs on macOS. The
+  "show only real data" rule still governs any field not on this list.
+- **Version/changelog — RESOLVED: one big release after M-A.** M-B…M-G + the redesign ship
+  together as a single minor bump (expected **v0.3.0**) cut once M-A lands, not before. The
+  `[Unreleased]` block already carries M-B…M-G; M-A adds a sizable `Changed` block.
+
+**Milestone structure — RESOLVED: one branch, one internally-phased plan.** M-A is built on a
+single `mA-redesign` branch off `dev`, as one implementation plan phased internally
+(foundation → shared components → pages → live-log modal + Notifications rewrite → hardening),
+executed via subagent-driven-development, merged back `--no-ff` in one go. Rationale: tokens +
+shell + shared components are tightly coupled and consumed by every page, so splitting into
+separately-merged sub-branches would leave `dev` half-redesigned mid-flight — violating the
+UI-consistency goal. Big-merge risk is covered by per-task SDD review, a whole-branch opus
+review, and a live demo before merge (same gates as M-B…M-G).
