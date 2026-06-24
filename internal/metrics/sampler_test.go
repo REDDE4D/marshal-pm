@@ -68,3 +68,23 @@ func TestSetOnTickFiresWithLabeledSamples(t *testing.T) {
 		t.Fatalf("onTick map = %+v, want an entry for a#0", got)
 	}
 }
+
+func TestSamplerRecordsThreadsAndFds(t *testing.T) {
+	pid, stop := startGroup(t)
+	defer stop()
+	s := NewSampler(time.Hour)
+	s.sample([]Instance{{Label: "a#0", Pid: pid, Online: true}})
+
+	got, ok := s.Get("a#0")
+	if !ok {
+		t.Fatal("no sample for a#0")
+	}
+	if got.Threads < 1 {
+		t.Fatalf("Threads = %d, want >= 1", got.Threads)
+	}
+	// Fds is -1 (unavailable, e.g. darwin) or a real positive count — never a
+	// misleading 0 for a live process group.
+	if got.Fds == 0 {
+		t.Fatalf("Fds = 0, want -1 (unavailable) or > 0")
+	}
+}

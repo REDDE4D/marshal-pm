@@ -12,8 +12,10 @@ import (
 
 // Sample is one instance's latest reading.
 type Sample struct {
-	Cpu float64 // percent, summed over the process group
-	Mem uint64  // RSS bytes, summed over the process group
+	Cpu     float64 // percent, summed over the process group
+	Mem     uint64  // RSS bytes, summed over the process group
+	Threads int32   // thread count, summed over the process group
+	Fds     int32   // open FD count, summed over the group; -1 if unavailable (e.g. darwin)
 }
 
 // Instance is the minimal view the sampler needs of a supervised instance.
@@ -85,6 +87,7 @@ func (s *Sampler) sample(insts []Instance) {
 			continue
 		}
 		var sum Sample
+		fdsOK := false
 		for _, pid := range groupPids(int32(in.Pid)) {
 			live[pid] = true
 			p := s.handle(pid)
@@ -97,6 +100,16 @@ func (s *Sampler) sample(insts []Instance) {
 			if m, err := p.MemoryInfo(); err == nil && m != nil {
 				sum.Mem += m.RSS
 			}
+			if t, err := p.NumThreads(); err == nil {
+				sum.Threads += t
+			}
+			if fd, err := p.NumFDs(); err == nil {
+				sum.Fds += fd
+				fdsOK = true
+			}
+		}
+		if !fdsOK {
+			sum.Fds = -1 // unavailable on this platform (gopsutil NumFDs unsupported)
 		}
 		result[in.Label] = sum
 	}

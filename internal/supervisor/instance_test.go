@@ -2,6 +2,8 @@ package supervisor
 
 import (
 	"context"
+	"errors"
+	"os/exec"
 	"sync"
 	"testing"
 	"time"
@@ -41,6 +43,12 @@ func TestInstanceOnlineThenStop(t *testing.T) {
 	wait()
 	if got := i.Snapshot().State; got != StateStopped {
 		t.Fatalf("state after cancel = %q, want stopped", got)
+	}
+	// Operator stop is recorded as an exit too: stop() sends SIGTERM and
+	// recordExit captures it. Guard that path so a dropped recordExit in
+	// stop() would fail the suite.
+	if got := i.Snapshot().ExitReason; got == "" {
+		t.Fatalf("ExitReason after operator stop = %q, want non-empty (e.g. \"signal: terminated\")", got)
 	}
 }
 
@@ -94,5 +102,44 @@ func TestInstanceGracefulStopFallsBackToKill(t *testing.T) {
 	}
 	if got := i.Snapshot().State; got != StateStopped {
 		t.Fatalf("state = %q, want stopped", got)
+	}
+}
+
+func TestDeriveExit(t *testing.T) {
+	if c, r := deriveExit(nil); c != 0 || r != "exit status 0" {
+		t.Fatalf("deriveExit(nil) = (%d, %q), want (0, \"exit status 0\")", c, r)
+	}
+	// Real non-zero exit yields *exec.ExitError.
+	err := exec.Command("sh", "-c", "exit 3").Run()
+	if c, r := deriveExit(err); c != 3 || r == "" {
+		t.Fatalf("deriveExit(exit 3) = (%d, %q), want (3, non-empty)", c, r)
+	}
+	// Generic (non-ExitError) error, e.g. spawn failure.
+	if c, r := deriveExit(errors.New("boom")); c != -1 || r != "boom" {
+		t.Fatalf("deriveExit(boom) = (%d, %q), want (-1, \"boom\")", c, r)
+	}
+}
+
+func TestInstanceRecordsExitCode(t *testing.T) {
+	// Never exited yet -> blank reason.
+	i := NewInstance(proc.Spec{Cmd: "sh", Args: []string{"-c", "exit 7"}}, testPolicy(config.RestartNo))
+	if got := i.Snapshot().ExitReason; got != "" {
+		t.Fatalf("ExitReason before run = %q, want empty", got)
+	}
+	_, wait := runInstance(i)
+	wait() // RestartNo + failure -> instance stops itself (errored)
+	snap := i.Snapshot()
+	if snap.ExitCode != 7 || snap.ExitReason != "exit status 7" {
+		t.Fatalf("after exit 7: code=%d reason=%q, want 7 / \"exit status 7\"", snap.ExitCode, snap.ExitReason)
+	}
+}
+
+func TestInstanceRecordsCleanExit(t *testing.T) {
+	i := NewInstance(proc.Spec{Cmd: "sh", Args: []string{"-c", "exit 0"}}, testPolicy(config.RestartNo))
+	_, wait := runInstance(i)
+	wait()
+	snap := i.Snapshot()
+	if snap.ExitCode != 0 || snap.ExitReason != "exit status 0" {
+		t.Fatalf("after clean exit: code=%d reason=%q, want 0 / \"exit status 0\"", snap.ExitCode, snap.ExitReason)
 	}
 }

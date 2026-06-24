@@ -5,6 +5,7 @@ import (
 
 	"marshal/internal/logs"
 	"marshal/internal/manager"
+	"marshal/internal/metrics"
 	"marshal/internal/metricstore"
 )
 
@@ -13,9 +14,25 @@ func TestSnapshotToProcCredential(t *testing.T) {
 		Name:       "priv",
 		Source:     "git",
 		Credential: "gh-ci",
-	}, 0, 0)
+	}, metrics.Sample{})
 	if p.GetCredential() != "gh-ci" {
 		t.Fatalf("credential not stamped: %q", p.GetCredential())
+	}
+}
+
+func TestSnapshotToProcExtendedMetrics(t *testing.T) {
+	sn := manager.InstanceSnapshot{Name: "api"}
+	sn.ExitCode = 2
+	sn.ExitReason = "exit status 2"
+	p := snapshotToProc(sn, metrics.Sample{Threads: 12, Fds: -1})
+	if p.GetThreads() != 12 {
+		t.Fatalf("threads = %d, want 12", p.GetThreads())
+	}
+	if p.GetOpenFds() != -1 {
+		t.Fatalf("open_fds = %d, want -1", p.GetOpenFds())
+	}
+	if p.GetExitCode() != 2 || p.GetExitReason() != "exit status 2" {
+		t.Fatalf("exit = (%d, %q), want (2, \"exit status 2\")", p.GetExitCode(), p.GetExitReason())
 	}
 }
 

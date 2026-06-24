@@ -32,6 +32,9 @@ export function ProcessCard({ agent, proc, connected, cpuSeries, memSeries, erro
     ? `${agent} · pid ${proc.pid || "—"} · up ${uptime(proc.uptime_ms)} · ${proc.restarts} restarts`
     : `${agent} · ${state} · ${proc.restarts} restarts`;
 
+  const fds = proc.open_fds < 0 ? "—" : String(proc.open_fds);
+  const stats = `${proc.threads} thr · ${fds} fds`;
+
   const isDeploying = state === "cloning" || state === "building";
   const isFailed = state === "failed";
 
@@ -84,7 +87,10 @@ export function ProcessCard({ agent, proc, connected, cpuSeries, memSeries, erro
       {isFailed && proc.detail && (
         <div className="pcard-failed-detail">{proc.detail}</div>
       )}
-      <div className="pcard-meta">{meta}</div>
+      <div className="pcard-meta">{meta}{state === "online" && ` · ${stats}`}</div>
+      {proc.exit_reason && (
+        <div className="pcard-meta pcard-exit">last exit: {proc.exit_reason}</div>
+      )}
       {!isDeploying && (
         <div className="pcard-metrics">
           <span className="metric"><span className="mlabel">cpu</span><Sparkline points={cpuSeries} color="#2DD4BF" /><span className="mval">{(proc.cpu * 100).toFixed(0)}%</span></span>

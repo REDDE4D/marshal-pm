@@ -2,6 +2,8 @@ package supervisor
 
 import (
 	"context"
+	"errors"
+	"os/exec"
 	"sync"
 	"syscall"
 	"time"
@@ -22,10 +24,12 @@ type Policy struct {
 
 // Snapshot is a point-in-time view of an instance.
 type Snapshot struct {
-	State     State
-	Pid       int
-	Restarts  int
-	StartedAt time.Time
+	State      State
+	Pid        int
+	Restarts   int
+	StartedAt  time.Time
+	ExitCode   int32  // last exit code; -1 if signaled or spawn failure
+	ExitReason string // e.g. "exit status 1" / "signal: killed"; "" = never exited
 }
 
 // Instance supervises a single OS process, restarting it per Policy.
@@ -33,12 +37,14 @@ type Instance struct {
 	spec   proc.Spec
 	policy Policy
 
-	mu        sync.Mutex
-	state     State
-	pid       int
-	restarts  int // total restarts
-	unstable  int // consecutive sub-MinUptime restarts
-	startedAt time.Time
+	mu         sync.Mutex
+	state      State
+	pid        int
+	restarts   int // total restarts
+	unstable   int // consecutive sub-MinUptime restarts
+	startedAt  time.Time
+	exitCode   int32  // last observed exit code
+	exitReason string // last observed exit reason ("" until first exit)
 }
 
 // NewInstance builds an instance supervisor. Call Run to start it.
@@ -50,7 +56,10 @@ func NewInstance(spec proc.Spec, policy Policy) *Instance {
 func (i *Instance) Snapshot() Snapshot {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	return Snapshot{State: i.state, Pid: i.pid, Restarts: i.restarts, StartedAt: i.startedAt}
+	return Snapshot{
+		State: i.state, Pid: i.pid, Restarts: i.restarts, StartedAt: i.startedAt,
+		ExitCode: i.exitCode, ExitReason: i.exitReason,
+	}
 }
 
 // set updates observable state under the lock. A pid < 0 leaves the stored pid
@@ -75,7 +84,7 @@ func (i *Instance) Run(ctx context.Context) {
 		p, err := proc.Start(i.spec)
 		if err != nil {
 			// Spawn failure: treat like an immediate crash for restart accounting.
-			if !i.handleExit(ctx, started, true) {
+			if !i.handleExit(ctx, started, err) {
 				return
 			}
 			continue
@@ -91,16 +100,41 @@ func (i *Instance) Run(ctx context.Context) {
 			i.set(StateStopped, 0, time.Time{})
 			return
 		case waitErr := <-exited:
-			failed := waitErr != nil
-			if !i.handleExit(ctx, started, failed) {
+			if !i.handleExit(ctx, started, waitErr) {
 				return
 			}
 		}
 	}
 }
 
+// deriveExit maps a Wait/Start error to a numeric code and human reason.
+// nil -> clean exit 0; *exec.ExitError -> its code (-1 if signaled) and string;
+// any other error (e.g. spawn failure) -> -1 and the error text.
+func deriveExit(waitErr error) (int32, string) {
+	if waitErr == nil {
+		return 0, "exit status 0"
+	}
+	var ee *exec.ExitError
+	if errors.As(waitErr, &ee) {
+		return int32(ee.ExitCode()), ee.String()
+	}
+	return -1, waitErr.Error()
+}
+
+// recordExit stores the most recent exit under the lock. Persists across
+// restarts; overwritten only by the next exit.
+func (i *Instance) recordExit(waitErr error) {
+	code, reason := deriveExit(waitErr)
+	i.mu.Lock()
+	i.exitCode = code
+	i.exitReason = reason
+	i.mu.Unlock()
+}
+
 // handleExit runs after a process terminates (or fails to spawn) and decides whether to restart. It returns false to terminate Run.
-func (i *Instance) handleExit(ctx context.Context, started time.Time, failed bool) bool {
+func (i *Instance) handleExit(ctx context.Context, started time.Time, waitErr error) bool {
+	i.recordExit(waitErr)
+	failed := waitErr != nil
 	if ctx.Err() != nil {
 		i.set(StateStopped, 0, time.Time{})
 		return false
@@ -161,9 +195,10 @@ func (i *Instance) stop(p *proc.Process, exited <-chan error) {
 	i.set(StateStopping, 0, time.Time{})
 	_ = p.Signal(syscall.SIGTERM)
 	select {
-	case <-exited:
+	case waitErr := <-exited:
+		i.recordExit(waitErr)
 	case <-time.After(i.policy.KillTimeout):
 		_ = p.Kill()
-		<-exited
+		i.recordExit(<-exited)
 	}
 }

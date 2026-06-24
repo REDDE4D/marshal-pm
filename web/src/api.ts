@@ -9,6 +9,10 @@ export type Proc = {
   source?: "command" | "git";
   detail?: string;
   credential?: string;
+  threads: number;
+  open_fds: number; // -1 = unavailable on this platform
+  exit_code: number;
+  exit_reason?: string; // "" / absent = never exited
 };
 
 export type Agent = {
