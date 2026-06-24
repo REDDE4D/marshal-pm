@@ -3,6 +3,7 @@ package daemon
 import (
 	"testing"
 
+	"marshal/internal/eventstore"
 	"marshal/internal/logs"
 	"marshal/internal/manager"
 	"marshal/internal/metrics"
@@ -14,7 +15,7 @@ func TestSnapshotToProcCredential(t *testing.T) {
 		Name:       "priv",
 		Source:     "git",
 		Credential: "gh-ci",
-	}, metrics.Sample{})
+	}, metrics.Sample{}, eventstore.Rollup{})
 	if p.GetCredential() != "gh-ci" {
 		t.Fatalf("credential not stamped: %q", p.GetCredential())
 	}
@@ -24,7 +25,7 @@ func TestSnapshotToProcExtendedMetrics(t *testing.T) {
 	sn := manager.InstanceSnapshot{Name: "api"}
 	sn.ExitCode = 2
 	sn.ExitReason = "exit status 2"
-	p := snapshotToProc(sn, metrics.Sample{Threads: 12, Fds: -1})
+	p := snapshotToProc(sn, metrics.Sample{Threads: 12, Fds: -1}, eventstore.Rollup{})
 	if p.GetThreads() != 12 {
 		t.Fatalf("threads = %d, want 12", p.GetThreads())
 	}
@@ -33,6 +34,17 @@ func TestSnapshotToProcExtendedMetrics(t *testing.T) {
 	}
 	if p.GetExitCode() != 2 || p.GetExitReason() != "exit status 2" {
 		t.Fatalf("exit = (%d, %q), want (2, \"exit status 2\")", p.GetExitCode(), p.GetExitReason())
+	}
+}
+
+func TestSnapshotToProcRestartRollup(t *testing.T) {
+	p := snapshotToProc(manager.InstanceSnapshot{Name: "api"}, metrics.Sample{Fds: -1},
+		eventstore.Rollup{Count24h: 4, LastMs: 1_700_000_000_000})
+	if p.GetRestarts24H() != 4 {
+		t.Fatalf("restarts24h = %d, want 4", p.GetRestarts24H())
+	}
+	if p.GetLastRestartUnix() != 1_700_000_000 { // millis -> seconds
+		t.Fatalf("last_restart_unix = %d, want 1700000000", p.GetLastRestartUnix())
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 
 	"marshal/internal/config"
 	"marshal/internal/deploy"
+	"marshal/internal/eventstore"
 	"marshal/internal/fleet"
 	"marshal/internal/fleetauth"
 	"marshal/internal/hostmetrics"
@@ -40,6 +41,7 @@ type Server struct {
 	logs             *logs.Registry
 	metrics          *metrics.Sampler
 	mdb              *metricstore.Store // metric history
+	estore           *eventstore.Store  // restart-event history (M-E)
 	kill             func()             // triggers daemon shutdown (set by Run)
 	logPolicyDefault logs.Policy        // effective default log policy (from WithLogRetention)
 	deployer         *deploy.Deployer
@@ -274,7 +276,11 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 			reg.SetPolicy(app.Name, logPolicy(app, cfg.logRetention))
 		}
 	}
-	mgr := manager.New(ctx, manager.WithLogs(reg))
+	estore, err := eventstore.Open(st.RestartsDBPath())
+	if err != nil {
+		return fmt.Errorf("open restarts db: %w", err)
+	}
+	mgr := manager.New(ctx, manager.WithLogs(reg), manager.WithRestartSink(estore))
 	sampler := metrics.NewSampler(cfg.sampleInterval)
 	hostSampler := hostmetrics.NewSampler()
 	mdb, err := metricstore.Open(st.MetricsDBPath())
@@ -309,7 +315,7 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 	}
 
 	gs := grpc.NewServer()
-	srv := &Server{mgr: mgr, store: st, logs: reg, metrics: sampler, mdb: mdb, logPolicyDefault: cfg.logRetention}
+	srv := &Server{mgr: mgr, store: st, logs: reg, metrics: sampler, mdb: mdb, estore: estore, logPolicyDefault: cfg.logRetention}
 	srv.deployer = deploy.New(deployHost{srv}, deploy.ExecRunner{}, st.DeploysDir())
 	var once sync.Once
 	stopped := make(chan struct{})
@@ -355,6 +361,7 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 				return
 			case <-t.C:
 				_, _ = mdb.Prune(time.Now().UnixMilli() - cfg.retention.Milliseconds())
+				_, _ = estore.Prune(time.Now().UnixMilli() - 7*24*60*60*1000) // M-E: 7-day retention
 			}
 		}
 	}()
@@ -370,6 +377,7 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 	cancel() // unblock the watcher if Serve returned on its own
 	mgr.StopAll()
 	_ = mdb.Close()
+	_ = estore.Close()
 	_ = os.Remove(sock)
 	if serveErr != nil && !errors.Is(serveErr, grpc.ErrServerStopped) {
 		return serveErr
