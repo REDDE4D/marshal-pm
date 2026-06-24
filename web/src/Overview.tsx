@@ -197,19 +197,19 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
                     {
                       icon: "▸",
                       label: "Restart",
-                      onClick: () => control(a.name, proc.name, "restart"),
+                      onClick: () => control(a.name, proc.name, "restart").catch(() => {}),
                     },
                     {
                       icon: "⟲",
                       label: "Reload",
                       variant: "warn",
-                      onClick: () => control(a.name, proc.name, "reload"),
+                      onClick: () => control(a.name, proc.name, "reload").catch(() => {}),
                     },
                     {
                       icon: "■",
                       label: "Stop",
                       variant: "dgr",
-                      onClick: () => control(a.name, proc.name, "stop"),
+                      onClick: () => control(a.name, proc.name, "stop").catch(() => {}),
                     },
                   ];
 

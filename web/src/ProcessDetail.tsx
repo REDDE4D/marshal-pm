@@ -141,7 +141,7 @@ export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: 
   const headerMeta = [state, ...metaParts].join(" · ");
 
   function doControl(action: "restart" | "stop" | "reload") {
-    control(agent, proc, action);
+    control(agent, proc, action).catch(() => {});
   }
 
   const showFiles = p?.source === "git";
