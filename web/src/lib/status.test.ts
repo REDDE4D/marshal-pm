@@ -10,11 +10,19 @@ describe("statusOf", () => {
     }
   });
   it("errored/failed → errored", () => {
-    for (const s of ["errored", "failed"]) expect(statusOf(s).kind).toBe("errored");
+    for (const s of ["errored", "failed"]) {
+      const r = statusOf(s);
+      expect(r.kind).toBe("errored");
+      expect(r.dotClass).toBe("er");
+    }
   });
   it("stopped/unknown → stopped", () => {
     expect(statusOf("stopped").kind).toBe("stopped");
     expect(statusOf("whatever").kind).toBe("stopped");
   });
-  it("word echoes the state", () => expect(statusOf("online").word).toBe("online"));
+  it("word echoes the state", () => {
+    expect(statusOf("online").word).toBe("online");
+    expect(statusOf("failed").word).toBe("failed");
+    expect(statusOf("whatever").word).toBe("whatever");
+  });
 });

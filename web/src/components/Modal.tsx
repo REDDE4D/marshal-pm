@@ -91,9 +91,7 @@ export function Modal({ title, onClose, children, footer }: Props) {
       >
         <div className="mhead">
           <span className="mtitle">{title}</span>
-          <span className="mclose" onClick={onClose} role="button" aria-label="Close">
-            ×
-          </span>
+          <button className="mclose" onClick={onClose} aria-label="Close">×</button>
         </div>
         <div className="mbody">{children}</div>
         {footer && <div className="mfoot">{footer}</div>}
