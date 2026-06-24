@@ -13,6 +13,9 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 ## [Unreleased]
 
 ### Added
+- **Control additions (M-G):** graceful **reload** (rolling per-instance restart, distinct from
+  restart), a per-agent **restart all** action, and a **log download** endpoint
+  (`GET /api/logs/download`, plain-text full history honoring the stream/search filters).
 - **Restart history (M-E):** each process now shows how many times it restarted
   in the last 24h and when it last restarted, recorded from real supervisor
   restart events in a local SQLite event store (7-day retention) and surfaced on

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AgentMetrics, Bucket, LogLine, getFleet, getLogs, getLogStats, getMetricsForProc, logout } from "./api";
+import { AgentMetrics, Bucket, LogLine, getFleet, getLogs, getLogStats, getMetricsForProc, logout, logsDownloadURL } from "./api";
 import { MetricChart } from "./MetricChart";
 import { LogView } from "./LogView";
 import { ControlButtons } from "./ControlButtons";
@@ -145,6 +145,7 @@ export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: 
           <span className="seg">{STREAMS.map((s) => <button key={s} className={stream === s ? "active" : ""} onClick={() => setStream(s)}>{s}</button>)}</span>
           <span className="seg">{LOG_LIMITS.map((n) => <button key={n} className={limit === n ? "active" : ""} onClick={() => setLimit(n)}>{n}</button>)}</span>
           <input className="log-search" placeholder="search…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <a className="btn" href={logsDownloadURL(agent, proc, { stream, q: searchDeb })} download>download</a>
         </div>
         <LogView lines={lines} />
       </div>

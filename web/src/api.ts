@@ -148,7 +148,7 @@ export type ControlResult = { ok: boolean; error?: string };
 export async function control(
   agent: string,
   selector: string,
-  action: "restart" | "stop" | "delete",
+  action: "restart" | "stop" | "delete" | "reload",
 ): Promise<ControlResult> {
   const r = await fetch("/api/control", {
     method: "POST",
@@ -316,6 +316,13 @@ export async function readFile(agent: string, app: string, path: string): Promis
   if (r.status === 401) throw new Error("unauthorized");
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `file failed (${r.status})`);
   return r.json();
+}
+
+// logsDownloadURL builds the GET /api/logs/download link for a proc, honoring the
+// current stream/search filters. Used as a plain <a href> (cookie auth applies).
+export function logsDownloadURL(agent: string, selector: string, opts: { stream: string; q: string }): string {
+  const q = new URLSearchParams({ agent, selector, stream: opts.stream, q: opts.q });
+  return `/api/logs/download?${q.toString()}`;
 }
 
 export function fileDownloadURL(agent: string, app: string, path: string): string {
