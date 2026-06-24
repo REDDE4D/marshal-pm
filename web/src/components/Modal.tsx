@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -8,9 +8,11 @@ type Props = {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  /** Optional inline style applied to the .modal div (e.g. to override default width). */
+  modalStyle?: CSSProperties;
 };
 
-export function Modal({ title, onClose, children, footer }: Props) {
+export function Modal({ title, onClose, children, footer, modalStyle }: Props) {
   const modalRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<Element | null>(null);
 
@@ -88,6 +90,7 @@ export function Modal({ title, onClose, children, footer }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        style={modalStyle}
       >
         <div className="mhead">
           <span className="mtitle">{title}</span>

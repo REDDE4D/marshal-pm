@@ -3,6 +3,7 @@ import { AgentMetrics, Bucket, LogLine, getFleet, getLogs, getLogStats, getMetri
 import { MetricChart } from "./MetricChart";
 import { navigate, logsHref } from "./router";
 import { FileBrowser } from "./FileBrowser";
+import { LiveLogModal } from "./LiveLogModal";
 import { MetricCluster, Cell } from "./components/Cluster";
 import { SectionHeader } from "./components/Ledger";
 import { Segment } from "./components/Controls";
@@ -44,6 +45,7 @@ export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: 
   const [lines, setLines] = useState<LogLine[]>([]);
   const [searchDeb] = useState("");
   const [sub, setSub] = useState<Sub>("over");
+  const [showLive, setShowLive] = useState(false);
 
   useEffect(() => {
     let stop = false;
@@ -161,7 +163,7 @@ export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: 
         <span className="detail-name mono">{proc}</span>
         <span className="detail-meta">{headerMeta}</span>
         <div className="detail-actions">
-          <button className="btn" onClick={() => navigate(logsHref(agent, proc))}>▤ live log</button>
+          <button className="btn" onClick={() => setShowLive(true)}>▤ live log</button>
           <button className="btn" disabled={!connected} onClick={() => doControl("restart")}>▸ restart</button>
           <button className="btn warn" disabled={!connected} onClick={() => {
             if (window.confirm("Reload will apply config changes without a full restart. Continue?")) doControl("reload");
@@ -275,6 +277,15 @@ export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: 
       )}
 
       {/* Logs subview: clicking the Logs subtab navigates away, so this never renders */}
+
+      {/* Live-log modal */}
+      {showLive && (
+        <LiveLogModal
+          agent={agent}
+          proc={proc}
+          onClose={() => setShowLive(false)}
+        />
+      )}
     </>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Agent, AgentMetrics, control, getFleet, getMetrics } from "./api";
 import { AddAppModal } from "./AddAppModal";
 import { ConnectAgentModal } from "./ConnectAgentModal";
+import { LiveLogModal } from "./LiveLogModal";
 import { RestartAllButton } from "./RestartAllButton";
 import { MetricCluster, Cell } from "./components/Cluster";
 import {
@@ -15,7 +16,7 @@ import { Sparkline } from "./Sparkline";
 import { fleetSummary } from "./lib/fleet";
 import { statusOf } from "./lib/status";
 import { relativeTime, formatBytes } from "./lib/format";
-import { navigate, procHref, logsHref } from "./router";
+import { navigate, procHref } from "./router";
 
 type Series = Record<string, Record<string, { cpu: number[]; mem: number[] }>>;
 
@@ -27,6 +28,7 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
   const [metrics, setMetrics] = useState<Series>({});
   const [showAdd, setShowAdd] = useState(false);
   const [showConnect, setShowConnect] = useState(false);
+  const [liveLog, setLiveLog] = useState<{ agent: string; proc: string } | null>(null);
 
   // 2s fleet poll
   useEffect(() => {
@@ -190,8 +192,7 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
                     {
                       icon: "▤",
                       label: "Log",
-                      // TODO(Task13): swap to live-log modal
-                      onClick: () => navigate(logsHref(a.name, proc.name)),
+                      onClick: () => setLiveLog({ agent: a.name, proc: proc.name }),
                     },
                     {
                       icon: "▸",
@@ -309,6 +310,13 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
         />
       )}
       {showConnect && <ConnectAgentModal onClose={() => setShowConnect(false)} />}
+      {liveLog && (
+        <LiveLogModal
+          agent={liveLog.agent}
+          proc={liveLog.proc}
+          onClose={() => setLiveLog(null)}
+        />
+      )}
     </>
   );
 }
