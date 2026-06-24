@@ -1903,6 +1903,7 @@ type ControlOp struct {
 	//	*ControlOp_ListDir
 	//	*ControlOp_ReadFile
 	//	*ControlOp_Commit
+	//	*ControlOp_Reload
 	Op            isControlOp_Op `protobuf_oneof:"op"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2026,6 +2027,15 @@ func (x *ControlOp) GetCommit() *CommitRequest {
 	return nil
 }
 
+func (x *ControlOp) GetReload() *Selector {
+	if x != nil {
+		if x, ok := x.Op.(*ControlOp_Reload); ok {
+			return x.Reload
+		}
+	}
+	return nil
+}
+
 type isControlOp_Op interface {
 	isControlOp_Op()
 }
@@ -2066,6 +2076,10 @@ type ControlOp_Commit struct {
 	Commit *CommitRequest `protobuf:"bytes,9,opt,name=commit,proto3,oneof"` // M24
 }
 
+type ControlOp_Reload struct {
+	Reload *Selector `protobuf:"bytes,10,opt,name=reload,proto3,oneof"` // M-G, rolling graceful restart
+}
+
 func (*ControlOp_Stop) isControlOp_Op() {}
 
 func (*ControlOp_Restart) isControlOp_Op() {}
@@ -2083,6 +2097,8 @@ func (*ControlOp_ListDir) isControlOp_Op() {}
 func (*ControlOp_ReadFile) isControlOp_Op() {}
 
 func (*ControlOp_Commit) isControlOp_Op() {}
+
+func (*ControlOp_Reload) isControlOp_Op() {}
 
 type ControlResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2514,7 +2530,7 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"credential\"8\n" +
 	"\fCommitResult\x12\x10\n" +
 	"\x03sha\x18\x01 \x01(\tR\x03sha\x12\x16\n" +
-	"\x06branch\x18\x02 \x01(\tR\x06branch\"\xeb\x03\n" +
+	"\x06branch\x18\x02 \x01(\tR\x06branch\"\x9b\x04\n" +
 	"\tControlOp\x12*\n" +
 	"\x04stop\x18\x01 \x01(\v2\x14.marshal.v1.SelectorH\x00R\x04stop\x120\n" +
 	"\arestart\x18\x02 \x01(\v2\x14.marshal.v1.SelectorH\x00R\arestart\x12.\n" +
@@ -2524,7 +2540,9 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"\bredeploy\x18\x06 \x01(\v2\x1b.marshal.v1.RedeployRequestH\x00R\bredeploy\x127\n" +
 	"\blist_dir\x18\a \x01(\v2\x1a.marshal.v1.ListDirRequestH\x00R\alistDir\x12:\n" +
 	"\tread_file\x18\b \x01(\v2\x1b.marshal.v1.ReadFileRequestH\x00R\breadFile\x123\n" +
-	"\x06commit\x18\t \x01(\v2\x19.marshal.v1.CommitRequestH\x00R\x06commitB\x04\n" +
+	"\x06commit\x18\t \x01(\v2\x19.marshal.v1.CommitRequestH\x00R\x06commit\x12.\n" +
+	"\x06reload\x18\n" +
+	" \x01(\v2\x14.marshal.v1.SelectorH\x00R\x06reloadB\x04\n" +
 	"\x02op\"\xea\x01\n" +
 	"\rControlResult\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x14\n" +
@@ -2654,29 +2672,30 @@ var file_marshal_v1_fleet_proto_depIdxs = []int32{
 	19, // 29: marshal.v1.ControlOp.list_dir:type_name -> marshal.v1.ListDirRequest
 	20, // 30: marshal.v1.ControlOp.read_file:type_name -> marshal.v1.ReadFileRequest
 	26, // 31: marshal.v1.ControlOp.commit:type_name -> marshal.v1.CommitRequest
-	34, // 32: marshal.v1.ControlResult.procs:type_name -> marshal.v1.ProcInfo
-	22, // 33: marshal.v1.ControlResult.dir:type_name -> marshal.v1.DirListing
-	23, // 34: marshal.v1.ControlResult.file:type_name -> marshal.v1.FileContent
-	27, // 35: marshal.v1.ControlResult.commit:type_name -> marshal.v1.CommitResult
-	28, // 36: marshal.v1.Command.op:type_name -> marshal.v1.ControlOp
-	29, // 37: marshal.v1.CommandResult.result:type_name -> marshal.v1.ControlResult
-	28, // 38: marshal.v1.FleetControlRequest.op:type_name -> marshal.v1.ControlOp
-	29, // 39: marshal.v1.FleetControlResponse.result:type_name -> marshal.v1.ControlResult
-	2,  // 40: marshal.v1.Fleet.Connect:input_type -> marshal.v1.AgentMessage
-	8,  // 41: marshal.v1.Fleet.ListFleet:input_type -> marshal.v1.ListFleetRequest
-	17, // 42: marshal.v1.Fleet.FleetMetricsHistory:input_type -> marshal.v1.FleetMetricsHistoryRequest
-	15, // 43: marshal.v1.Fleet.FleetLogsHistory:input_type -> marshal.v1.FleetLogsHistoryRequest
-	32, // 44: marshal.v1.Fleet.FleetControl:input_type -> marshal.v1.FleetControlRequest
-	3,  // 45: marshal.v1.Fleet.Connect:output_type -> marshal.v1.ServerMessage
-	9,  // 46: marshal.v1.Fleet.ListFleet:output_type -> marshal.v1.ListFleetResponse
-	40, // 47: marshal.v1.Fleet.FleetMetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
-	16, // 48: marshal.v1.Fleet.FleetLogsHistory:output_type -> marshal.v1.FleetLogsHistoryResponse
-	33, // 49: marshal.v1.Fleet.FleetControl:output_type -> marshal.v1.FleetControlResponse
-	45, // [45:50] is the sub-list for method output_type
-	40, // [40:45] is the sub-list for method input_type
-	40, // [40:40] is the sub-list for extension type_name
-	40, // [40:40] is the sub-list for extension extendee
-	0,  // [0:40] is the sub-list for field type_name
+	38, // 32: marshal.v1.ControlOp.reload:type_name -> marshal.v1.Selector
+	34, // 33: marshal.v1.ControlResult.procs:type_name -> marshal.v1.ProcInfo
+	22, // 34: marshal.v1.ControlResult.dir:type_name -> marshal.v1.DirListing
+	23, // 35: marshal.v1.ControlResult.file:type_name -> marshal.v1.FileContent
+	27, // 36: marshal.v1.ControlResult.commit:type_name -> marshal.v1.CommitResult
+	28, // 37: marshal.v1.Command.op:type_name -> marshal.v1.ControlOp
+	29, // 38: marshal.v1.CommandResult.result:type_name -> marshal.v1.ControlResult
+	28, // 39: marshal.v1.FleetControlRequest.op:type_name -> marshal.v1.ControlOp
+	29, // 40: marshal.v1.FleetControlResponse.result:type_name -> marshal.v1.ControlResult
+	2,  // 41: marshal.v1.Fleet.Connect:input_type -> marshal.v1.AgentMessage
+	8,  // 42: marshal.v1.Fleet.ListFleet:input_type -> marshal.v1.ListFleetRequest
+	17, // 43: marshal.v1.Fleet.FleetMetricsHistory:input_type -> marshal.v1.FleetMetricsHistoryRequest
+	15, // 44: marshal.v1.Fleet.FleetLogsHistory:input_type -> marshal.v1.FleetLogsHistoryRequest
+	32, // 45: marshal.v1.Fleet.FleetControl:input_type -> marshal.v1.FleetControlRequest
+	3,  // 46: marshal.v1.Fleet.Connect:output_type -> marshal.v1.ServerMessage
+	9,  // 47: marshal.v1.Fleet.ListFleet:output_type -> marshal.v1.ListFleetResponse
+	40, // 48: marshal.v1.Fleet.FleetMetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
+	16, // 49: marshal.v1.Fleet.FleetLogsHistory:output_type -> marshal.v1.FleetLogsHistoryResponse
+	33, // 50: marshal.v1.Fleet.FleetControl:output_type -> marshal.v1.FleetControlResponse
+	46, // [46:51] is the sub-list for method output_type
+	41, // [41:46] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_marshal_v1_fleet_proto_init() }
@@ -2706,6 +2725,7 @@ func file_marshal_v1_fleet_proto_init() {
 		(*ControlOp_ListDir)(nil),
 		(*ControlOp_ReadFile)(nil),
 		(*ControlOp_Commit)(nil),
+		(*ControlOp_Reload)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
