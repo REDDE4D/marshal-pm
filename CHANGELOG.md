@@ -12,6 +12,13 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Fixed
+- **Dashboard chrome rendering.** Added a global `<button>` reset so utility buttons
+  (sign out, + add app, + connect agent) no longer show the browser's default light button
+  background on the dark theme; defined the previously-unstyled `restart all` control; and
+  forced the icon-rail glyphs (`⚠`, `⚿`) to text presentation so they render in the muted nav
+  colour instead of as bright color-emoji.
+
 ## [0.6.0] - 2026-06-25
 
 ### Added
