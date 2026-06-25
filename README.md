@@ -87,6 +87,35 @@ A single host can also just run the agent + CLI with no server at all.
 
 ---
 
+## Install
+
+Marshal ships as a single, self-contained binary (the dashboard is embedded; no runtime
+dependencies). Pre-1.0 — expect rough edges.
+
+**Homebrew** (macOS / Linux):
+
+```bash
+brew install REDDE4D/tap/marshal
+```
+
+**Install script** (downloads the latest release binary, verifies its checksum):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/REDDE4D/marshal-pm/main/install.sh | sh
+```
+
+Or grab a prebuilt archive for your OS/arch from the
+[releases page](https://github.com/REDDE4D/marshal-pm/releases).
+
+**From source** (requires the Go toolchain):
+
+```bash
+make build            # builds ./marshal, version stamped from git tags
+```
+
+Supported platforms: linux and macOS, amd64 and arm64. (Windows is not supported — Marshal
+relies on unix process groups and service managers.)
+
 ## Quick start (single host)
 
 ```bash
