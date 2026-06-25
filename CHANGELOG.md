@@ -12,6 +12,8 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-06-25
+
 ### Added
 - **`marshal stop`/`restart`/`delete` accept a `marshal.yaml`**, like `marshal start` does. Passing a
   config file targets every app it defines (an app that isn't running is warned about, not fatal),
@@ -330,7 +332,8 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.7.1...v0.8.0
