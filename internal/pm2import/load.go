@@ -75,7 +75,17 @@ func Load(path string) (Ecosystem, error) {
 	default:
 		return Ecosystem{}, fmt.Errorf("unsupported ecosystem file %q (expected .js/.cjs/.json/.yaml)", path)
 	}
-	return parseJSON(jsonBytes)
+	eco, err := parseJSON(jsonBytes)
+	if err != nil {
+		return Ecosystem{}, err
+	}
+	// Record the file's directory so Convert can resolve each app's cwd against
+	// it (PM2 semantics), making the generated config independent of the daemon's
+	// own working directory.
+	if abs, aerr := filepath.Abs(path); aerr == nil {
+		eco.BaseDir = filepath.Dir(abs)
+	}
+	return eco, nil
 }
 
 // nodeEval runs the ecosystem file through node and returns its exported config

@@ -6,6 +6,7 @@ package pm2import
 import (
 	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,6 +16,11 @@ import (
 // Ecosystem is a parsed PM2 ecosystem file (the normalized form).
 type Ecosystem struct {
 	Apps []PM2App
+	// BaseDir is the absolute directory of the ecosystem file, used to resolve
+	// each app's cwd the way PM2 does (relative cwd joined onto it; an absent cwd
+	// defaults to it). Empty when the config wasn't loaded from a file path, in
+	// which case cwd is left untouched.
+	BaseDir string
 }
 
 // PM2App is one PM2 app entry, normalized from the raw ecosystem JSON (see
@@ -79,6 +85,23 @@ func interpreterByExt(script string) string {
 	}
 }
 
+// resolveCwd makes an app's working directory absolute and self-contained,
+// matching PM2: an absent cwd defaults to the ecosystem file's directory, and a
+// relative cwd is joined onto it. An absolute cwd, or any cwd when baseDir is
+// unknown, is returned unchanged.
+func resolveCwd(baseDir, cwd string) string {
+	if baseDir == "" {
+		return cwd
+	}
+	if cwd == "" {
+		return baseDir
+	}
+	if filepath.IsAbs(cwd) {
+		return cwd
+	}
+	return filepath.Join(baseDir, cwd)
+}
+
 // Convert maps a PM2 ecosystem to a Marshal config plus human-readable warnings
 // for fields that have no equivalent.
 func Convert(eco Ecosystem) (Config, []string) {
@@ -124,7 +147,7 @@ func Convert(eco Ecosystem) (Config, []string) {
 			Name:        name,
 			Cmd:         cmd,
 			Args:        args,
-			Cwd:         p.Cwd,
+			Cwd:         resolveCwd(eco.BaseDir, p.Cwd),
 			Instances:   p.Instances,
 			Env:         p.Env,
 			EnvFile:     p.EnvFile,
