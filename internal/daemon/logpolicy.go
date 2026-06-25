@@ -1,8 +1,8 @@
 package daemon
 
 import (
-	"marshal/internal/config"
-	"marshal/internal/logs"
+	"github.com/REDDE4D/marshal-pm/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/logs"
 )
 
 // logPolicy resolves an app's effective log policy: the default with any

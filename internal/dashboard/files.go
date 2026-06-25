@@ -8,7 +8,7 @@ import (
 	"path"
 	"strings"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 // JSON DTOs — the dashboard never serializes raw pb messages (M21 lesson).

@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"marshal/internal/server"
+	"github.com/REDDE4D/marshal-pm/internal/server"
 )
 
 func serverCmd() *cobra.Command {

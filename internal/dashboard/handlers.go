@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"marshal/internal/audit"
-	"marshal/internal/notify"
+	"github.com/REDDE4D/marshal-pm/internal/audit"
+	"github.com/REDDE4D/marshal-pm/internal/notify"
 )
 
 const sessionCookie = "marshal_session"

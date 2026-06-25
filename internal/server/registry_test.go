@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 // TestRegistryListConcurrentWithUpdate is a concurrency regression guard for the

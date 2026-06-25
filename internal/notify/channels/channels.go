@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"marshal/internal/notify"
+	"github.com/REDDE4D/marshal-pm/internal/notify"
 )
 
 // httpDoer is the HTTP seam; tests override httpClient.

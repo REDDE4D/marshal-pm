@@ -10,8 +10,8 @@ package credstore
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/REDDE4D/marshal-pm/internal/secretbox"
 	"log"
-	"marshal/internal/secretbox"
 	"os"
 	"os/exec"
 	"path/filepath"

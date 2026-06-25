@@ -10,8 +10,8 @@ import (
 	"sync"
 	"testing"
 
-	"marshal/internal/config"
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 // fakeCall records one invocation of fakeRunner.Run.

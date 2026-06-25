@@ -3,9 +3,9 @@ package main
 import (
 	"testing"
 
-	"marshal/internal/config"
-	"marshal/internal/pb"
-	"marshal/internal/store"
+	"github.com/REDDE4D/marshal-pm/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/store"
 )
 
 func TestAppToSpecWritesLogs(t *testing.T) {

@@ -19,3 +19,6 @@ data/
 # OS
 .DS_Store
 .superpowers/
+
+# Claude Code local session data / worktrees
+.claude/

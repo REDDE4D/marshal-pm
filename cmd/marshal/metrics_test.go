@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 func TestPrintMetricsRendersRows(t *testing.T) {

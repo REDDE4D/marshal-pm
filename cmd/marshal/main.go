@@ -12,10 +12,10 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/status"
 
-	"marshal/internal/config"
-	"marshal/internal/manager"
-	"marshal/internal/pb"
-	"marshal/internal/version"
+	"github.com/REDDE4D/marshal-pm/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/manager"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/version"
 )
 
 func main() {

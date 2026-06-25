@@ -3,9 +3,9 @@ package daemon
 import (
 	"fmt"
 
-	"marshal/internal/deploy"
-	"marshal/internal/manager"
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/deploy"
+	"github.com/REDDE4D/marshal-pm/internal/manager"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 // credFromProto maps a wire credential to the deployer's credential, branching

@@ -10,7 +10,7 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/net"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 // netCounters is one reading of the aggregate network byte counters.

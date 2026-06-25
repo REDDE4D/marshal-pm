@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"marshal/internal/notify"
+	"github.com/REDDE4D/marshal-pm/internal/notify"
 )
 
 // Notifications is the subset of *notify.Store the dashboard needs.

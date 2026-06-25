@@ -32,7 +32,7 @@ builds:
     # Stamp the same version variable the Makefile uses, with the v-prefixed tag
     # so `marshal --version` matches a `make build` from the same tag.
     ldflags:
-      - -s -w -X marshal/internal/version.Version={{ .Tag }}
+      - -s -w -X github.com/REDDE4D/marshal-pm/internal/version.Version={{ .Tag }}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:

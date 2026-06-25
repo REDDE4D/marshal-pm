@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"marshal/internal/logs"
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/logs"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/fleet"
-	"marshal/internal/fleetauth"
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/fleet"
+	"github.com/REDDE4D/marshal-pm/internal/fleetauth"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

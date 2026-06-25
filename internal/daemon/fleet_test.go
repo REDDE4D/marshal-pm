@@ -3,11 +3,11 @@ package daemon
 import (
 	"testing"
 
-	"marshal/internal/eventstore"
-	"marshal/internal/logs"
-	"marshal/internal/manager"
-	"marshal/internal/metrics"
-	"marshal/internal/metricstore"
+	"github.com/REDDE4D/marshal-pm/internal/eventstore"
+	"github.com/REDDE4D/marshal-pm/internal/logs"
+	"github.com/REDDE4D/marshal-pm/internal/manager"
+	"github.com/REDDE4D/marshal-pm/internal/metrics"
+	"github.com/REDDE4D/marshal-pm/internal/metricstore"
 )
 
 func TestSnapshotToProcCredential(t *testing.T) {

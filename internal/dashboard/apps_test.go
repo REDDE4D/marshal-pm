@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/credstore"
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/credstore"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 // fakeCreds is a test-only implementation of the Credentials interface.

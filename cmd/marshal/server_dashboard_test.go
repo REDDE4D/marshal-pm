@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"marshal/internal/server"
+	"github.com/REDDE4D/marshal-pm/internal/server"
 )
 
 func TestServerPasswdSetsUser(t *testing.T) {

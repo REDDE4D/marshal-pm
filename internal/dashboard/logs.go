@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"marshal/internal/logstore"
+	"github.com/REDDE4D/marshal-pm/internal/logstore"
 )
 
 // LogsHistory is the read side of stored log lines. *server.logStores satisfies it.

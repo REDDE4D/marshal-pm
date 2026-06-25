@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/metricstore"
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/metricstore"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 type fakeMetrics struct{ calls []string }

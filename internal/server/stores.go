@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"marshal/internal/metricstore"
+	"github.com/REDDE4D/marshal-pm/internal/metricstore"
 )
 
 // stores manages lazily-opened per-agent metric stores under a data dir.

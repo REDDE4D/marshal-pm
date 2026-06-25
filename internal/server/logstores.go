@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"marshal/internal/logstore"
+	"github.com/REDDE4D/marshal-pm/internal/logstore"
 )
 
 // logStores manages lazily-opened per-agent log stores under a data dir.

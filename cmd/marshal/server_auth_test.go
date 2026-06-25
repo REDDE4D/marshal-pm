@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"marshal/internal/server"
+	"github.com/REDDE4D/marshal-pm/internal/server"
 )
 
 func TestServerFingerprintCmd(t *testing.T) {

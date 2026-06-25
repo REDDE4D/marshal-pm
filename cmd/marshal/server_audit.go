@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"marshal/internal/audit"
+	"github.com/REDDE4D/marshal-pm/internal/audit"
 )
 
 func serverAuditCmd() *cobra.Command {

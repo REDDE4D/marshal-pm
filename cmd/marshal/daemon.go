@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"marshal/internal/daemon"
-	"marshal/internal/store"
+	"github.com/REDDE4D/marshal-pm/internal/daemon"
+	"github.com/REDDE4D/marshal-pm/internal/store"
 )
 
 func daemonCmd() *cobra.Command {
