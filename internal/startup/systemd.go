@@ -10,39 +10,40 @@ type systemd struct{}
 
 func (systemd) InstallPlan(c Config) Plan {
 	content := renderSystemdUnit(c)
+	svc := c.systemdUnit() + ".service"
 	if c.System {
-		unit := "/etc/systemd/system/marshal.service"
-		stage := filepath.Join(c.StageDir, "marshal.service")
+		unit := "/etc/systemd/system/" + svc
+		stage := filepath.Join(c.StageDir, svc)
 		return Plan{
 			UnitPath:  unit,
 			StagePath: stage,
 			Content:   content,
 			NeedsRoot: true,
-			Label:     "marshal.service",
+			Label:     svc,
 			PostInstall: []Cmd{
 				{"sudo", []string{"cp", stage, unit}},
 				{"sudo", []string{"systemctl", "daemon-reload"}},
-				{"sudo", []string{"systemctl", "enable", "--now", "marshal.service"}},
+				{"sudo", []string{"systemctl", "enable", "--now", svc}},
 			},
 			PostRemove: []Cmd{
-				{"sudo", []string{"systemctl", "disable", "--now", "marshal.service"}},
+				{"sudo", []string{"systemctl", "disable", "--now", svc}},
 				{"sudo", []string{"rm", "-f", unit}},
 			},
 		}
 	}
-	unit := filepath.Join(c.Home, ".config", "systemd", "user", "marshal.service")
+	unit := filepath.Join(c.Home, ".config", "systemd", "user", svc)
 	return Plan{
 		UnitPath:  unit,
 		Content:   content,
 		NeedsRoot: false,
-		Label:     "marshal.service",
+		Label:     svc,
 		PostInstall: []Cmd{
 			{"systemctl", []string{"--user", "daemon-reload"}},
-			{"systemctl", []string{"--user", "enable", "--now", "marshal.service"}},
+			{"systemctl", []string{"--user", "enable", "--now", svc}},
 			{"loginctl", []string{"enable-linger", c.User}},
 		},
 		PostRemove: []Cmd{
-			{"systemctl", []string{"--user", "disable", "--now", "marshal.service"}},
+			{"systemctl", []string{"--user", "disable", "--now", svc}},
 		},
 	}
 }
@@ -54,11 +55,11 @@ func (s systemd) RemovePlan(c Config) Plan { return s.InstallPlan(c) }
 func renderSystemdUnit(c Config) string {
 	var b strings.Builder
 	b.WriteString("[Unit]\n")
-	b.WriteString("Description=Marshal process manager\n")
+	fmt.Fprintf(&b, "Description=Marshal (%s)\n", strings.Join(c.args(), " "))
 	b.WriteString("After=network.target\n\n")
 	b.WriteString("[Service]\n")
 	b.WriteString("Type=simple\n")
-	fmt.Fprintf(&b, "ExecStart=%s daemon\n", c.Binary)
+	fmt.Fprintf(&b, "ExecStart=%s %s\n", c.Binary, strings.Join(c.args(), " "))
 	b.WriteString("Restart=on-failure\n")
 	if c.System {
 		fmt.Fprintf(&b, "User=%s\n", c.User)

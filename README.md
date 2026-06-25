@@ -219,7 +219,23 @@ Run it in the foreground instead (no daemon), Ctrl-C to stop everything cleanly:
 On shutdown Marshal sends each app `SIGTERM`, waits up to `kill_timeout`, then `SIGKILL`s any
 survivors — signaling the whole process group so children are never orphaned.
 
-## Quick start (fleet + dashboard)
+## Quick start (dashboard, single host)
+
+One command runs the server, the dashboard, and a local agent supervising your apps:
+
+```bash
+marshal server passwd                              # set the dashboard password (once)
+marshal server --self-enroll marshal.yaml          # server + dashboard + your apps
+```
+
+Open `https://localhost:9001`, log in as `admin`, and watch your processes. To run it on
+boot (systemd/launchd):
+
+```bash
+marshal server startup --self-enroll /path/to/marshal.yaml
+```
+
+## Quick start (multi-host fleet)
 
 ```bash
 # --- on the server host ---

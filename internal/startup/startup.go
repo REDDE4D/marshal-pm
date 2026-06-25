@@ -16,13 +16,40 @@ import (
 // Config is the resolved environment the boot service must reproduce so the
 // booted daemon finds the same state dir and auto-resurrects dump.json.
 type Config struct {
-	Binary   string // absolute path to the marshal binary
-	User     string // current username (used only for --system units)
-	Home     string // $HOME to pin
-	XDGData  string // $XDG_DATA_HOME to pin, or "" (omitted from the unit)
-	System   bool   // --system: root-level unit vs per-user
-	StageDir string // dir to stage the --system file in (the state dir)
-	UID      int    // numeric uid (launchd user domain: gui/<uid>)
+	Binary   string   // absolute path to the marshal binary
+	User     string   // current username (used only for --system units)
+	Home     string   // $HOME to pin
+	XDGData  string   // $XDG_DATA_HOME to pin, or "" (omitted from the unit)
+	System   bool     // --system: root-level unit vs per-user
+	StageDir string   // dir to stage the --system file in (the state dir)
+	UID      int      // numeric uid (launchd user domain: gui/<uid>)
+	Args     []string // marshal subcommand + flags to run; nil → ["daemon"]
+	Label    string   // service base name; "" → the default daemon service
+}
+
+// args returns the marshal subcommand to run, defaulting to the daemon.
+func (c Config) args() []string {
+	if len(c.Args) == 0 {
+		return []string{"daemon"}
+	}
+	return c.Args
+}
+
+// systemdUnit returns the systemd unit base name (no .service suffix).
+func (c Config) systemdUnit() string {
+	if c.Label == "" {
+		return "marshal"
+	}
+	return c.Label
+}
+
+// launchdLabelFor returns the launchd reverse-DNS label, preserving the original
+// daemon label when no custom Label is set.
+func (c Config) launchdLabelFor() string {
+	if c.Label == "" {
+		return "com.marshal.daemon"
+	}
+	return "com." + c.Label
 }
 
 // Cmd is a single command to run (user install) or print (--system).

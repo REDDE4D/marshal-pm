@@ -13,6 +13,14 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 ## [Unreleased]
 
 ### Added
+- **Single-host quickstart: `marshal server --self-enroll <marshal.yaml>`.** One command boots
+  the fleet server + dashboard (defaults to `:9001`), enrolls an in-process local agent against
+  it, and supervises the apps in the file — so a single host gets a working dashboard without the
+  multi-step token/fingerprint enrollment dance.
+- **`marshal server startup`.** Installs a boot service (systemd/launchd) for the fleet server +
+  dashboard — the server-side counterpart of `marshal startup` (which runs the agent). With
+  `--self-enroll <marshal.yaml>` it installs the single-host quickstart as a service; `--remove`
+  uninstalls; `--system` installs a root-level unit.
 - **PM2 ecosystem import.** `marshal import pm2 <ecosystem.config.js|.json|.yaml>` converts a
   PM2 ecosystem file to a `marshal.yaml`. `.js`/`.cjs` files are evaluated with `node`, so
   dynamic config (env loaders, spreads, etc.) resolves exactly as it would under PM2; `.json`
