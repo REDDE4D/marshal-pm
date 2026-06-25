@@ -393,3 +393,32 @@ func TestGitSourceCredentialRoundTrip(t *testing.T) {
 		t.Fatalf("credential lost: %q", got.Credential)
 	}
 }
+
+func TestParseByteSize(t *testing.T) {
+	cases := map[string]uint64{
+		"300M": 300 << 20, "1G": 1 << 30, "512K": 512 << 10,
+		"1048576": 1048576, "5GB": 5 << 30, "256MB": 256 << 20, "": 0,
+	}
+	for in, want := range cases {
+		got, err := parseByteSize(in)
+		if err != nil {
+			t.Fatalf("%q: unexpected error %v", in, err)
+		}
+		if got != want {
+			t.Fatalf("parseByteSize(%q) = %d, want %d", in, got, want)
+		}
+	}
+	if _, err := parseByteSize("bogus"); err == nil {
+		t.Fatal("expected error for \"bogus\"")
+	}
+}
+
+func TestByteSizeFromYAML(t *testing.T) {
+	cfg, err := Parse([]byte("apps:\n  - name: web\n    cmd: ./web\n    max_memory_restart: 300M\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Apps[0].MaxMemoryRestart.Bytes; got != 300<<20 {
+		t.Fatalf("MaxMemoryRestart = %d, want %d", got, 300<<20)
+	}
+}
