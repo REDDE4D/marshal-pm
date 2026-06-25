@@ -12,6 +12,17 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Added
+- **More install methods.** Releases now also ship **`.deb`/`.rpm` packages** (binary +
+  shell completions + a disabled-by-default `marshal.service`) and a multi-arch **Docker
+  image of the fleet server + dashboard** at `ghcr.io/redde4d/marshal`. The Go module path
+  was renamed to `github.com/REDDE4D/marshal-pm`, so `go install
+  github.com/REDDE4D/marshal-pm/cmd/marshal@latest` now works.
+
+### Changed
+- **Module path renamed** from `marshal` to `github.com/REDDE4D/marshal-pm` (enables
+  `go install`; no behavior change).
+
 ## [0.4.1] - 2026-06-25
 
 ### Build / tooling

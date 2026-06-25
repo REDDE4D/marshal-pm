@@ -1,0 +1,24 @@
+# Marshal process-manager daemon, shipped by the .deb/.rpm package.
+#
+# Disabled by default — enable it explicitly:
+#   sudo systemctl enable --now marshal
+#
+# State is kept under /var/lib/marshal (created by StateDirectory=). To run as a
+# non-root user or change the data dir, drop a file in
+# /etc/systemd/system/marshal.service.d/override.conf (`systemctl edit marshal`).
+[Unit]
+Description=Marshal process manager
+Documentation=https://github.com/REDDE4D/marshal-pm
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/marshal daemon
+Restart=on-failure
+RestartSec=2
+# Persist managed-app state across restarts under /var/lib/marshal.
+StateDirectory=marshal
+Environment=XDG_DATA_HOME=/var/lib
+
+[Install]
+WantedBy=multi-user.target
