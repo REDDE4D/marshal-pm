@@ -92,6 +92,7 @@ export function Logs({ agent: initAgent, proc: initProc }: { agent?: string; pro
           onChange={(e) => setSelectedProc(e.target.value)}
           style={{ minWidth: 140 }}
           disabled={procs.length === 0}
+          title={procs.length === 0 ? "No processes for this agent" : undefined}
         >
           {procs.length === 0
             ? <option value="">—</option>

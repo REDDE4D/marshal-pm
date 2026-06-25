@@ -6,7 +6,8 @@ import { FileBrowser } from "./FileBrowser";
 import { LiveLogModal } from "./LiveLogModal";
 import { MetricCluster, Cell } from "./components/Cluster";
 import { SectionHeader } from "./components/Ledger";
-import { Segment } from "./components/Controls";
+import { Button, Segment } from "./components/Controls";
+import { EmptyState } from "./components/EmptyState";
 import { StatusGlyph } from "./components/StatusGlyph";
 import { relativeTime, formatDateShort } from "./lib/format";
 
@@ -164,11 +165,11 @@ export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: 
         <span className="detail-meta">{headerMeta}</span>
         <div className="detail-actions">
           <button className="btn" onClick={() => setShowLive(true)}>▤ live log</button>
-          <button className="btn" disabled={!connected} onClick={() => doControl("restart")}>▸ restart</button>
-          <button className="btn warn" disabled={!connected} onClick={() => {
+          <Button disabledReason={connected ? undefined : "Agent offline"} onClick={() => doControl("restart")}>▸ restart</Button>
+          <Button variant="warn" disabledReason={connected ? undefined : "Agent offline"} onClick={() => {
             if (window.confirm("Reload will apply config changes without a full restart. Continue?")) doControl("reload");
-          }}>⟲ reload</button>
-          <button className="btn dgr" disabled={!connected} onClick={() => doControl("stop")}>■ stop</button>
+          }}>⟲ reload</Button>
+          <Button variant="dgr" disabledReason={connected ? undefined : "Agent offline"} onClick={() => doControl("stop")}>■ stop</Button>
         </div>
       </div>
 
@@ -254,17 +255,23 @@ export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: 
             index="02"
             title="Recent logs"
             right={
-              <a className="lnk" onClick={() => navigate(logsHref(agent, proc))}>live ›</a>
+              <>
+                <span className="sub" style={{ fontSize: "11px", color: "var(--dim)" }}>last 8 lines</span>
+                <a className="lnk" onClick={() => navigate(logsHref(agent, proc))}>live ›</a>
+              </>
             }
           />
           <div className="logbox">
-            {lines.slice(-8).map((l, i) => (
-              <div key={i}>
-                <span className="ts">{new Date(l.ts).toLocaleTimeString()}</span>{" "}
-                <span className={l.stderr ? "er" : "tx"}>{l.text}</span>
-              </div>
-            ))}
-            {lines.length === 0 && <div className="tx" style={{ color: "var(--dim)", padding: "4px 0" }}>No log lines yet.</div>}
+            {lines.length === 0 ? (
+              <EmptyState message="No recent logs." />
+            ) : (
+              lines.slice(-8).map((l, i) => (
+                <div key={i}>
+                  <span className="ts">{new Date(l.ts).toLocaleTimeString()}</span>{" "}
+                  <span className={l.stderr ? "er" : "tx"}>{l.text}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

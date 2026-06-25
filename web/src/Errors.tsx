@@ -126,7 +126,7 @@ export function Errors() {
                     <button
                       className={`ackbtn${sig.acknowledged ? " on" : ""}`}
                       onClick={(e) => { e.stopPropagation(); onAck(sig); }}
-                      title={sig.acknowledged ? "Un-acknowledge" : "Acknowledge (silence until it recurs)"}
+                      title={sig.acknowledged ? "Un-acknowledge" : "Acknowledge — stops this error from nagging"}
                     >
                       {sig.acknowledged ? "acked" : "ack"}
                     </button>
