@@ -74,6 +74,16 @@ func (i *Instance) Snapshot() Snapshot {
 	}
 }
 
+// ResetCounters zeroes the lifetime and crash-loop restart counters. It does not
+// change process state or restart anything; for a running instance it restores
+// the crash-loop headroom before MaxRestarts is reached again.
+func (i *Instance) ResetCounters() {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.restarts = 0
+	i.unstable = 0
+}
+
 // set updates observable state under the lock. A pid < 0 leaves the stored pid
 // unchanged; pass the real pid when going Online, or 0 to clear it when the
 // process is no longer running. A zero startedAt likewise leaves it unchanged.

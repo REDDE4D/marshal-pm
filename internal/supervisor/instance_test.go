@@ -177,3 +177,19 @@ func TestOnRestartDoesNotFireWhenNoRestart(t *testing.T) {
 		t.Fatalf("onRestart fired %d times, want 0 (RestartNo)", atomic.LoadInt32(&n))
 	}
 }
+
+func TestResetCounters(t *testing.T) {
+	i := NewInstance(proc.Spec{}, Policy{})
+	i.restarts = 5
+	i.unstable = 3
+	i.ResetCounters()
+	if got := i.Snapshot().Restarts; got != 0 {
+		t.Fatalf("restarts = %d, want 0", got)
+	}
+	i.mu.Lock()
+	u := i.unstable
+	i.mu.Unlock()
+	if u != 0 {
+		t.Fatalf("unstable = %d, want 0", u)
+	}
+}
