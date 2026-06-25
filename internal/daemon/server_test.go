@@ -131,3 +131,11 @@ func waitListOnline(t *testing.T, srv *Server, want int) {
 	}
 	t.Fatalf("timed out waiting for %d online", want)
 }
+
+func TestWithFleetPollIntervalSetsOption(t *testing.T) {
+	var o runOptions
+	WithFleetPollInterval(250 * time.Millisecond)(&o)
+	if o.fleetPoll != 250*time.Millisecond {
+		t.Fatalf("fleetPoll = %v, want 250ms", o.fleetPoll)
+	}
+}
