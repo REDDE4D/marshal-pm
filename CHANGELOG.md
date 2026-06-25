@@ -12,6 +12,8 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-25
+
 ### Added
 - **More install methods.** Releases now also ship **`.deb`/`.rpm` packages** (binary +
   shell completions + a disabled-by-default `marshal.service`) and a multi-arch **Docker
@@ -179,7 +181,8 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.2.0...v0.3.0
