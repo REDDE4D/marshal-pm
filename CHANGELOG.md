@@ -12,6 +12,13 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Added
+- **Per-app `env_file`.** An app may name a dotenv file (`env_file: .env.aegis`) whose
+  `KEY=VALUE` lines are loaded and merged into its environment, with inline `env:` taking
+  precedence. Resolved relative to the `marshal.yaml` directory; supports `#` comments, a
+  leading `export `, and quoted values. Lets several apps share one script with per-app env
+  files (the common PM2 ecosystem pattern) without inlining secrets into the YAML.
+
 ### Security
 - **Per-IP gRPC auth throttle.** Repeated failed admin/agent/enroll token attempts from one
   source IP now trip a lockout (10 consecutive failures → 5s, doubling to 5min), rejecting

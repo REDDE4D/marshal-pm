@@ -302,6 +302,83 @@ func TestValidateAcceptsSafeGitSource(t *testing.T) {
 	}
 }
 
+func TestParseDotEnv(t *testing.T) {
+	in := `
+# a comment
+FOO=bar
+  SPACED  =  trimmed value
+export EXPORTED=yes
+QUOTED="with spaces"
+SINGLE='single quoted'
+HASEQ=a=b=c
+EMPTY=
+no_equals_line
+=novalue
+`
+	got := parseDotEnv([]byte(in))
+	want := map[string]string{
+		"FOO":      "bar",
+		"SPACED":   "trimmed value",
+		"EXPORTED": "yes",
+		"QUOTED":   "with spaces",
+		"SINGLE":   "single quoted",
+		"HASEQ":    "a=b=c",
+		"EMPTY":    "",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d keys %v, want %d", len(got), got, len(want))
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s = %q, want %q", k, got[k], v)
+		}
+	}
+}
+
+func TestLoadMergesEnvFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env.aegis"), []byte("TOKEN=secret\nSHARED=fromfile\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	yaml := `apps:
+  - name: aegis
+    cmd: node
+    args: ["src/index.js"]
+    env_file: .env.aegis
+    env:
+      SHARED: inline-wins
+`
+	if err := os.WriteFile(filepath.Join(dir, "marshal.yaml"), []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(filepath.Join(dir, "marshal.yaml"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	env := cfg.Apps[0].Env
+	if env["TOKEN"] != "secret" {
+		t.Errorf("TOKEN = %q, want secret (from env_file)", env["TOKEN"])
+	}
+	if env["SHARED"] != "inline-wins" {
+		t.Errorf("SHARED = %q, want inline-wins (inline overrides env_file)", env["SHARED"])
+	}
+}
+
+func TestLoadEnvFileMissingErrors(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `apps:
+  - name: x
+    cmd: node
+    env_file: .env.nope
+`
+	if err := os.WriteFile(filepath.Join(dir, "marshal.yaml"), []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(filepath.Join(dir, "marshal.yaml")); err == nil {
+		t.Fatal("expected error for missing env_file")
+	}
+}
+
 func TestGitSourceCredentialRoundTrip(t *testing.T) {
 	src := GitSource{Repo: "https://x/y.git", Credential: "gh-ci"}
 	b, err := json.Marshal(src)

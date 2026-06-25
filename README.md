@@ -149,6 +149,19 @@ apps:
     restart: on-failure   # always | on-failure | no
     max_restarts: 16
     kill_timeout: 5s
+    env:                  # inline environment (takes precedence over env_file)
+      LOG_LEVEL: info
+    env_file: .env.api    # dotenv file merged in, relative to this marshal.yaml
+```
+
+Several apps can share one script with a separate `env_file` each — the common PM2
+ecosystem pattern:
+
+```yaml
+apps:
+  - { name: aegis, cmd: node, args: ["src/index.js"], env_file: .env.aegis }
+  - { name: raven, cmd: node, args: ["src/index.js"], env_file: .env.raven }
+  - { name: ghost, cmd: node, args: ["src/index.js"], env_file: .env.ghost }
 ```
 
 ```bash
