@@ -18,7 +18,7 @@ version:
 	@echo $(VERSION)
 
 test:
-	go test ./... -race -count=1
+	go test ./... -tags e2e_fleet -race -count=1
 
 .PHONY: proto
 proto: ## regenerate internal/pb from proto/marshal/v1

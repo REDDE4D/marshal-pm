@@ -201,6 +201,16 @@ func isConfigFile(arg string) bool {
 	return err == nil && !info.IsDir()
 }
 
+// enrollmentHeader returns a one-line status string indicating whether the host
+// is configured to enroll with a central server. A nil or empty-address config
+// means not enrolled.
+func enrollmentHeader(sc *config.ServerConfig) string {
+	if sc != nil && sc.Address != "" {
+		return "enrolled → " + sc.Address
+	}
+	return "not enrolled"
+}
+
 func listCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "list",
@@ -208,6 +218,11 @@ func listCmd() *cobra.Command {
 		Short:   "Show all managed processes",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			// Best-effort enrollment header: skip silently if the store can't be opened.
+			if st, err := store.New(); err == nil {
+				sc, _ := st.LoadServer()
+				fmt.Fprintln(cmd.OutOrStdout(), enrollmentHeader(sc))
+			}
 			return withClient(func(ctx context.Context, c pb.DaemonClient) error {
 				list, err := c.List(ctx, &pb.Empty{})
 				if err != nil {

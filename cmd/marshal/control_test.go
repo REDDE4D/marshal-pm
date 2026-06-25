@@ -124,6 +124,15 @@ func TestStreamFromFlags(t *testing.T) {
 	}
 }
 
+func TestEnrollmentHeader(t *testing.T) {
+	if got := enrollmentHeader(&config.ServerConfig{Address: "srv:9000"}); !strings.Contains(got, "srv:9000") || !strings.Contains(got, "enrolled") {
+		t.Errorf("header = %q", got)
+	}
+	if got := enrollmentHeader(nil); !strings.Contains(got, "not enrolled") {
+		t.Errorf("header = %q", got)
+	}
+}
+
 func TestPersistServer(t *testing.T) {
 	st := store.NewAt(t.TempDir())
 	if err := persistServer(st, &config.Config{Server: &config.ServerConfig{Address: "srv:9000"}}); err != nil {

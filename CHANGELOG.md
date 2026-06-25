@@ -16,6 +16,10 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 - **`marshal stop`/`restart`/`delete` accept a `marshal.yaml`**, like `marshal start` does. Passing a
   config file targets every app it defines (an app that isn't running is warned about, not fatal),
   so `marshal stop marshal.yaml` works instead of looking for an app literally named `marshal.yaml`.
+- **`marshal enroll <server> --token --fingerprint` / `marshal unenroll`** join or leave a central
+  server from a host's local daemon. Once enrolled, every app on the host (everything `marshal start`
+  manages) appears in that server's dashboard automatically — no per-app step. The daemon now watches
+  its server config and connects/reconnects live, so enrolling no longer requires a daemon restart.
 
 ### Changed
 - **`marshal start`'s help now spells out that it's local-only** — apps it starts show in `marshal
@@ -24,6 +28,12 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 - **`marshal list` (and every command that prints a process table) now renders a bordered table**
   with the state column colorized on a terminal (green online / red errored or stopped / yellow
   otherwise). Output to a pipe or file stays plain — no borders-breaking color codes.
+- **`marshal server startup --self-enroll` now enrolls the one local daemon** instead of running a
+  separate in-process agent under `<serverData>/agent`. There is now a single agent per host, so
+  `marshal list` and the dashboard agree. Ctrl-C stops the server/dashboard; supervised apps keep
+  running under the persistent daemon (stop them with `marshal stop`, the daemon with `marshal kill`).
+  Upgrade note: a host that used the old self-enroll agent should remove `<serverData>/agent` and
+  re-add its apps under the unified daemon.
 
 ### Fixed
 - **`marshal import pm2` now bakes an absolute `cwd` into every app.** PM2 resolves an app's script
