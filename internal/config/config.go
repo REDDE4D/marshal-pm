@@ -4,8 +4,10 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -191,6 +193,39 @@ func (c *Config) validate() error {
 		// applyDefaults has already promoted Instances == 0 to 1; only negatives remain invalid.
 		if a.Instances < 0 {
 			return fmt.Errorf("app %q has invalid instances %d", a.Name, a.Instances)
+		}
+		if a.Source != nil {
+			if err := a.Source.Validate(); err != nil {
+				return fmt.Errorf("app %q: %w", a.Name, err)
+			}
+		}
+	}
+	return nil
+}
+
+// Validate rejects git-source fields that could be abused: repo/ref values that
+// git would interpret as command-line options (leading "-"), and subdir values
+// that escape the clone directory (absolute paths or ".." traversal). These
+// fields flow into git argv and into the build/run working directory, so they
+// must be confined before use. It is called both at config-parse time and again
+// at the deploy sink, so resurrected state (dump.json) is re-checked.
+func (s *GitSource) Validate() error {
+	if s.Repo == "" {
+		return fmt.Errorf("source.repo is required")
+	}
+	if strings.HasPrefix(s.Repo, "-") {
+		return fmt.Errorf("source.repo %q must not start with '-'", s.Repo)
+	}
+	if strings.HasPrefix(s.Ref, "-") {
+		return fmt.Errorf("source.ref %q must not start with '-'", s.Ref)
+	}
+	if s.Subdir != "" {
+		if filepath.IsAbs(s.Subdir) {
+			return fmt.Errorf("source.subdir %q must be relative", s.Subdir)
+		}
+		clean := filepath.Clean(s.Subdir)
+		if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("source.subdir %q escapes the repository", s.Subdir)
 		}
 	}
 	return nil

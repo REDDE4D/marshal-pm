@@ -12,6 +12,20 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Security
+- **Git deploy argument-injection hardening:** `source.repo`, `source.ref`, and `source.subdir`
+  are now validated. Repo/ref values that git would interpret as command-line options (a leading
+  `-`, e.g. `--upload-pack=…`) and subdir values that escape the clone directory (absolute paths
+  or `..` traversal) are rejected. Validation runs both at config-parse time and again at the
+  deploy sink, so resurrected on-disk state (`dump.json`) is re-checked rather than trusted.
+
+### Fixed
+- **`dump.json` written `0600` instead of `0644`:** the state dump serializes app `Env`, which
+  commonly holds secrets (DB passwords, API keys); it is no longer world/group readable.
+- **Registry memory bound:** disconnected agents whose last snapshot is older than the 7-day
+  retention window are now evicted from the in-memory fleet registry during the periodic prune,
+  so churning/ephemeral agent names can no longer grow the map without bound.
+
 ## [0.3.0] - 2026-06-24
 
 ### Changed

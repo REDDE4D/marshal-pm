@@ -147,6 +147,9 @@ func (d *Deployer) Start(app config.App, cred Credential) error {
 	if app.Source == nil || app.Source.Repo == "" {
 		return fmt.Errorf("git source requires a repo")
 	}
+	if err := app.Source.Validate(); err != nil {
+		return err
+	}
 	if d.host.Exists(app.Name) {
 		return fmt.Errorf("app %q already exists", app.Name)
 	}
@@ -172,6 +175,9 @@ func (d *Deployer) Redeploy(name string, cred Credential) error {
 	src, ok := d.host.Source(name)
 	if !ok || src.Repo == "" {
 		return fmt.Errorf("app %q is not git-sourced", name)
+	}
+	if err := src.Validate(); err != nil {
+		return err
 	}
 	d.mu.Lock()
 	if _, busy := d.states[name]; busy {
