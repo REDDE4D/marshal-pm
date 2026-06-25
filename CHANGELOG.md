@@ -12,6 +12,25 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Changed
+- **Dashboard UX-clarity pass.** A consistency pass across the whole dashboard so actions explain
+  themselves and outcomes are always visible — driven by a real confusion where the Notifications
+  "add channel" form looked saved but wasn't. Concretely: disabled buttons now say *why* they're
+  disabled (hover tooltip via a new `disabledReason`) instead of greying out silently; form fields
+  gained required markers and inline hints (e.g. the channel **name** is now clearly distinct from
+  the bot token); empty lists show guidance instead of blank space; success/error feedback is
+  consistent and self-clearing; the Notifications "add channel"/"add rule" buttons are relabelled
+  and the page shows an empty state; destructive file actions (delete/rename/new file) use proper
+  in-app dialogs instead of the browser's `confirm`/`prompt`; the process control buttons no longer
+  silently cancel a pending confirmation after 3 seconds; and the login form re-enables and refocuses
+  after a failed attempt.
+
+### Added
+- **Shared UI primitives** for consistent dashboard clarity: `EmptyState`, `StatusMessage`/`useStatus`,
+  and `ConfirmDialog`/`PromptDialog` (on the existing accessible modal), plus `disabledReason` on
+  `Button` and `required`/`hint`/`error` on `Field`. A `web/src/components/README.md` documents the
+  conventions for future pages.
+
 ## [0.9.0] - 2026-06-25
 
 ### Fixed
