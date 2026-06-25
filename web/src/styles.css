@@ -268,3 +268,7 @@ select.inp{ font-family:var(--i); }
 .field .req { color: var(--dim); }
 .field .hint { margin: 4px 0 0; font-size: 11px; color: var(--dim); }
 .field .err { margin: 4px 0 0; font-size: 11px; color: var(--rose); }
+
+/* EmptyState (Task 4): muted placeholder for empty lists */
+.empty-state { padding: 22px; color: var(--dim); font-size: 13px; }
+.empty-state-action { margin-top: 8px; }
