@@ -100,6 +100,11 @@ fi
 echo "install: installed marshal ${version} to ${BIN_DIR}/marshal"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
-  *) echo "install: note — ${BIN_DIR} is not on your PATH";;
+  *)
+    echo "install: NOTE — ${BIN_DIR} is not on your PATH. Add it:"
+    echo "    export PATH=\"${BIN_DIR}:\$PATH\"                       # current shell"
+    echo "    echo 'export PATH=\"${BIN_DIR}:\$PATH\"' >> ~/.bashrc   # persist (bash)"
+    echo "install: (or run it directly: ${BIN_DIR}/marshal)"
+    ;;
 esac
 "${BIN_DIR}/marshal" --version 2>/dev/null || true

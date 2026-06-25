@@ -12,6 +12,11 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Fixed
+- **install.sh PATH guidance.** When the binary lands in `~/.local/bin` (the fallback when
+  `/usr/local/bin` isn't writable) and that directory isn't on `PATH`, the installer now prints
+  the exact `export PATH=…` commands to fix it, instead of a one-line note that's easy to miss.
+
 ## [0.6.1] - 2026-06-25
 
 ### Fixed
