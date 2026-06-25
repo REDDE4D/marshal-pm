@@ -2,6 +2,7 @@ package pm2import
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -48,6 +49,9 @@ func Load(path string) (Ecosystem, error) {
 		if err != nil {
 			return Ecosystem{}, err
 		}
+		if err := checkEvalResult(path, b); err != nil {
+			return Ecosystem{}, err
+		}
 		jsonBytes = b
 	case ".json":
 		b, err := os.ReadFile(path)
@@ -87,9 +91,66 @@ func nodeEval(path string) ([]byte, error) {
 	const script = `process.stdout.write(JSON.stringify(require(process.argv[1])))`
 	out, err := exec.Command("node", "-e", script, abs).Output()
 	if err != nil {
+		// Output() captures node's stderr into ExitError.Stderr; surface it so a
+		// throwing config reports its real cause instead of a bare exit status.
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && len(ee.Stderr) > 0 {
+			return nil, fmt.Errorf("evaluate ecosystem with node: %w\n%s", err, strings.TrimSpace(string(ee.Stderr)))
+		}
 		return nil, fmt.Errorf("evaluate ecosystem with node: %w", err)
 	}
 	return out, nil
+}
+
+// checkEvalResult inspects the JSON node produced from a .js/.cjs/.mjs ecosystem
+// file and, when it has no top-level `apps`, returns a diagnostic for the usual
+// cause: the file was evaluated as an ES module instead of CommonJS. An ESM
+// `export default {...}` lands under a `default` key; a CommonJS `module.exports`
+// in a file that node treats as ESM (because a nearby package.json sets
+// "type":"module") is dropped entirely, leaving `{}`. Returns nil when `apps` is
+// present or there's no ESM evidence — the generic empty case is reported by the
+// caller as the usual "no apps found".
+func checkEvalResult(path string, b []byte) error {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(b, &obj); err != nil {
+		return nil // not an object; let parseJSON surface any error
+	}
+	if _, ok := obj["apps"]; ok {
+		return nil
+	}
+	if _, ok := obj["default"]; ok {
+		return fmt.Errorf("ecosystem file %q exported an ES module (a `default` export but no top-level `apps`); PM2 ecosystem files must be CommonJS — use `module.exports = { apps: [...] }` and name the file .cjs", path)
+	}
+	if strings.EqualFold(filepath.Ext(path), ".js") && nearestPackageIsModule(path) {
+		return fmt.Errorf("ecosystem file %q evaluated to an empty export: a nearby package.json sets \"type\":\"module\", so node treated this .js file as an ES module and ignored `module.exports`. Rename it to .cjs (or remove \"type\":\"module\")", path)
+	}
+	return nil
+}
+
+// nearestPackageIsModule walks up from path's directory to the first package.json
+// (node's resolution order) and reports whether it declares "type":"module".
+func nearestPackageIsModule(path string) bool {
+	dir, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	dir = filepath.Dir(dir)
+	for {
+		if b, err := os.ReadFile(filepath.Join(dir, "package.json")); err == nil {
+			var pkg struct {
+				Type string `json:"type"`
+			}
+			if json.Unmarshal(b, &pkg) != nil {
+				return false // unparseable package.json — assume CommonJS
+			}
+			return strings.EqualFold(pkg.Type, "module")
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return false
+		}
+		dir = parent
+	}
 }
 
 func parseJSON(b []byte) (Ecosystem, error) {

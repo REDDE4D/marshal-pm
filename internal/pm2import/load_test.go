@@ -34,6 +34,73 @@ func TestParseJSONFlexibleFields(t *testing.T) {
 	}
 }
 
+// requireNode skips a test when node isn't on PATH (the .js eval path needs it).
+func requireNode(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+}
+
+func writeFile(t *testing.T, dir, name, body string) string {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// A package.json with "type":"module" makes node treat a .js file as ESM, so a
+// CommonJS module.exports is ignored and node returns an empty object. The error
+// should point the user at the .cjs fix rather than the opaque "no apps found".
+func TestLoadESMTypedJSGivesCjsHint(t *testing.T) {
+	requireNode(t)
+	dir := t.TempDir()
+	writeFile(t, dir, "package.json", `{"type":"module"}`)
+	path := writeFile(t, dir, "ecosystem.config.js",
+		`module.exports = { apps: [ { name: "svc", script: "src/index.js" } ] };`)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected an error for an ESM-typed .js ecosystem file")
+	}
+	if !strings.Contains(err.Error(), ".cjs") || !strings.Contains(err.Error(), "type") {
+		t.Errorf("error should explain the type:module / .cjs fix, got: %v", err)
+	}
+}
+
+// An `export default {...}` ecosystem lands under a "default" key (not "apps").
+// PM2 files must be CommonJS; the error should say so.
+func TestLoadESMExportDefaultGivesHint(t *testing.T) {
+	requireNode(t)
+	dir := t.TempDir()
+	writeFile(t, dir, "package.json", `{"type":"module"}`)
+	path := writeFile(t, dir, "ecosystem.config.js",
+		`export default { apps: [ { name: "svc", script: "s.js" } ] };`)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected an error for an export-default ecosystem file")
+	}
+	if !strings.Contains(err.Error(), "module.exports") {
+		t.Errorf("error should require CommonJS module.exports, got: %v", err)
+	}
+}
+
+// When node itself throws while evaluating the config, its stderr must surface
+// in the error instead of collapsing to a bare "exit status 1".
+func TestLoadNodeErrorIncludesStderr(t *testing.T) {
+	requireNode(t)
+	dir := t.TempDir()
+	path := writeFile(t, dir, "ecosystem.config.js", `throw new Error("kaboom-from-config");`)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected an error when the config throws")
+	}
+	if !strings.Contains(err.Error(), "kaboom-from-config") {
+		t.Errorf("error should include node's stderr, got: %v", err)
+	}
+}
+
 func TestLoadJSConfigViaNode(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")

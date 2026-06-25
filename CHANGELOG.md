@@ -12,6 +12,14 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Fixed
+- **`marshal import pm2` now diagnoses ESM ecosystem files instead of reporting a bare "no apps
+  found".** When a project's `package.json` sets `"type":"module"`, node treats `ecosystem.config.js`
+  as an ES module and silently ignores its CommonJS `module.exports`, so the importer received an
+  empty object. The importer now detects this (and the related `export default` case) and tells the
+  user to rename the file to `.cjs`. It also surfaces node's stderr when an ecosystem file throws
+  during evaluation (e.g. a missing referenced `.env`), instead of collapsing to `exit status 1`.
+
 ## [0.10.0] - 2026-06-25
 
 ### Changed
