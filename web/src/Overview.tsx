@@ -17,6 +17,8 @@ import { fleetSummary } from "./lib/fleet";
 import { statusOf } from "./lib/status";
 import { relativeTime, formatBytes } from "./lib/format";
 import { navigate, procHref } from "./router";
+import { EmptyState } from "./components/EmptyState";
+import { Button } from "./components/Controls";
 
 type Series = Record<string, Record<string, { cpu: number[]; mem: number[] }>>;
 
@@ -82,8 +84,8 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
           because these modals depend on Overview's agents state. Intentional deviation from
           demo bar placement; restyled in Task 17. */}
       <div className="actions" style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginBottom: "0.75rem" }}>
-        <button className="lnk" onClick={() => setShowAdd(true)}>+ add app</button>
-        <button className="lnk" onClick={() => setShowConnect(true)}>+ connect agent</button>
+        <Button variant="ghost" size="sm" onClick={() => setShowAdd(true)}>+ add app</Button>
+        <Button variant="ghost" size="sm" onClick={() => setShowConnect(true)}>+ connect agent</Button>
       </div>
 
       {/* Fleet cluster */}
@@ -127,9 +129,7 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
 
       {/* Empty fleet */}
       {agents.length === 0 && (
-        <p className="empty" style={{ textAlign: "center", marginTop: "2rem" }}>
-          no agents connected.
-        </p>
+        <EmptyState message="No agents connected." action={<span>Use &ldquo;+ connect agent&rdquo; above to enroll your first agent.</span>} />
       )}
 
       {/* Per-agent sections */}
