@@ -124,7 +124,7 @@ export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: 
 
   // Cluster derived values
   const cpuPeak = detail.length
-    ? Math.max(...detail.map((b) => b.cpu_max ?? b.cpu_avg ?? 0)) * 100
+    ? Math.max(...detail.map((b) => b.cpu_max ?? b.cpu_avg ?? 0))
     : null;
   const memPeak = detail.length
     ? Math.max(...detail.map((b) => b.mem_max ?? b.mem_avg ?? 0))
@@ -189,7 +189,7 @@ export function ProcessDetail({ agent, proc, onLogout }: { agent: string; proc: 
             <Cell
               label="CPU"
               color="teal"
-              value={p ? (p.cpu * 100).toFixed(1) : "—"}
+              value={p ? p.cpu.toFixed(1) : "—"}
               unit="%"
               sub={cpuPeak !== null ? `peak ${cpuPeak.toFixed(1)}% · ${windowLabel}` : ""}
             />

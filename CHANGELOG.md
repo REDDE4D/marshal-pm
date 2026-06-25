@@ -12,7 +12,16 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
-## [0.7.0] - 2026-06-25
+## [0.7.1] - 2026-06-25
+
+### Fixed
+- **Dashboard CPU shown 100× too high.** The backend already reports CPU as a percentage
+  (gopsutil per-core %, summed over the process group), but the dashboard multiplied it by 100
+  again — so a process using ~2% appeared as "220%", and peaks could exceed the machine's core
+  count (e.g. "559%" on a 4-core host). The Overview ledger, process-detail cluster, and the
+  metric-chart axis now display the value as-is.
+- **Metric charts now show values on hover.** The CPU/memory charts had no interactivity; they
+  now render a crosshair and a readout (value · peak · time) for the hovered point.
 
 ### Added
 - **Single-host quickstart: `marshal server --self-enroll <marshal.yaml>`.** One command boots
@@ -235,7 +244,8 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/REDDE4D/marshal-pm/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/REDDE4D/marshal-pm/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.5.0...v0.6.0

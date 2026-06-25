@@ -215,8 +215,8 @@ export function Overview({ onLogout }: { onLogout: () => void }) {
 
                   // proc.mem is in bytes; display in MiB
                   const memMB = proc.mem > 0 ? (proc.mem / 1048576).toFixed(1) : null;
-                  // proc.cpu is 0–1 fraction; display as integer %
-                  const cpuPct = (proc.cpu * 100).toFixed(0);
+                  // proc.cpu is already a percentage (per-core %, summed over the group).
+                  const cpuPct = proc.cpu.toFixed(0);
                   // uptime: proc.uptime_ms → seconds since boot for relativeTime
                   const uptimeSec = Math.floor(Date.now() / 1000) - Math.floor(proc.uptime_ms / 1000);
 
