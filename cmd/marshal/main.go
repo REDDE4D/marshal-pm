@@ -68,6 +68,8 @@ func rootCmd() *cobra.Command {
 		serverCmd(),
 		fleetCmd(),
 		importCmd(),
+		enrollCmd(),
+		unenrollCmd(),
 	)
 	return root
 }
