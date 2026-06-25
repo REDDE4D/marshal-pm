@@ -186,6 +186,38 @@ func TestStartRejectsEmptyRepoAndDuplicate(t *testing.T) {
 	}
 }
 
+func TestStartRejectsDangerousSource(t *testing.T) {
+	root := t.TempDir()
+	host := newFakeHost()
+	runner := &fakeRunner{}
+	d := New(host, runner, root)
+
+	bad := gitApp("web")
+	bad.Source.Ref = "--upload-pack=touch /tmp/pwn"
+	if err := d.Start(bad, Credential{}); err == nil {
+		t.Fatal("expected error for option-injection ref")
+	}
+	if len(runner.calls) != 0 {
+		t.Fatalf("runner must not be invoked for a rejected source, got %d calls", len(runner.calls))
+	}
+}
+
+func TestRedeployRejectsDangerousSource(t *testing.T) {
+	root := t.TempDir()
+	host := newFakeHost()
+	host.existing["web"] = true
+	host.sources["web"] = config.GitSource{Repo: "https://example/r.git", Ref: "--upload-pack=x"}
+	runner := &fakeRunner{}
+	d := New(host, runner, root)
+
+	if err := d.Redeploy("web", Credential{}); err == nil {
+		t.Fatal("expected error for option-injection ref on redeploy")
+	}
+	if len(runner.calls) != 0 {
+		t.Fatalf("runner must not be invoked for a rejected source, got %d calls", len(runner.calls))
+	}
+}
+
 func errBuild() error { return &buildErr{} }
 
 type buildErr struct{}

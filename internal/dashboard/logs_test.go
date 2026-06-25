@@ -113,7 +113,7 @@ func (r *recordingLogs) StderrSince(string, int64) ([]logstore.StoredLine, error
 
 func TestLogsThreadsQueryFilter(t *testing.T) {
 	rl := &recordingLogs{}
-	h := newHandler(fakeLister{}, &fakeMetrics{}, rl, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", "", nil)
+	h := newHandler(fakeLister{}, &fakeMetrics{}, rl, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", nil, nil)
 	req := httptest.NewRequest("GET", "/api/logs?agent=dev-1&selector=web&q=boom", nil)
 	rec := httptest.NewRecorder()
 	h.logs(rec, req)
@@ -135,7 +135,7 @@ func (s statLogs) StderrSince(string, int64) ([]logstore.StoredLine, error) { re
 
 func TestLogStatsEndpoint(t *testing.T) {
 	sl := statLogs{counts: map[string]int64{"web#0": 4, "api#0": 1}}
-	h := newHandler(fakeLister{}, &fakeMetrics{}, sl, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", "", nil)
+	h := newHandler(fakeLister{}, &fakeMetrics{}, sl, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", nil, nil)
 	req := httptest.NewRequest("GET", "/api/logstats?agent=dev-1", nil)
 	rec := httptest.NewRecorder()
 	h.logstats(rec, req)

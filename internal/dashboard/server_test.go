@@ -140,7 +140,7 @@ func TestSessionSurvivesHandlerRestart(t *testing.T) {
 	auth := fakeAuth{user: "admin", pass: "pw"}
 
 	// First handler: log in, capture the cookie.
-	h1 := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, auth, time.Hour, path, "", nil)
+	h1 := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, auth, time.Hour, path, nil, nil)
 	srv1 := httptest.NewServer(h1.mux)
 	c1 := srv1.Client()
 	resp, _ := c1.Post(srv1.URL+"/api/login", "application/json", strings.NewReader(`{"User":"admin","Pass":"pw"}`))
@@ -151,7 +151,7 @@ func TestSessionSurvivesHandlerRestart(t *testing.T) {
 	}
 
 	// Second handler at the same path (simulating a restart): the cookie still validates.
-	h2 := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, auth, time.Hour, path, "", nil)
+	h2 := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, auth, time.Hour, path, nil, nil)
 	srv2 := httptest.NewServer(h2.mux)
 	defer srv2.Close()
 	req, _ := http.NewRequest("GET", srv2.URL+"/api/fleet", nil)

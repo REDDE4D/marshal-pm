@@ -66,7 +66,7 @@ func (f *fakeNotifs) SetSettings(s notify.Settings) error { f.settings = s; retu
 // authenticated session, returning the handler and a session cookie.
 func testHandlerWithNotifs(t *testing.T, n Notifications) *handler {
 	t.Helper()
-	h := newHandler(nil, nil, nil, nil, nil, 0, "", "", nil)
+	h := newHandler(nil, nil, nil, nil, nil, 0, "", nil, nil)
 	h.notifs = n
 	h.notifBuild = func(c notify.Channel, _ map[string]string) (notify.Sender, error) {
 		return senderFunc(func() error { return nil }), nil
@@ -340,7 +340,7 @@ func TestPutSettingsRoundTripsCoalesceWindow(t *testing.T) {
 }
 
 func TestNotifsUnavailableIs503(t *testing.T) {
-	h := newHandler(nil, nil, nil, nil, nil, 0, "", "", nil) // h.notifs == nil
+	h := newHandler(nil, nil, nil, nil, nil, 0, "", nil, nil) // h.notifs == nil
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/notifications", nil)
 	h.getNotifications(rec, req)
