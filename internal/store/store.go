@@ -155,3 +155,15 @@ func (s *Store) LoadFleetToken() (string, error) {
 func (s *Store) SaveFleetToken(token string) error {
 	return os.WriteFile(s.FleetTokenPath(), []byte(token), 0o600)
 }
+
+// ClearServer removes the saved server config and the per-agent fleet token, so
+// the daemon's fleet supervisor drops the connection (unenroll). Missing files
+// are not an error.
+func (s *Store) ClearServer() error {
+	for _, p := range []string{s.serverPath(), s.FleetTokenPath()} {
+		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
