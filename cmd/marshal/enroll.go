@@ -48,7 +48,7 @@ func enrollCmd() *cobra.Command {
 			}); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "marshal: enrolled with %s as %q — a running daemon will connect within a few seconds.\n", args[0], name)
+			fmt.Fprintf(cmd.OutOrStdout(), "marshal: enrolled with %q as %q — a running daemon will connect within a few seconds.\n", args[0], name)
 			return nil
 		},
 	}

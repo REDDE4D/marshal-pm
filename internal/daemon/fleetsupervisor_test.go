@@ -33,7 +33,8 @@ func TestSuperviseFleetStartsOnEnrollStopsOnClear(t *testing.T) {
 	defer cancel()
 	go superviseFleet(ctx, st, 10*time.Millisecond, runner)
 
-	// Not enrolled → no runner.
+	// Not enrolled → no runner. A fixed sleep is safe for a negative assertion:
+	// we expect zero runs, so this can never false-pass by finishing too early.
 	time.Sleep(40 * time.Millisecond)
 	mu.Lock()
 	if len(runs) != 0 {

@@ -32,7 +32,7 @@ func loadFleetTarget(st *store.Store) (tgt fleetTarget, fleetToken string, enrol
 	if err != nil || sc == nil || sc.Address == "" {
 		return fleetTarget{}, "", false
 	}
-	fleetToken, _ = st.LoadFleetToken()
+	fleetToken, _ = st.LoadFleetToken() // a read error is treated as "no minted token" — we fall back to the enroll token
 	if fleetToken == "" && sc.Token == "" {
 		return fleetTarget{}, "", false
 	}
