@@ -20,7 +20,9 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
   interpreter inferred from the script extension), plus `cwd`, `env`, `env_file`, `instances`,
   `autorestart`, `max_restarts`, and `kill_timeout`. Fields with no equivalent (cluster mode,
   `watch`, `cron_restart`, `instances: "max"`) are reported as warnings. Output goes to stdout
-  or, with `-o`, to a `0600` file (it may contain resolved secrets).
+  or, with `-o`, to a `0600` file (it may contain resolved secrets); `--split-env` instead
+  writes each app's env to a `0600` `<name>.env` file referenced via `env_file:`, keeping
+  resolved secrets out of the generated `marshal.yaml`.
 
 ### Fixed
 - **install.sh PATH guidance.** When the binary lands in `~/.local/bin` (the fallback when

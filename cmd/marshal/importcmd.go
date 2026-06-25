@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -23,6 +24,7 @@ func importCmd() *cobra.Command {
 // importPM2Cmd converts a PM2 ecosystem file to a marshal.yaml.
 func importPM2Cmd() *cobra.Command {
 	var out string
+	var splitEnv bool
 	c := &cobra.Command{
 		Use:   "pm2 <ecosystem.config.js|.json|.yaml>",
 		Short: "Convert a PM2 ecosystem file to a marshal.yaml",
@@ -43,6 +45,24 @@ func importPM2Cmd() *cobra.Command {
 			if len(cfg.Apps) == 0 {
 				return fmt.Errorf("no apps found in %s", args[0])
 			}
+
+			// --split-env: write each app's resolved env to a 0600 <name>.env file
+			// (next to the output) and reference it via env_file, keeping secrets
+			// out of the generated marshal.yaml.
+			if splitEnv {
+				dir := "."
+				if out != "" {
+					dir = filepath.Dir(out)
+				}
+				files, werr := cfg.SplitEnvFiles(dir)
+				if werr != nil {
+					return werr
+				}
+				for _, f := range files {
+					fmt.Fprintf(cmd.ErrOrStderr(), "marshal: wrote %s\n", filepath.Join(dir, f))
+				}
+			}
+
 			data, err := cfg.YAML()
 			if err != nil {
 				return err
@@ -70,5 +90,6 @@ func importPM2Cmd() *cobra.Command {
 		},
 	}
 	c.Flags().StringVarP(&out, "output", "o", "", "write to a file (0600) instead of stdout")
+	c.Flags().BoolVar(&splitEnv, "split-env", false, "write each app's env to a 0600 <name>.env file and reference it via env_file (keeps secrets out of the marshal.yaml)")
 	return c
 }

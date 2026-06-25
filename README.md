@@ -195,6 +195,13 @@ marshal import pm2 ecosystem.config.js -o marshal.yaml
 exactly as PM2 would; `.json`/`.yaml` are read directly. Anything without a Marshal equivalent
 (cluster mode, `watch`, `cron_restart`) is reported as a warning.
 
+Add `--split-env` to keep secrets out of the YAML — each app's env is written to a `0600`
+`<name>.env` file and referenced via `env_file:` instead of being inlined:
+
+```bash
+marshal import pm2 ecosystem.config.js --split-env -o marshal.yaml
+```
+
 ```bash
 ./marshal start marshal.yaml     # start under the background daemon
 ./marshal list                   # see managed processes
