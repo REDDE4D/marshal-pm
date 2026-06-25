@@ -489,16 +489,26 @@ export type ErrSignature = {
   first_unix: number;
   last_unix: number;
   buckets: number[];
+  acknowledged: boolean;
 };
 
 export type ErrorsResponse = {
   range: string;
   since: number;
   now: number;
-  cluster: { errors: number; signatures: number; affected_procs: number; last_error_unix: number };
+  cluster: { errors: number; signatures: number; unacknowledged: number; affected_procs: number; last_error_unix: number };
   signatures: ErrSignature[];
   truncated: boolean;
 };
+
+export async function ackError(id: string, ack: boolean): Promise<void> {
+  const r = await fetch("/api/errors/ack", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, ack }),
+  });
+  if (!r.ok) throw new Error(`ack ${r.status}`);
+}
 
 export type UpdateStatus = {
   enabled: boolean;

@@ -12,6 +12,16 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-25
+
+### Added
+- **Acknowledge error signatures.** Errors can now be acknowledged from the dashboard so they
+  stop nagging: the rail error badge counts only *unacknowledged* signatures, and the Errors
+  page gains an "ack/acked" button per row (acked rows dim) plus an "Unacked" metric.
+  Acknowledgement is persisted server-side (keyed by the stable signature id) and **re-surfaces
+  automatically if the error recurs** after it was acked. New `POST /api/errors/ack`; the
+  `/api/errors` response gains `acknowledged` per signature and `cluster.unacknowledged`.
+
 ## [0.7.1] - 2026-06-25
 
 ### Fixed
@@ -244,7 +254,8 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/REDDE4D/marshal-pm/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/REDDE4D/marshal-pm/compare/v0.6.0...v0.6.1

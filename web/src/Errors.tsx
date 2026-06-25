@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getErrors, type ErrorsResponse } from "./api";
+import { getErrors, ackError, type ErrorsResponse, type ErrSignature } from "./api";
 import { MetricCluster, Cell } from "./components/Cluster";
 import { SectionHeader, LedgerHeader, LedgerRow } from "./components/Ledger";
 import { Segment } from "./components/Controls";
@@ -21,54 +21,50 @@ function rangeLabel(range: Range): string {
   return "all time";
 }
 
-const LEDGER_COLS = "26px 2fr 1fr 1.3fr 0.7fr 0.8fr";
+const LEDGER_COLS = "26px 2fr 1fr 1.3fr 0.6fr 0.7fr 0.7fr";
 
 export function Errors() {
   const [range, setRange] = useState<Range>("24h");
   const [data, setData] = useState<ErrorsResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let live = true;
     setErr(null);
-    setData(null);
     getErrors(range)
       .then((d) => { if (live) setData(d); })
       .catch((e) => { if (live) setErr(String(e)); });
     return () => { live = false; };
-  }, [range]);
+  }, [range, tick]);
 
-  // Derive most-recent signature for "Last error" sub label
-  const mostRecentSig = data?.signatures.reduce<typeof data.signatures[0] | null>(
+  async function onAck(sig: ErrSignature) {
+    try {
+      await ackError(sig.id, !sig.acknowledged);
+      setTick((t) => t + 1); // reload so the badge + counts update
+    } catch {
+      /* swallow — non-fatal */
+    }
+  }
+
+  const mostRecentSig = data?.signatures.reduce<ErrSignature | null>(
     (best, s) => (!best || s.last_unix > best.last_unix ? s : best),
     null
   ) ?? null;
 
-  const lastSub = mostRecentSig
-    ? `ago · ${mostRecentSig.agent} / ${mostRecentSig.proc}`
-    : "ago";
+  const lastSub = mostRecentSig ? `ago · ${mostRecentSig.agent} / ${mostRecentSig.proc}` : "ago";
 
   return (
     <>
-      {/* Cluster */}
       <MetricCluster cols={4}>
+        <Cell label={`Errors ${range}`} value={data ? data.cluster.errors : "—"} sub={rangeLabel(range)} color="rose" />
         <Cell
-          label={`Errors ${range}`}
-          value={data ? data.cluster.errors : "—"}
-          sub={rangeLabel(range)}
-          color="rose"
-        />
-        <Cell
-          label="Distinct"
-          value={data ? data.cluster.signatures : "—"}
-          sub="error signatures"
+          label="Unacked"
+          value={data ? data.cluster.unacknowledged : "—"}
+          sub={data ? `of ${data.cluster.signatures} signatures` : "error signatures"}
           color="amber"
         />
-        <Cell
-          label="Affected procs"
-          value={data ? data.cluster.affected_procs : "—"}
-          sub="processes"
-        />
+        <Cell label="Affected procs" value={data ? data.cluster.affected_procs : "—"} sub="processes" />
         <Cell
           label="Last error"
           value={data ? relativeTime(data.cluster.last_error_unix) : "—"}
@@ -77,30 +73,20 @@ export function Errors() {
         />
       </MetricCluster>
 
-      {/* Section header */}
       <SectionHeader
         index="01"
         title="Exceptions"
-        right={
-          <Segment<Range>
-            options={RANGE_OPTIONS}
-            value={range}
-            onChange={setRange}
-          />
-        }
+        right={<Segment<Range> options={RANGE_OPTIONS} value={range} onChange={setRange} />}
         count={data ? `${data.signatures.length} signatures` : undefined}
       />
 
-      {/* States */}
       {err && <p className="sub" style={{ padding: "12px 22px", color: "var(--rose)" }}>Failed to load: {err}</p>}
       {!err && !data && <p className="sub" style={{ padding: "12px 22px" }}>Loading…</p>}
 
       {data && (
         <>
           {data.truncated && (
-            <p className="sub" style={{ padding: "6px 22px" }}>
-              Showing a partial window — scan cap reached.
-            </p>
+            <p className="sub" style={{ padding: "6px 22px" }}>Showing a partial window — scan cap reached.</p>
           )}
 
           {data.signatures.length === 0 ? (
@@ -114,6 +100,7 @@ export function Errors() {
                 <div>Occurrences</div>
                 <div className="rr">Count</div>
                 <div className="rr">Last</div>
+                <div className="rr" />
               </LedgerHeader>
 
               {data.signatures.map((sig, i) => (
@@ -121,6 +108,7 @@ export function Errors() {
                   key={sig.id}
                   cols={LEDGER_COLS}
                   onClick={() => navigate(procHref(sig.agent, sig.proc))}
+                  dim={sig.acknowledged}
                 >
                   <div className="ix">{String(i + 1).padStart(2, "0")}</div>
                   <div>
@@ -133,8 +121,15 @@ export function Errors() {
                   </div>
                   <BarSparkline points={sig.buckets} color="var(--rose)" />
                   <div className="rr v rose">{sig.count}</div>
-                  <div className="rr v" style={{ fontSize: "11px", color: "var(--dim)" }}>
-                    {relativeTime(sig.last_unix)}
+                  <div className="rr v" style={{ fontSize: "11px", color: "var(--dim)" }}>{relativeTime(sig.last_unix)}</div>
+                  <div className="rr">
+                    <button
+                      className={`ackbtn${sig.acknowledged ? " on" : ""}`}
+                      onClick={(e) => { e.stopPropagation(); onAck(sig); }}
+                      title={sig.acknowledged ? "Un-acknowledge" : "Acknowledge (silence until it recurs)"}
+                    >
+                      {sig.acknowledged ? "acked" : "ack"}
+                    </button>
                   </div>
                 </LedgerRow>
               ))}

@@ -24,7 +24,7 @@ export function AppShell({ ctx, right, onLogout, children }: AppShellProps) {
     async function poll() {
       try {
         const r = await getErrors("24h");
-        if (!cancelled) setBadge(r.cluster.signatures);
+        if (!cancelled) setBadge(r.cluster.unacknowledged);
       } catch {
         // swallow — never throw, never logout
       }

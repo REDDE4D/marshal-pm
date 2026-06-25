@@ -73,15 +73,17 @@ export function LedgerRow({
   onClick,
   actions,
   children,
+  dim,
 }: {
   cols: string;
   onClick?: (e: MouseEvent<HTMLDivElement>) => void;
   actions?: QuickAction[];
   children: ReactNode;
+  dim?: boolean;
 }) {
   return (
     <div
-      className={"lr" + (onClick ? " clk" : "")}
+      className={"lr" + (onClick ? " clk" : "") + (dim ? " dim" : "")}
       style={{ gridTemplateColumns: cols }}
       onClick={onClick}
     >

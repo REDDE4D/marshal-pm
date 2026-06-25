@@ -1,10 +1,32 @@
 package dashboard
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/REDDE4D/marshal-pm/internal/errsig"
 )
+
+// Acks records which error signatures have been acknowledged. *ackstore.Store
+// satisfies it; nil disables acknowledgement (everything stays unacknowledged).
+type Acks interface {
+	AckedAt(id string) (int64, bool)
+	Ack(id string, atMs int64) error
+	Unack(id string) error
+}
+
+// acknowledged reports whether a signature counts as acknowledged: it must have
+// an ack, and must not have recurred since (lastUnix seconds ≤ the ack ms).
+func acknowledged(acked bool, ackedAtMs, lastUnix int64) bool {
+	return acked && lastUnix*1000 <= ackedAtMs
+}
+
+func (h *handler) ackedAt(id string) (int64, bool) {
+	if h.acks == nil {
+		return 0, false
+	}
+	return h.acks.AckedAt(id)
+}
 
 const (
 	errSparkBuckets = 24
@@ -14,23 +36,25 @@ const (
 )
 
 type errSigView struct {
-	ID        string   `json:"id"`
-	Sample    string   `json:"sample"`
-	Source    string   `json:"source,omitempty"`
-	Agent     string   `json:"agent"`
-	Proc      string   `json:"proc"`
-	Affected  []string `json:"affected"`
-	Count     int      `json:"count"`
-	FirstUnix int64    `json:"first_unix"`
-	LastUnix  int64    `json:"last_unix"`
-	Buckets   []int    `json:"buckets"`
+	ID           string   `json:"id"`
+	Sample       string   `json:"sample"`
+	Source       string   `json:"source,omitempty"`
+	Agent        string   `json:"agent"`
+	Proc         string   `json:"proc"`
+	Affected     []string `json:"affected"`
+	Count        int      `json:"count"`
+	FirstUnix    int64    `json:"first_unix"`
+	LastUnix     int64    `json:"last_unix"`
+	Buckets      []int    `json:"buckets"`
+	Acknowledged bool     `json:"acknowledged"`
 }
 
 type errClusterView struct {
-	Errors        int   `json:"errors"`
-	Signatures    int   `json:"signatures"`
-	AffectedProcs int   `json:"affected_procs"`
-	LastErrorUnix int64 `json:"last_error_unix"`
+	Errors         int   `json:"errors"`
+	Signatures     int   `json:"signatures"`
+	Unacknowledged int   `json:"unacknowledged"`
+	AffectedProcs  int   `json:"affected_procs"`
+	LastErrorUnix  int64 `json:"last_error_unix"`
 }
 
 type errorsView struct {
@@ -100,12 +124,47 @@ func (h *handler) errors(w http.ResponseWriter, r *http.Request) {
 		},
 		Signatures: make([]errSigView, 0, len(res.Signatures)),
 	}
+	unack := 0
 	for _, s := range res.Signatures {
+		at, ok := h.ackedAt(s.Id)
+		ack := acknowledged(ok, at, s.LastUnix)
+		if !ack {
+			unack++
+		}
 		out.Signatures = append(out.Signatures, errSigView{
 			ID: s.Id, Sample: s.Sample, Source: s.Source, Agent: s.Agent, Proc: s.Proc,
 			Affected: s.Affected, Count: s.Count, FirstUnix: s.FirstUnix, LastUnix: s.LastUnix,
-			Buckets: s.Buckets,
+			Buckets: s.Buckets, Acknowledged: ack,
 		})
 	}
+	out.Cluster.Unacknowledged = unack
 	writeJSON(w, http.StatusOK, out)
+}
+
+// ackError serves POST /api/errors/ack {"id":..., "ack":true|false}: acknowledge
+// (silence until it recurs) or un-acknowledge an error signature.
+func (h *handler) ackError(w http.ResponseWriter, r *http.Request) {
+	if h.acks == nil {
+		http.Error(w, "acknowledgement unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	var body struct {
+		ID  string `json:"id"`
+		Ack bool   `json:"ack"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ID == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	var err error
+	if body.Ack {
+		err = h.acks.Ack(body.ID, nowMs())
+	} else {
+		err = h.acks.Unack(body.ID)
+	}
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
