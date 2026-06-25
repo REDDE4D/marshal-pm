@@ -12,6 +12,8 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-25
+
 ### Added
 - **Single-host quickstart: `marshal server --self-enroll <marshal.yaml>`.** One command boots
   the fleet server + dashboard (defaults to `:9001`), enrolls an in-process local agent against
@@ -233,7 +235,8 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/REDDE4D/marshal-pm/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.1...v0.5.0
