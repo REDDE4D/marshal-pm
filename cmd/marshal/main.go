@@ -67,6 +67,7 @@ func rootCmd() *cobra.Command {
 		killCmd(),
 		serverCmd(),
 		fleetCmd(),
+		importCmd(),
 	)
 	return root
 }

@@ -12,6 +12,16 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Added
+- **PM2 ecosystem import.** `marshal import pm2 <ecosystem.config.js|.json|.yaml>` converts a
+  PM2 ecosystem file to a `marshal.yaml`. `.js`/`.cjs` files are evaluated with `node`, so
+  dynamic config (env loaders, spreads, etc.) resolves exactly as it would under PM2; `.json`
+  and `.yaml` are read directly. Maps `script`/`interpreter`/`node_args` → `cmd`/`args` (with
+  interpreter inferred from the script extension), plus `cwd`, `env`, `env_file`, `instances`,
+  `autorestart`, `max_restarts`, and `kill_timeout`. Fields with no equivalent (cluster mode,
+  `watch`, `cron_restart`, `instances: "max"`) are reported as warnings. Output goes to stdout
+  or, with `-o`, to a `0600` file (it may contain resolved secrets).
+
 ### Fixed
 - **install.sh PATH guidance.** When the binary lands in `~/.local/bin` (the fallback when
   `/usr/local/bin` isn't writable) and that directory isn't on `PATH`, the installer now prints
