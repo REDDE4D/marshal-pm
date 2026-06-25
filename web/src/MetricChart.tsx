@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Bucket } from "./api";
 
 type MetricChartProps = {
@@ -10,10 +11,16 @@ const H = 140;
 const PAD = 28;
 
 function fmt(metric: "cpu" | "mem", v: number): string {
-  return metric === "cpu" ? `${(v * 100).toFixed(0)}%` : `${(v / (1024 * 1024)).toFixed(0)} MB`;
+  // cpu is already a percentage (gopsutil per-core %, summed over the group).
+  return metric === "cpu" ? `${v.toFixed(0)}%` : `${(v / (1024 * 1024)).toFixed(0)} MB`;
+}
+
+function fmtPrecise(metric: "cpu" | "mem", v: number): string {
+  return metric === "cpu" ? `${v.toFixed(1)}%` : `${(v / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function MetricChart({ buckets, metric }: MetricChartProps) {
+  const [hover, setHover] = useState<number | null>(null);
   if (buckets.length === 0) {
     return <p className="chart-empty">No history yet.</p>;
   }
@@ -30,32 +37,63 @@ export function MetricChart({ buckets, metric }: MetricChartProps) {
   const color = metric === "cpu" ? "#34D0BA" : "#8189EC";
   const gradId = `mc-grad-${metric}`;
 
-  // Build the closed area path: avg line points + baseline closing segment
   const areaPoints = [
     ...avg.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`),
     `${x(n - 1).toFixed(1)},${y(lo).toFixed(1)}`,
     `${x(0).toFixed(1)},${y(lo).toFixed(1)}`,
   ].join(" ");
 
+  // Map a pointer position to the nearest bucket index, accounting for the
+  // horizontal padding (the SVG stretches to fill its container).
+  function onMove(e: React.MouseEvent<SVGSVGElement>) {
+    const r = e.currentTarget.getBoundingClientRect();
+    const frac = (e.clientX - r.left) / r.width;
+    const left = PAD / W;
+    const right = (W - PAD) / W;
+    const dataFrac = Math.max(0, Math.min(1, (frac - left) / (right - left)));
+    setHover(n > 1 ? Math.round(dataFrac * (n - 1)) : 0);
+  }
+
+  const hb = hover !== null ? buckets[hover] : null;
+
   return (
-    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="metric-chart" role="img" preserveAspectRatio="none">
-      <defs>
-        <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor={color} stopOpacity={0.35} />
-          <stop offset="1" stopColor={color} stopOpacity={0} />
-        </linearGradient>
-      </defs>
-      {/* Y gridlines + labels at lo and hi */}
-      <line x1={PAD} y1={y(hi)} x2={W - PAD} y2={y(hi)} className="grid" />
-      <line x1={PAD} y1={y(lo)} x2={W - PAD} y2={y(lo)} className="grid" />
-      <text x={4} y={y(hi) + 4} className="axis">{fmt(metric, hi)}</text>
-      <text x={4} y={y(lo) + 4} className="axis">{fmt(metric, lo)}</text>
-      {/* gradient area fill under avg series */}
-      <polyline fill={`url(#${gradId})`} stroke="none" points={areaPoints} />
-      {/* faint max series so peak info isn't lost */}
-      <polyline points={line(max)} fill="none" stroke={color} strokeWidth={1} strokeOpacity={0.35} />
-      {/* avg series on top */}
-      <polyline points={line(avg)} fill="none" stroke={color} strokeWidth={1.6} />
-    </svg>
+    <div className="mc-wrap">
+      {hb && (
+        <div className="mc-readout">
+          <b>{fmtPrecise(metric, metric === "cpu" ? hb.cpu_avg : hb.mem_avg)}</b>
+          {" · peak "}
+          {fmtPrecise(metric, metric === "cpu" ? hb.cpu_max : hb.mem_max)}
+          {" · "}
+          {new Date(hb.ts).toLocaleTimeString()}
+        </div>
+      )}
+      <svg
+        width={W}
+        height={H}
+        viewBox={`0 0 ${W} ${H}`}
+        className="metric-chart"
+        role="img"
+        preserveAspectRatio="none"
+        onMouseMove={onMove}
+        onMouseLeave={() => setHover(null)}
+      >
+        <defs>
+          <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor={color} stopOpacity={0.35} />
+            <stop offset="1" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <line x1={PAD} y1={y(hi)} x2={W - PAD} y2={y(hi)} className="grid" />
+        <line x1={PAD} y1={y(lo)} x2={W - PAD} y2={y(lo)} className="grid" />
+        <text x={4} y={y(hi) + 4} className="axis">{fmt(metric, hi)}</text>
+        <text x={4} y={y(lo) + 4} className="axis">{fmt(metric, lo)}</text>
+        <polyline fill={`url(#${gradId})`} stroke="none" points={areaPoints} />
+        <polyline points={line(max)} fill="none" stroke={color} strokeWidth={1} strokeOpacity={0.35} />
+        <polyline points={line(avg)} fill="none" stroke={color} strokeWidth={1.6} />
+        {hover !== null && (
+          <line x1={x(hover)} y1={y(hi)} x2={x(hover)} y2={y(lo)} className="mc-cross" />
+        )}
+      </svg>
+    </div>
   );
 }

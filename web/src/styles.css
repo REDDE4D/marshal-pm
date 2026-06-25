@@ -138,6 +138,16 @@ select.inp{ font-family:var(--i); }
 .chart{ background:var(--bg); padding:14px 18px; }
 .chart .cap{ font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin-bottom:10px; display:flex; justify-content:space-between; }
 
+/* Metric chart hover: crosshair + a value/time readout. */
+.mc-wrap{ position:relative; }
+.mc-readout{
+  position:absolute; top:-2px; right:0; z-index:2; pointer-events:none;
+  font-family:var(--m); font-size:11px; color:var(--tx);
+  background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:2px 7px;
+}
+.mc-readout b{ color:var(--bright); font-weight:600; }
+.mc-cross{ stroke:var(--dim); stroke-width:1; stroke-dasharray:3 3; }
+
 .logbar{ display:flex; align-items:center; gap:8px; padding:12px 20px; }
 .logbox{ margin:0 22px 20px; background:#070809; border:1px solid var(--line); border-radius:4px; padding:12px 15px; font-family:var(--m); font-size:12.5px; line-height:1.9; max-height:380px; overflow:auto; }
 .logbox .ts{ color:var(--faint); } .logbox .er{ color:var(--rose); } .logbox .ok{ color:var(--olive); } .logbox .tx{ color:#9AA1AD; } .logbox .warn{ color:var(--amber); }
