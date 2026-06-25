@@ -120,6 +120,7 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 	mux.HandleFunc("POST /api/notifications/channels", h.requireSession(h.putChannel))
 	mux.HandleFunc("DELETE /api/notifications/channels/{name}", h.requireSession(h.deleteChannelHandler))
 	mux.HandleFunc("POST /api/notifications/channels/{name}/test", h.requireSession(h.testChannel))
+	mux.HandleFunc("POST /api/notifications/test", h.requireSession(h.testAll))
 	mux.HandleFunc("POST /api/notifications/rules", h.requireSession(h.putRule))
 	mux.HandleFunc("DELETE /api/notifications/rules/{name}", h.requireSession(h.deleteRuleHandler))
 	mux.HandleFunc("PUT /api/notifications/settings", h.requireSession(h.putSettings))

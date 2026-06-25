@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   getNotifications, putChannel, deleteChannel, testChannel,
-  putRule, deleteRule, putNotifSettings,
+  putRule, deleteRule, putNotifSettings, testAllChannels,
   type NotifConfig, type NotifChannel, type NotifRule,
 } from "./api";
 import { SectionHeader, LedgerHeader, LedgerRow } from "./components/Ledger";
@@ -52,8 +52,9 @@ export function Notifications() {
   async function reload() {
     try {
       setCfg(await getNotifications());
-    } catch {
-      setErr("failed to load");
+      setErr("");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "failed to load");
     }
   }
   useEffect(() => {
@@ -428,20 +429,50 @@ function SettingsSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => 
     return init;
   });
   const [msg, setMsg] = useState("");
+  const [ok, setOk] = useState(true);
+  const [testing, setTesting] = useState(false);
+
+  const enabledCount = cfg.channels.filter((c) => c.enabled).length;
+
+  async function sendTest() {
+    setTesting(true);
+    try {
+      const r = await testAllChannels();
+      if (r.error) {
+        setOk(false);
+        setMsg(r.error);
+      } else if (r.results.length === 0) {
+        setOk(false);
+        setMsg("no enabled channels to test");
+      } else {
+        const failed = r.results.filter((x) => !x.ok);
+        if (failed.length === 0) {
+          setOk(true);
+          setMsg(`test sent to ${r.sent} channel${r.sent === 1 ? "" : "s"}`);
+        } else {
+          setOk(false);
+          setMsg(`${r.sent} sent · ${failed.map((f) => `${f.name}: ${f.error}`).join("; ")}`);
+        }
+      }
+    } finally {
+      setTesting(false);
+    }
+  }
 
   async function save() {
     const co: Record<string, number> = {};
     for (const ev of EVENT_TYPES) {
       if (overrides[ev] !== "") co[ev] = Number(overrides[ev]);
     }
-    await putNotifSettings({
+    const res = await putNotifSettings({
       cooldown_seconds: cooldown,
       suppress_recovery: !recovery,
       cooldown_overrides: co,
       coalesce_window_seconds: coalesce,
     });
-    setMsg("saved");
-    onChange();
+    setOk(res.ok);
+    setMsg(res.ok ? "saved" : res.error ?? "save failed");
+    if (res.ok) onChange();
   }
 
   return (
@@ -523,8 +554,15 @@ function SettingsSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => 
 
       <div className="actions">
         <Button onClick={save}>save settings</Button>
+        <Button
+          onClick={sendTest}
+          disabled={testing || enabledCount === 0}
+          title={enabledCount === 0 ? "no enabled channels" : "send a test notification to all enabled channels"}
+        >
+          {testing ? "sending…" : "send test notification"}
+        </Button>
         {msg && (
-          <span className="sub" style={{ marginLeft: "12px", color: "var(--teal)" }}>
+          <span className="sub" style={{ marginLeft: "12px", color: ok ? "var(--teal)" : "var(--rose)" }}>
             {msg}
           </span>
         )}

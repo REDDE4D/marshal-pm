@@ -215,6 +215,78 @@ func TestTestChannelReportsSecretsError(t *testing.T) {
 	}
 }
 
+func TestTestAllSendsEnabledSkipsDisabled(t *testing.T) {
+	n := &fakeNotifs{channels: []notify.Channel{
+		{Name: "tg", Type: "telegram", Enabled: true},
+		{Name: "off", Type: "slack", Enabled: false},
+		{Name: "wh", Type: "webhook", Enabled: true},
+	}}
+	h := testHandlerWithNotifs(t, n)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/notifications/test", nil)
+	h.testAll(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rec.Code)
+	}
+	var resp struct {
+		OK      bool            `json:"ok"`
+		Sent    int             `json:"sent"`
+		Results []testAllResult `json:"results"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.OK || resp.Sent != 2 {
+		t.Fatalf("want ok:true sent:2, got ok:%v sent:%d", resp.OK, resp.Sent)
+	}
+	if len(resp.Results) != 2 {
+		t.Fatalf("want 2 results (disabled skipped), got %d: %+v", len(resp.Results), resp.Results)
+	}
+	for _, r := range resp.Results {
+		if r.Name == "off" {
+			t.Fatalf("disabled channel should be skipped, got %+v", r)
+		}
+	}
+}
+
+func TestTestAllReportsPerChannelFailure(t *testing.T) {
+	n := &fakeNotifs{channels: []notify.Channel{
+		{Name: "good", Type: "webhook", Enabled: true},
+		{Name: "bad", Type: "telegram", Enabled: true},
+	}}
+	h := testHandlerWithNotifs(t, n)
+	h.notifBuild = func(c notify.Channel, _ map[string]string) (notify.Sender, error) {
+		return senderFunc(func() error {
+			if c.Name == "bad" {
+				return errors.New("boom")
+			}
+			return nil
+		}), nil
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/notifications/test", nil)
+	h.testAll(rec, req)
+	body := rec.Body.String()
+	// One delivered → ok:true overall, but the bad channel surfaces its error.
+	if !strings.Contains(body, `"ok":true`) || !strings.Contains(body, `"sent":1`) {
+		t.Fatalf("want overall ok:true sent:1, got %s", body)
+	}
+	if !strings.Contains(body, "boom") {
+		t.Fatalf("want per-channel error surfaced, got %s", body)
+	}
+}
+
+func TestTestAllNoEnabledChannelsIsNotOK(t *testing.T) {
+	n := &fakeNotifs{channels: []notify.Channel{{Name: "off", Type: "slack", Enabled: false}}}
+	h := testHandlerWithNotifs(t, n)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/notifications/test", nil)
+	h.testAll(rec, req)
+	if !strings.Contains(rec.Body.String(), `"ok":false`) {
+		t.Fatalf("want ok:false when no enabled channels, got %s", rec.Body)
+	}
+}
+
 func TestPutRuleCreates(t *testing.T) {
 	n := &fakeNotifs{}
 	h := testHandlerWithNotifs(t, n)

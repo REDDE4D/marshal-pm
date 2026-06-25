@@ -12,6 +12,24 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-25
+
+### Fixed
+- **Notification settings silently failed to save.** The dashboard's "save settings" always
+  reported "saved" regardless of the server's response, and the notifications page rendered an
+  empty config (instead of an error) when the backend was unavailable — so when notifications were
+  disabled server-side (e.g. an invalid `MARSHAL_MASTER_KEY`) or a save was rejected, the change
+  appeared to succeed but reverted on reload with no explanation. The save button now surfaces the
+  real error (and only claims success on HTTP 200), and the page now shows "notifications
+  unavailable" when the backend is disabled. (`putNotifSettings`/`getNotifications` no longer
+  swallow non-OK responses.)
+
+### Added
+- **Send a test notification to all enabled channels.** The Notifications → Settings section gains
+  a "send test notification" button that fires a test message through every enabled channel at once
+  and reports per-channel results, so you can verify your configuration end-to-end. New
+  `POST /api/notifications/test` (complements the existing per-channel test).
+
 ## [0.8.0] - 2026-06-25
 
 ### Added
@@ -254,7 +272,8 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/REDDE4D/marshal-pm/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.6.1...v0.7.0

@@ -94,6 +94,28 @@ func (h *handler) deleteChannelHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func testMessage() notify.Message {
+	return notify.Message{
+		Title: "Marshal test notification",
+		Body:  "This is a test message from Marshal.",
+		Event: notify.Event{Type: "test", Agent: "marshal", Detail: "test", Time: time.Now()},
+	}
+}
+
+// sendTest builds a sender for c and delivers a test message, returning the first
+// error encountered (decrypt, build, or send). nil means the test was delivered.
+func (h *handler) sendTest(ctx context.Context, c notify.Channel) error {
+	secrets, _, err := h.notifs.ChannelSecrets(c.Name)
+	if err != nil {
+		return err
+	}
+	sender, err := h.notifBuild(c, secrets)
+	if err != nil {
+		return err
+	}
+	return sender.Send(ctx, testMessage())
+}
+
 func (h *handler) testChannel(w http.ResponseWriter, r *http.Request) {
 	if !h.notifsReady(w) {
 		return
@@ -111,28 +133,44 @@ func (h *handler) testChannel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	secrets, _, err := h.notifs.ChannelSecrets(name)
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	sender, err := h.notifBuild(*target, secrets)
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	msg := notify.Message{
-		Title: "Marshal test notification",
-		Body:  "This is a test message from Marshal.",
-		Event: notify.Event{Type: "test", Agent: "marshal", Detail: "test", Time: time.Now()},
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-	if err := sender.Send(ctx, msg); err != nil {
+	if err := h.sendTest(ctx, *target); err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// testAllResult is the per-channel outcome of a fan-out test.
+type testAllResult struct {
+	Name  string `json:"name"`
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+// testAll sends a test notification through every enabled channel and reports the
+// per-channel outcome. ok is true only if at least one channel was delivered.
+func (h *handler) testAll(w http.ResponseWriter, r *http.Request) {
+	if !h.notifsReady(w) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	results := make([]testAllResult, 0)
+	sent := 0
+	for _, c := range h.notifs.Channels() {
+		if !c.Enabled {
+			continue
+		}
+		if err := h.sendTest(ctx, c); err != nil {
+			results = append(results, testAllResult{Name: c.Name, OK: false, Error: err.Error()})
+			continue
+		}
+		results = append(results, testAllResult{Name: c.Name, OK: true})
+		sent++
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": sent > 0, "sent": sent, "results": results})
 }
 
 func (h *handler) putRule(w http.ResponseWriter, r *http.Request) {

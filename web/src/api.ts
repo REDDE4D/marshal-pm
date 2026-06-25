@@ -408,7 +408,10 @@ export type NotifConfig = { channels: NotifChannel[]; rules: NotifRule[]; settin
 export async function getNotifications(): Promise<NotifConfig> {
   const r = await fetch("/api/notifications", { credentials: "same-origin" });
   if (r.status === 401) throw new Error("unauthorized");
-  if (!r.ok) return { channels: [], rules: [], settings: { cooldown_seconds: 300 } };
+  // 503 means notifications are disabled server-side (e.g. no master key); surface
+  // it instead of silently rendering an empty config that swallows every save.
+  if (r.status === 503) throw new Error((await r.text()).trim() || "notifications unavailable");
+  if (!r.ok) throw new Error(`failed to load notifications (${r.status})`);
   return r.json();
 }
 
@@ -439,6 +442,16 @@ export async function testChannel(name: string): Promise<{ ok: boolean; error?: 
   return r.json();
 }
 
+export type TestAllResult = { name: string; ok: boolean; error?: string };
+
+export async function testAllChannels(): Promise<{ ok: boolean; sent: number; results: TestAllResult[]; error?: string }> {
+  const r = await fetch("/api/notifications/test", {
+    method: "POST", credentials: "same-origin",
+  });
+  if (!r.ok) return { ok: false, sent: 0, results: [], error: (await r.text()).trim() || `error ${r.status}` };
+  return r.json();
+}
+
 export async function putRule(rule: NotifRule): Promise<{ ok: boolean; error?: string }> {
   const r = await fetch("/api/notifications/rules", {
     method: "POST", credentials: "same-origin",
@@ -455,12 +468,13 @@ export async function deleteRule(name: string): Promise<{ ok: boolean }> {
   return { ok: r.ok };
 }
 
-export async function putNotifSettings(s: NotifSettings): Promise<{ ok: boolean }> {
+export async function putNotifSettings(s: NotifSettings): Promise<{ ok: boolean; error?: string }> {
   const r = await fetch("/api/notifications/settings", {
     method: "PUT", credentials: "same-origin",
     headers: { "Content-Type": "application/json" }, body: JSON.stringify(s),
   });
-  return { ok: r.ok };
+  if (r.ok) return { ok: true };
+  return { ok: false, error: (await r.text()).trim() || `error ${r.status}` };
 }
 
 export type ConnectInfo = { token: string; fingerprint: string; default_address: string };
