@@ -73,7 +73,7 @@ export function AppShell({ ctx, right, onLogout, children }: AppShellProps) {
           onClick={() => navigate("#/errors")}
         >
           {badge > 0 && <span className="badge">{badge}</span>}
-          <span className="ic">⚠</span>
+          <span className="ic">{"⚠︎"}</span>
           <span className="lb">Errors</span>
         </button>
 
@@ -100,7 +100,7 @@ export function AppShell({ ctx, right, onLogout, children }: AppShellProps) {
           aria-label="Credentials"
           onClick={() => navigate("#/credentials")}
         >
-          <span className="ic">⚿</span>
+          <span className="ic">{"⚿︎"}</span>
           <span className="lb">Creds</span>
         </button>
 

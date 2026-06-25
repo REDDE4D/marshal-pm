@@ -12,6 +12,15 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-06-25
+
+### Fixed
+- **Dashboard chrome rendering.** Added a global `<button>` reset so utility buttons
+  (sign out, + add app, + connect agent) no longer show the browser's default light button
+  background on the dark theme; defined the previously-unstyled `restart all` control; and
+  forced the icon-rail glyphs (`⚠`, `⚿`) to text presentation so they render in the muted nav
+  colour instead of as bright color-emoji.
+
 ## [0.6.0] - 2026-06-25
 
 ### Added
@@ -199,7 +208,8 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/REDDE4D/marshal-pm/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.0...v0.4.1

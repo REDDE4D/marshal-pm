@@ -10,6 +10,8 @@ apps straight from a git repo and let you edit their files in the browser.
 Written in Go, standard-library-leaning, built bottom-up from a single-host supervisor into
 a full fleet manager.
 
+![Marshal fleet dashboard — metric clusters and a live per-agent process ledger](docs/images/fleet-overview.png)
+
 > [!IMPORTANT]
 > ### 🤖 Vibecoded with Claude Code
 > **Every line of this project — code, tests, design specs, and these docs — was written by
@@ -84,6 +86,25 @@ a full fleet manager.
 ```
 
 A single host can also just run the agent + CLI with no server at all.
+
+---
+
+## Dashboard
+
+The dashboard is a React app **embedded in the binary** — no separate web server to run. It's
+served over TLS at `https://<server>:<http-port>` behind password auth.
+
+**Process detail** — current gauges, CPU/memory history, and live logs per process:
+
+![Process detail with CPU/memory charts and live logs](docs/images/process-detail.png)
+
+**Errors** — stderr is normalized into grouped exception signatures with occurrence counts and trends:
+
+![Grouped error signatures](docs/images/errors.png)
+
+**Live logs** — stream stdout/stderr across the fleet with level and text/regex filtering:
+
+![Live log streaming with filters](docs/images/logs.png)
 
 ---
 
