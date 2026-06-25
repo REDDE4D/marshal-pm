@@ -18,6 +18,11 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
   image of the fleet server + dashboard** at `ghcr.io/redde4d/marshal`. The Go module path
   was renamed to `github.com/REDDE4D/marshal-pm`, so `go install
   github.com/REDDE4D/marshal-pm/cmd/marshal@latest` now works.
+- **Update-available notifier.** The server checks once a day (anonymously, via GitHub's
+  `/releases/latest` redirect — no API token, no identifiers) whether a newer Marshal
+  release exists and surfaces a dismissible banner in the dashboard, which also flags any
+  connected agents running an older version. It never downloads or replaces anything —
+  update via your install method. Opt out with `MARSHAL_NO_UPDATE_CHECK=1`.
 
 ### Changed
 - **Module path renamed** from `marshal` to `github.com/REDDE4D/marshal-pm` (enables
