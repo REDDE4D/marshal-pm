@@ -3,6 +3,7 @@ import { CredentialMeta, listCredentials, createCredential, createSSHCredential,
 import { SectionHeader, LedgerHeader, LedgerRow } from "./components/Ledger";
 import { Segment, Field, Input, Button } from "./components/Controls";
 import { formatDateShort } from "./lib/format";
+import { useStatus, StatusMessage } from "./components/StatusMessage";
 
 const COLS = "1.4fr 1fr 1.2fr 0.6fr";
 
@@ -17,6 +18,7 @@ export function Credentials({ onLogout: _onLogout }: { onLogout: () => void }) {
   const [error, setError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [newPublicKey, setNewPublicKey] = useState("");
+  const { status, show } = useStatus();
 
   async function refresh() {
     const list = await listCredentials();
@@ -29,6 +31,16 @@ export function Credentials({ onLogout: _onLogout }: { onLogout: () => void }) {
   const canSubmit = kind === "ssh-key"
     ? name.trim() !== "" && !busy
     : name.trim() !== "" && username.trim() !== "" && token !== "" && !busy;
+
+  const disabledReason: string | undefined = busy
+    ? "saving…"
+    : !name.trim()
+    ? "enter a name"
+    : kind === "https-token" && !username.trim()
+    ? "enter a username"
+    : kind === "https-token" && !token
+    ? "enter a token"
+    : undefined;
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
@@ -44,8 +56,10 @@ export function Credentials({ onLogout: _onLogout }: { onLogout: () => void }) {
         setNewPublicKey(res.public_key ?? "");
         setName("");
         await refresh();
+        show("success", "key generated");
       } else {
-        setError(res.error || "error");
+        const msg = res.error || "error";
+        show("error", msg);
       }
     } else {
       const res = await createCredential(name.trim(), username.trim(), token);
@@ -55,8 +69,10 @@ export function Credentials({ onLogout: _onLogout }: { onLogout: () => void }) {
         setUsername("");
         setToken("");
         await refresh();
+        show("success", "credential added");
       } else {
-        setError(res.error || "error");
+        const msg = res.error || "error";
+        show("error", msg);
       }
     }
   }
@@ -143,7 +159,12 @@ export function Credentials({ onLogout: _onLogout }: { onLogout: () => void }) {
 
       <form onSubmit={handleCreate}>
         <div style={{ padding: "8px 20px 0", maxWidth: "560px" }}>
-          <Field label="type">
+          <Field
+            label="type"
+            hint={kind === "ssh-key"
+              ? "generates an ed25519 key pair — add the public key as a deploy key on your repo"
+              : "stores your personal access token for HTTPS git operations"}
+          >
             <Segment<"https-token" | "ssh-key">
               options={[
                 { value: "https-token", label: "https token" },
@@ -212,9 +233,10 @@ export function Credentials({ onLogout: _onLogout }: { onLogout: () => void }) {
         </div>
 
         <div className="actions">
-          <Button type="submit" disabled={!canSubmit}>
+          <Button type="submit" disabledReason={disabledReason}>
             {busy ? "saving…" : kind === "ssh-key" ? "generate key" : "add credential"}
           </Button>
+          <StatusMessage status={status} />
         </div>
       </form>
     </>

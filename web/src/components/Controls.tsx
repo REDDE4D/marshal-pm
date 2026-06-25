@@ -126,13 +126,20 @@ export function Chip({ label, on, onClick }: ChipProps) {
 interface FieldProps {
   label: string;
   children: ReactNode;
+  required?: boolean;
+  hint?: string;
+  error?: string;
 }
 
-export function Field({ label, children }: FieldProps) {
+export function Field({ label, children, required, hint, error }: FieldProps) {
   return (
     <div className="field">
-      <label>{label}</label>
+      <label>
+        {label}
+        {required && <span className="req" title="Required"> ·</span>}
+      </label>
       {children}
+      {error ? <p className="err">{error}</p> : hint ? <p className="hint">{hint}</p> : null}
     </div>
   );
 }
@@ -159,10 +166,19 @@ export function Input({ className, ...rest }: InputProps) {
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "warn" | "dgr" | "ghost";
   size?: "sm";
+  /** When set, the button renders disabled with this text as its tooltip. */
+  disabledReason?: string;
 }
 
-export function Button({ variant, size, className, ...rest }: ButtonProps) {
+export function Button({ variant, size, className, disabledReason, disabled, title, ...rest }: ButtonProps) {
   const parts = ["btn", variant, size].filter(Boolean) as string[];
   if (className) parts.push(className);
-  return <button className={parts.join(" ")} {...rest} />;
+  return (
+    <button
+      className={parts.join(" ")}
+      disabled={disabled || !!disabledReason}
+      title={disabledReason || title}
+      {...rest}
+    />
+  );
 }

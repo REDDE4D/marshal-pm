@@ -90,10 +90,18 @@ export function AddAppModal({
     }
   }
 
+  const disabledReason =
+    agent === "" ? "Select an agent" :
+    name.trim() === "" ? "Enter a name" :
+    cmd.trim() === "" ? "Enter a command" :
+    (sourceType === "git" && repo.trim() === "") ? "Enter a repo URL" :
+    busy ? "Submitting…" :
+    undefined;
+
   const footer = (
     <>
       <Button variant="ghost" type="button" onClick={onClose}>cancel</Button>
-      <Button type="submit" form={FORM_ID} disabled={!canSubmit}>
+      <Button type="submit" form={FORM_ID} disabledReason={disabledReason}>
         {busy ? "adding…" : "add app"}
       </Button>
     </>
@@ -102,6 +110,7 @@ export function AddAppModal({
   return (
     <Modal title="Add application" onClose={onClose} footer={footer}>
       <form id={FORM_ID} onSubmit={submit}>
+        {error && <div className="modal-error">{error}</div>}
         <Field label="target agent">
           {connected.length === 0 ? (
             <span className="hint">no agents connected</span>
@@ -131,17 +140,17 @@ export function AddAppModal({
         </Field>
 
         {sourceType === "git" && (
-          <Field label="repo">
+          <Field label="repo" required hint="Full HTTPS or SSH URL of the repository to clone">
             <Input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="https://github.com/user/repo" />
           </Field>
         )}
         {sourceType === "git" && (
-          <Field label="ref">
+          <Field label="ref" hint="Branch, tag, or commit to check out — leave blank for the default branch">
             <Input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="default branch" />
           </Field>
         )}
         {sourceType === "git" && (
-          <Field label="build command">
+          <Field label="build command" hint="Runs once after clone to build the project — leave blank to auto-detect">
             <Input value={build} onChange={(e) => setBuild(e.target.value)} placeholder="auto-detect" />
           </Field>
         )}
@@ -228,7 +237,6 @@ export function AddAppModal({
           </div>
         )}
 
-        {error && <div className="modal-error">{error}</div>}
       </form>
     </Modal>
   );
