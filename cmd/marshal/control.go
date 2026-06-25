@@ -98,8 +98,13 @@ func persistServer(st *store.Store, cfg *config.Config) error {
 func startCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "start <marshal.yaml>",
-		Short: "Start app(s) defined in a marshal.yaml file under the daemon",
-		Args:  cobra.ExactArgs(1),
+		Short: "Start app(s) defined in a marshal.yaml file under the local daemon",
+		Long: "Start app(s) from a marshal.yaml under the local daemon — the classic,\n" +
+			"single-host workflow. These apps appear in `marshal list` but NOT in a\n" +
+			"central-server dashboard: the local daemon and the fleet are separate.\n\n" +
+			"To run apps on an enrolled agent so they show up in the dashboard, use\n" +
+			"`marshal fleet start <agent> <marshal.yaml>` against the server instead.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load(args[0])
 			if err != nil {

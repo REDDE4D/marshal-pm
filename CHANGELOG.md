@@ -18,6 +18,9 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
   so `marshal stop marshal.yaml` works instead of looking for an app literally named `marshal.yaml`.
 
 ### Changed
+- **`marshal start`'s help now spells out that it's local-only** — apps it starts show in `marshal
+  list` but not in a central-server dashboard (the local daemon and the fleet are separate stores).
+  It points to `marshal fleet start <agent> <marshal.yaml>` for running apps on an enrolled agent.
 - **`marshal list` (and every command that prints a process table) now renders a bordered table**
   with the state column colorized on a terminal (green online / red errored or stopped / yellow
   otherwise). Output to a pipe or file stays plain — no borders-breaking color codes.
