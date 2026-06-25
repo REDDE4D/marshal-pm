@@ -272,3 +272,9 @@ select.inp{ font-family:var(--i); }
 /* EmptyState (Task 4): muted placeholder for empty lists */
 .empty-state { padding: 22px; color: var(--dim); font-size: 13px; }
 .empty-state-action { margin-top: 8px; }
+
+/* StatusMessage (Task 5): inline feedback */
+.status-msg { margin-left: 12px; font-size: 12px; }
+.status-msg.success { color: var(--teal); }
+.status-msg.error { color: var(--rose); }
+.status-msg.info { color: var(--dim); }
