@@ -159,10 +159,19 @@ export function Input({ className, ...rest }: InputProps) {
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "warn" | "dgr" | "ghost";
   size?: "sm";
+  /** When set, the button renders disabled with this text as its tooltip. */
+  disabledReason?: string;
 }
 
-export function Button({ variant, size, className, ...rest }: ButtonProps) {
+export function Button({ variant, size, className, disabledReason, disabled, title, ...rest }: ButtonProps) {
   const parts = ["btn", variant, size].filter(Boolean) as string[];
   if (className) parts.push(className);
-  return <button className={parts.join(" ")} {...rest} />;
+  return (
+    <button
+      className={parts.join(" ")}
+      disabled={disabled || !!disabledReason}
+      title={disabledReason || title}
+      {...rest}
+    />
+  );
 }
