@@ -12,6 +12,8 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-25
+
 ### Added
 - **gRPC auth-failure auditing:** the fleet gRPC interceptors now record failed
   admin/agent/enroll token attempts (source class + peer IP + outcome) to the same
@@ -150,7 +152,8 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/REDDE4D/marshal-pm/releases/tag/v0.1.0
