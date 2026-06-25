@@ -8,6 +8,9 @@ import {
   listDir, readFile, fileDownloadURL, writeFile, createFile, deleteFile, renameFile,
   type DirEntry, type FileContent,
 } from "./api";
+import { ConfirmDialog, PromptDialog } from "./components/ConfirmDialog";
+import { Button } from "./components/Controls";
+import { useStatus, StatusMessage } from "./components/StatusMessage";
 
 function langFor(name: string) {
   const ext = name.split(".").pop()?.toLowerCase();
@@ -23,6 +26,12 @@ function langFor(name: string) {
 function joinPath(dir: string, name: string) { return dir ? `${dir}/${name}` : name; }
 function parentPath(p: string) { const i = p.lastIndexOf("/"); return i < 0 ? "" : p.slice(0, i); }
 
+type DialogState =
+  | { kind: "delete"; entry: DirEntry }
+  | { kind: "rename"; entry: DirEntry }
+  | { kind: "newfile" }
+  | null;
+
 export function FileBrowser({ agent, app, credential }: { agent: string; app: string; credential?: string }) {
   const [path, setPath] = useState("");
   const [entries, setEntries] = useState<DirEntry[]>([]);
@@ -31,8 +40,9 @@ export function FileBrowser({ agent, app, credential }: { agent: string; app: st
   const [msg, setMsg] = useState("");              // commit message
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<DialogState>(null);
   const [reload, setReload] = useState(0);
+  const { status, show } = useStatus();
 
   useEffect(() => {
     let stop = false;
@@ -45,7 +55,7 @@ export function FileBrowser({ agent, app, credential }: { agent: string; app: st
 
   async function onEntry(e: DirEntry) {
     if (e.is_dir) { setOpen(null); setPath(joinPath(path, e.name)); return; }
-    setErr(null); setNote(null);
+    setErr(null);
     try {
       const f = await readFile(agent, app, joinPath(path, e.name));
       setOpen(f); setDraft(f.content); setMsg(`Update ${f.path}`);
@@ -56,51 +66,62 @@ export function FileBrowser({ agent, app, credential }: { agent: string; app: st
 
   async function onSave() {
     if (!open) return;
-    setBusy(true); setErr(null); setNote(null);
+    setBusy(true); setErr(null);
     try {
       const res = await writeFile(agent, app, open.path, draft, msg || `Update ${open.path}`, credential);
-      setNote(`✓ Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
+      show("success", `Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
       setOpen({ ...open, content: draft });
       setReload((n) => n + 1);
     } catch (e: any) { setErr(String(e.message || e)); }
     finally { setBusy(false); }
   }
 
-  async function onNewFile() {
-    const name = window.prompt("New file path (relative to current folder):");
-    if (!name) return;
+  function onNewFile() {
+    setDialog({ kind: "newfile" });
+  }
+
+  async function commitNewFile(name: string) {
+    setDialog(null);
     const rel = joinPath(path, name);
-    setBusy(true); setErr(null); setNote(null);
+    setBusy(true); setErr(null);
     try {
       const res = await createFile(agent, app, rel, "", `Create ${rel}`, credential);
-      setNote(`✓ Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
+      show("success", `Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
       setReload((n) => n + 1);
     } catch (e: any) { setErr(String(e.message || e)); }
     finally { setBusy(false); }
   }
 
-  async function onDelete(e: DirEntry) {
-    const rel = joinPath(path, e.name);
-    if (!window.confirm(`Delete ${rel}? This commits and pushes the deletion.`)) return;
-    setBusy(true); setErr(null); setNote(null);
+  function onDelete(e: DirEntry) {
+    setDialog({ kind: "delete", entry: e });
+  }
+
+  async function commitDelete(entry: DirEntry) {
+    setDialog(null);
+    const rel = joinPath(path, entry.name);
+    setBusy(true); setErr(null);
     try {
       const res = await deleteFile(agent, app, rel, `Delete ${rel}`, credential);
-      setNote(`✓ Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
+      show("success", `Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
       if (open?.path === rel) setOpen(null);
       setReload((n) => n + 1);
     } catch (e2: any) { setErr(String(e2.message || e2)); }
     finally { setBusy(false); }
   }
 
-  async function onRename(e: DirEntry) {
-    const to = window.prompt(`Rename ${e.name} to:`, e.name);
-    if (!to || to === e.name) return;
-    const from = joinPath(path, e.name);
+  function onRename(e: DirEntry) {
+    setDialog({ kind: "rename", entry: e });
+  }
+
+  async function commitRename(entry: DirEntry, to: string) {
+    setDialog(null);
+    if (!to || to === entry.name) return;
+    const from = joinPath(path, entry.name);
     const dest = joinPath(path, to);
-    setBusy(true); setErr(null); setNote(null);
+    setBusy(true); setErr(null);
     try {
       const res = await renameFile(agent, app, from, dest, `Rename ${from} → ${dest}`, credential);
-      setNote(`✓ Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
+      show("success", `Pushed ${res.sha.slice(0, 7)} to ${res.branch}`);
       if (open?.path === from) setOpen(null);
       setReload((n) => n + 1);
     } catch (e2: any) { setErr(String(e2.message || e2)); }
@@ -123,7 +144,7 @@ export function FileBrowser({ agent, app, credential }: { agent: string; app: st
         <button className="btn ghost sm" disabled={busy} onClick={onNewFile} style={{ marginLeft: "auto" }}>+ new file</button>
       </div>
       {err && <div className="fb-err">{err}</div>}
-      {note && <div className="pushnote">{note}</div>}
+      <StatusMessage status={status} />
       <div className="fbbody">
         <div className="fblist">
           {path !== "" && (
@@ -174,13 +195,46 @@ export function FileBrowser({ agent, app, credential }: { agent: string; app: st
               {editable && (
                 <div className="saverow">
                   <input className="inp" style={{ flex: 1 }} value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Commit message" />
-                  <button className="btn" disabled={busy || draft === open.content} onClick={onSave}>save &amp; push</button>
+                  <Button
+                    disabledReason={busy ? "Saving…" : draft === open.content ? "No changes to save" : undefined}
+                    onClick={onSave}
+                  >save &amp; push</Button>
                 </div>
               )}
             </>
           )}
         </div>
       </div>
+
+      {dialog?.kind === "delete" && (
+        <ConfirmDialog
+          title="Delete file"
+          body={`Delete ${joinPath(path, dialog.entry.name)}? This commits and pushes the deletion.`}
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => commitDelete(dialog.entry)}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+      {dialog?.kind === "rename" && (
+        <PromptDialog
+          title="Rename file"
+          label="Rename to"
+          initial={dialog.entry.name}
+          confirmLabel="Rename"
+          onConfirm={(to) => commitRename(dialog.entry, to)}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+      {dialog?.kind === "newfile" && (
+        <PromptDialog
+          title="New file"
+          label="New file path (relative to current folder)"
+          confirmLabel="Create"
+          onConfirm={(name) => commitNewFile(name)}
+          onCancel={() => setDialog(null)}
+        />
+      )}
     </div>
   );
 }
