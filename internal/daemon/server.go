@@ -220,6 +220,7 @@ type runOptions struct {
 	sampleInterval time.Duration
 	retention      time.Duration
 	logRetention   logs.Policy
+	fleetPoll      time.Duration
 }
 
 // Option configures Run.
@@ -238,6 +239,12 @@ func WithRetention(d time.Duration) Option {
 // WithLogRetention overrides the default log retention/compression policy.
 func WithLogRetention(p logs.Policy) Option {
 	return func(o *runOptions) { o.logRetention = p }
+}
+
+// WithFleetPollInterval overrides how often the fleet supervisor re-reads the
+// store's server config (default 2s; used by tests).
+func WithFleetPollInterval(d time.Duration) Option {
+	return func(o *runOptions) { o.fleetPoll = d }
 }
 
 // metricsSnapshot adapts the manager's instance list to the sampler's view.
@@ -259,7 +266,7 @@ func metricsSnapshot(m *manager.Manager) func() []metrics.Instance {
 // Run starts the daemon: resolves the socket, auto-resurrects, serves until ctx
 // is canceled or Kill is called, then gracefully stops everything.
 func Run(ctx context.Context, st *store.Store, opts ...Option) error {
-	cfg := runOptions{sampleInterval: 5 * time.Second, retention: 168 * time.Hour, logRetention: logs.DefaultPolicy}
+	cfg := runOptions{sampleInterval: 5 * time.Second, retention: 168 * time.Hour, logRetention: logs.DefaultPolicy, fleetPoll: 2 * time.Second}
 	for _, o := range opts {
 		o(&cfg)
 	}
@@ -324,33 +331,23 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 
 	serveCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	if sc, err := st.LoadServer(); err == nil && sc != nil {
-		name := sc.Name
-		if name == "" {
-			if h, hErr := os.Hostname(); hErr == nil {
-				name = h
-			}
-		}
-		if name == "" {
-			name = "unknown"
-		}
-		fleetTok, _ := st.LoadFleetToken()
-		if fleetTok == "" && sc.Token == "" {
-			log.Printf("fleet: disabled — no token and not enrolled")
-		} else if tlsCfg, tErr := fleetauth.ClientTLS(sc.Fingerprint, sc.CA); tErr != nil {
+	run := func(cctx context.Context, tgt fleetTarget, fleetTok string) {
+		tlsCfg, tErr := fleetauth.ClientTLS(tgt.fingerprint, tgt.ca)
+		if tErr != nil {
 			log.Printf("fleet: disabled, bad TLS config: %v", tErr)
-		} else {
-			fc := fleet.New(sc.Address, name, version.String(),
-				srv.fleetSnapshot(),
-				fleet.WithTLS(tlsCfg),
-				fleet.WithAuth(fleetTok, sc.Token, st.SaveFleetToken),
-				fleet.WithMetrics(metricsSince(mdb)),
-				fleet.WithLogs(logsSince(reg)),
-				fleet.WithHost(func() *pb.HostMetrics { return hostSampler.Sample() }),
-				fleet.WithCommands(srv.handleFleetCommand))
-			go fc.Run(serveCtx)
+			return
 		}
+		fc := fleet.New(tgt.address, tgt.name, version.String(),
+			srv.fleetSnapshot(),
+			fleet.WithTLS(tlsCfg),
+			fleet.WithAuth(fleetTok, tgt.enrollToken, st.SaveFleetToken),
+			fleet.WithMetrics(metricsSince(mdb)),
+			fleet.WithLogs(logsSince(reg)),
+			fleet.WithHost(func() *pb.HostMetrics { return hostSampler.Sample() }),
+			fleet.WithCommands(srv.handleFleetCommand))
+		fc.Run(cctx)
 	}
+	go superviseFleet(serveCtx, st, cfg.fleetPoll, run)
 	go sampler.Run(serveCtx, metricsSnapshot(mgr))
 	go func() {
 		t := time.NewTicker(10 * time.Minute)

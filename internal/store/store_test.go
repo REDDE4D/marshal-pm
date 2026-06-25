@@ -149,3 +149,26 @@ func TestFleetTokenRoundTrip(t *testing.T) {
 		t.Fatalf("mode = %o, want 600", info.Mode().Perm())
 	}
 }
+
+func TestClearServerRemovesConfigAndToken(t *testing.T) {
+	st := NewAt(t.TempDir())
+	if err := st.SaveServer(&config.ServerConfig{Address: "srv:9000", Token: "t"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SaveFleetToken("agent-tok"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ClearServer(); err != nil {
+		t.Fatalf("ClearServer: %v", err)
+	}
+	if sc, _ := st.LoadServer(); sc != nil {
+		t.Errorf("server config still present: %+v", sc)
+	}
+	if tok, _ := st.LoadFleetToken(); tok != "" {
+		t.Errorf("fleet token still present: %q", tok)
+	}
+	// Idempotent: clearing again on an empty store is fine.
+	if err := st.ClearServer(); err != nil {
+		t.Errorf("second ClearServer: %v", err)
+	}
+}

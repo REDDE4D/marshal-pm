@@ -6,11 +6,15 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
-	"text/tabwriter"
 	"time"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/REDDE4D/marshal-pm/internal/client"
 	"github.com/REDDE4D/marshal-pm/internal/config"
@@ -94,8 +98,13 @@ func persistServer(st *store.Store, cfg *config.Config) error {
 func startCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "start <marshal.yaml>",
-		Short: "Start app(s) defined in a marshal.yaml file under the daemon",
-		Args:  cobra.ExactArgs(1),
+		Short: "Start app(s) defined in a marshal.yaml file under the local daemon",
+		Long: "Start app(s) from a marshal.yaml under the local daemon — the classic,\n" +
+			"single-host workflow. These apps appear in `marshal list` but NOT in a\n" +
+			"central-server dashboard: the local daemon and the fleet are separate.\n\n" +
+			"To run apps on an enrolled agent so they show up in the dashboard, use\n" +
+			"`marshal fleet start <agent> <marshal.yaml>` against the server instead.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load(args[0])
 			if err != nil {
@@ -124,23 +133,82 @@ func startCmd() *cobra.Command {
 	}
 }
 
-// selectorCmd builds stop/restart/delete, which share the same shape.
+// selectorCmd builds stop/restart/delete, which share the same shape. The
+// argument is a selector (name/id/all) or — like `marshal start` — a path to a
+// marshal.yaml, in which case every app it defines is targeted.
 func selectorCmd(use, short string, call func(context.Context, pb.DaemonClient, *pb.Selector) (*pb.ProcList, error)) *cobra.Command {
 	return &cobra.Command{
 		Use:   use,
 		Short: short,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			targets, fromFile, err := targetsFromArg(args[0])
+			if err != nil {
+				return err
+			}
 			return withClient(func(ctx context.Context, c pb.DaemonClient) error {
-				list, err := call(ctx, c, &pb.Selector{Target: args[0]})
-				if err != nil {
-					return err
+				agg := &pb.ProcList{}
+				for _, t := range targets {
+					list, err := call(ctx, c, &pb.Selector{Target: t})
+					if err != nil {
+						// When expanding a config file, an app that isn't running
+						// shouldn't abort the others — warn and keep going. A single
+						// explicit selector still fails hard.
+						if fromFile {
+							fmt.Fprintf(cmd.ErrOrStderr(), "marshal: %s: %v\n", t, err)
+							continue
+						}
+						return err
+					}
+					agg.Procs = append(agg.Procs, list.GetProcs()...)
 				}
-				printProcs(cmd, list)
+				printProcs(cmd, agg)
 				return nil
 			})
 		},
 	}
+}
+
+// targetsFromArg resolves a stop/restart/delete argument. A path to an existing
+// .yaml/.yml file expands to the names of the apps it defines (fromFile=true);
+// anything else is a single literal selector (name/id/all).
+func targetsFromArg(arg string) (targets []string, fromFile bool, err error) {
+	if !isConfigFile(arg) {
+		return []string{arg}, false, nil
+	}
+	cfg, err := config.Load(arg)
+	if err != nil {
+		return nil, true, err
+	}
+	if len(cfg.Apps) == 0 {
+		return nil, true, fmt.Errorf("no apps found in %s", arg)
+	}
+	names := make([]string, 0, len(cfg.Apps))
+	for _, a := range cfg.Apps {
+		names = append(names, a.Name)
+	}
+	return names, true, nil
+}
+
+// isConfigFile reports whether arg points at an existing YAML file on disk.
+func isConfigFile(arg string) bool {
+	switch strings.ToLower(filepath.Ext(arg)) {
+	case ".yaml", ".yml":
+	default:
+		return false
+	}
+	info, err := os.Stat(arg)
+	return err == nil && !info.IsDir()
+}
+
+// enrollmentHeader returns a one-line status string indicating whether the host
+// is configured to enroll with a central server. A nil or empty-address config
+// means not enrolled.
+func enrollmentHeader(sc *config.ServerConfig) string {
+	if sc != nil && sc.Address != "" {
+		return "enrolled → " + sc.Address
+	}
+	return "not enrolled"
 }
 
 func listCmd() *cobra.Command {
@@ -150,6 +218,11 @@ func listCmd() *cobra.Command {
 		Short:   "Show all managed processes",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			// Best-effort enrollment header: skip silently if the store can't be opened.
+			if st, err := store.New(); err == nil {
+				sc, _ := st.LoadServer()
+				fmt.Fprintln(cmd.OutOrStdout(), enrollmentHeader(sc))
+			}
 			return withClient(func(ctx context.Context, c pb.DaemonClient) error {
 				list, err := c.List(ctx, &pb.Empty{})
 				if err != nil {
@@ -265,10 +338,24 @@ func humanizeBytes(b int64) string {
 	return fmt.Sprintf("%.1f%s", float64(b)/float64(div), suffixes[exp])
 }
 
-// printProcs renders a ProcList as an aligned table.
+// printProcs renders a ProcList as a bordered table, colorizing state when the
+// destination is a terminal.
 func printProcs(cmd *cobra.Command, list *pb.ProcList) {
-	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tNAME\tINST\tSTATE\tPID\tCPU\tMEM\tUPTIME\tRESTARTS")
+	out := cmd.OutOrStdout()
+	renderProcTable(out, list, isTerminal(out))
+}
+
+var procTableHeaders = []string{"ID", "NAME", "INST", "STATE", "PID", "CPU", "MEM", "UPTIME", "RESTARTS"}
+
+const procStateColumn = 3 // index of STATE in procTableHeaders
+
+// renderProcTable draws a box-drawing table for a ProcList. When color is true
+// the STATE cell is ANSI-colored (green online / red errored or stopped /
+// yellow otherwise); padding is computed from the uncolored text so columns
+// stay aligned.
+func renderProcTable(w io.Writer, list *pb.ProcList, color bool) {
+	rows := make([][]string, 0, len(list.GetProcs()))
+	states := make([]string, 0, len(list.GetProcs()))
 	for _, p := range list.GetProcs() {
 		uptime, cpu, mem := "-", "-", "-"
 		if p.GetUptimeMs() > 0 {
@@ -278,10 +365,89 @@ func printProcs(cmd *cobra.Command, list *pb.ProcList) {
 			cpu = fmt.Sprintf("%.1f%%", p.GetCpu())
 			mem = humanizeBytes(p.GetMem())
 		}
-		fmt.Fprintf(w, "%d\t%s\t%d\t%s\t%d\t%s\t%s\t%s\t%d\n",
-			p.GetId(), p.GetName(), p.GetInstanceId(), p.GetState(), p.GetPid(), cpu, mem, uptime, p.GetRestarts())
+		rows = append(rows, []string{
+			strconv.Itoa(int(p.GetId())), p.GetName(), strconv.Itoa(int(p.GetInstanceId())),
+			p.GetState(), strconv.Itoa(int(p.GetPid())), cpu, mem, uptime, strconv.Itoa(int(p.GetRestarts())),
+		})
+		states = append(states, p.GetState())
 	}
-	_ = w.Flush()
+
+	widths := make([]int, len(procTableHeaders))
+	for i, h := range procTableHeaders {
+		widths[i] = utf8.RuneCountInString(h)
+	}
+	for _, r := range rows {
+		for i, c := range r {
+			if n := utf8.RuneCountInString(c); n > widths[i] {
+				widths[i] = n
+			}
+		}
+	}
+
+	fmt.Fprint(w, tableBorder("┌", "┬", "┐", widths))
+	fmt.Fprint(w, tableRow(procTableHeaders, widths, -1, ""))
+	fmt.Fprint(w, tableBorder("├", "┼", "┤", widths))
+	for i, r := range rows {
+		colorCode := ""
+		if color {
+			colorCode = stateColor(states[i])
+		}
+		fmt.Fprint(w, tableRow(r, widths, procStateColumn, colorCode))
+	}
+	fmt.Fprint(w, tableBorder("└", "┴", "┘", widths))
+}
+
+// tableBorder draws a horizontal rule with the given corner/junction runes,
+// each column padded by one space on each side (hence width+2).
+func tableBorder(left, mid, right string, widths []int) string {
+	var b strings.Builder
+	b.WriteString(left)
+	for i, w := range widths {
+		b.WriteString(strings.Repeat("─", w+2))
+		if i < len(widths)-1 {
+			b.WriteString(mid)
+		}
+	}
+	b.WriteString(right + "\n")
+	return b.String()
+}
+
+// tableRow renders one left-aligned row. If colorCode is non-empty, the cell at
+// colorIdx is wrapped in it (and reset), with padding kept outside the color so
+// widths line up.
+func tableRow(cells []string, widths []int, colorIdx int, colorCode string) string {
+	var b strings.Builder
+	b.WriteString("│")
+	for i, c := range cells {
+		pad := strings.Repeat(" ", widths[i]-utf8.RuneCountInString(c))
+		b.WriteString(" ")
+		if i == colorIdx && colorCode != "" {
+			b.WriteString(colorCode + c + "\x1b[0m" + pad)
+		} else {
+			b.WriteString(c + pad)
+		}
+		b.WriteString(" │")
+	}
+	b.WriteString("\n")
+	return b.String()
+}
+
+// stateColor maps a process state to an ANSI color code.
+func stateColor(state string) string {
+	switch state {
+	case "online":
+		return "\x1b[32m" // green
+	case "errored", "stopped":
+		return "\x1b[31m" // red
+	default:
+		return "\x1b[33m" // yellow (launching, restarting, …)
+	}
+}
+
+// isTerminal reports whether w is a terminal, so color is safe to emit.
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	return ok && term.IsTerminal(int(f.Fd()))
 }
 
 func logsCmd() *cobra.Command {
