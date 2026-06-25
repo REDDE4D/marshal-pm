@@ -16,7 +16,7 @@ func TestPrepareSelfEnrollUsesDefaultStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sc == nil || sc.Address != "localhost:9000" || sc.Token != "enr" || sc.Fingerprint != "fp" {
+	if sc == nil || sc.Address != "localhost:9000" || sc.Token != "enr" || sc.Fingerprint != "fp" || sc.Name != "h1" {
 		t.Fatalf("server block = %+v", sc)
 	}
 }

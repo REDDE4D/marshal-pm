@@ -140,13 +140,15 @@ func runSelfEnroll(cmd *cobra.Command, dataDir, listen, httpListen, tlsCert, tls
 	fmt.Fprintf(out, "marshal: apps started — watching server (Ctrl-C to stop server only)\n")
 
 	<-ctx.Done()
-	// Surface the first non-context error from the server goroutine.
+	// Block briefly for the server goroutine to finish graceful shutdown so a
+	// real Serve-time error (e.g. TLS problem after Listen succeeded) is not
+	// silently dropped by an immediate non-blocking default branch.
 	select {
 	case err := <-errCh:
 		if err != nil && ctx.Err() == nil {
 			return err
 		}
-	default:
+	case <-time.After(2 * time.Second):
 	}
 	fmt.Fprintln(out, "marshal: server stopped (daemon and apps are still running)")
 	return nil
