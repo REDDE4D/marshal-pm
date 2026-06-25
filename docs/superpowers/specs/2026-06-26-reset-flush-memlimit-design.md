@@ -6,15 +6,22 @@
 
 ## Summary
 
-Three additions, all framed for PM2 parity so migrating users keep their muscle memory:
+Four additions, all framed for PM2 parity so migrating users keep their muscle memory:
 
 1. **`marshal reset <name|id|all>`** — zero an app's restart counter (mirrors `pm2 reset`).
 2. **`marshal flush [name|id|all]`** — clear an app's captured logs; no argument = all (mirrors `pm2 flush`).
 3. **`max_memory_restart: 300M`** — per-app config: auto-restart an app when its RSS exceeds a
    threshold for a sustained period (mirrors PM2's `max_memory_restart`).
+4. **Color-coded merged log tail** — colorize the per-app `name#idx` prefix in `logs … -f` so an
+   interleaved multi-app stream is readable (foreman/docker-compose style).
 
-The first two are small, self-contained operational utilities. The third is near-free because the
-daemon already samples per-instance RSS every tick; it adds a debounced comparison + restart trigger.
+The first two are small, self-contained operational utilities; the fourth is a ~15-line CLI polish.
+The third is near-free because the daemon already samples per-instance RSS every tick; it adds a
+debounced comparison + restart trigger.
+
+A larger "live observability" set — a full-screen TUI monitor (`marshal monit`) and true live fleet
+log streaming — was deliberately split into its own follow-up spec (target v0.13.0) rather than
+bloating this release. See *Out of scope* below.
 
 ## Motivation
 
@@ -207,6 +214,31 @@ Most apps are single-instance, so this is acceptable for v0.12.0. The handoff/CH
 
 ---
 
+## Feature 4 — Color-coded merged log tail
+
+### Behavior
+
+When following logs (`marshal logs <sel> -f`), each line is already prefixed `name#idx | line`
+(`cmd/marshal/control.go:517`). This feature colorizes the `name#idx` prefix so a merged stream
+of multiple apps is easy to scan, like `foreman`/`docker compose`. Color is applied **only when the
+destination is a terminal** (reusing the existing `isTerminal` check that `printProcs` uses at
+`control.go:345`); piped/redirected output stays plain so logs remain greppable. The line text
+itself is not colored — only the prefix. stderr lines keep going to stderr.
+
+### New code
+
+- **CLI** (`cmd/marshal/control.go`): add a small `labelColor(label string) string` helper that
+  hashes the label to one of a fixed palette of ANSI colors (stable per app across the session), and
+  update `printLogLine` (`control.go:511`) to wrap the `name#idx` prefix in that color when
+  `isTerminal(w)` is true. Honor `NO_COLOR` consistency with the rest of the CLI (if a shared
+  color gate exists, reuse it; otherwise `isTerminal` alone is sufficient and matches `printProcs`).
+
+No proto, daemon, or fleet changes — this is purely client-side rendering of the existing stream.
+(The same prefix colorization can later be applied to `fleet logs` rendering at `fleet.go:150`, but
+that path is history-fetch, not live; it is optional polish, not required here.)
+
+---
+
 ## Cross-cutting plumbing
 
 ### Wire propagation for `max_memory_restart`
@@ -247,6 +279,8 @@ field in the create-app UI and `apps.go` spec builder); no new control action.
   round-trip through dump.json.
 - `daemon`: e2e `Reset` and `Flush` RPCs over the test harness (counter → 0; log files emptied).
 - `convert`: `appSpecToConfig` carries `max_memory_restart`.
+- `cmd/marshal`: `labelColor` is stable per label and within the palette; `printLogLine` emits the
+  colored prefix only when the writer is a terminal (plain when not).
 
 ### Docs & conventions
 
@@ -259,5 +293,11 @@ field in the create-app UI and `apps.go` spec builder); no new control action.
 
 ## Out of scope (backlog)
 
-Captured for after this lands: HTTP health checks, `cron_restart`, `--watch`, `marshal prune`,
-per-instance memory restart.
+**Next spec — "live observability" (target v0.13.0):** a full-screen TUI monitor (`marshal monit`,
+`pm2 monit` equivalent — process list + live CPU/mem alongside a streaming log pane, keyboard
+navigable) and **true live fleet log streaming** (today `fleet logs` fetches history; this would add
+a streaming server→client path). Both deserve their own design — notably the TUI library choice
+(bubbletea/tview), layout, keybindings, and refresh loop — so they are deliberately not in this spec.
+
+**Further backlog:** HTTP health checks, `cron_restart`, `--watch`, `marshal prune`, per-instance
+memory restart, and applying prefix colorization to the `fleet logs` render path.
