@@ -6,20 +6,36 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/REDDE4D/marshal-pm/internal/client"
 	"github.com/REDDE4D/marshal-pm/internal/config"
-	"github.com/REDDE4D/marshal-pm/internal/daemon"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 	"github.com/REDDE4D/marshal-pm/internal/server"
 	"github.com/REDDE4D/marshal-pm/internal/store"
 )
 
-// runSelfEnroll boots the fleet server + dashboard and an in-process agent that
-// enrolls against it and supervises the apps in yamlPath — the single-host
-// "just give me a dashboard" path, all in one process.
+// prepareSelfEnroll writes the localhost server block into the DEFAULT store so
+// the local daemon enrolls against the co-located server.
+// It does NOT write the apps — those are started via client.Connect + c.Start
+// to avoid double-starting (client.Connect auto-spawns the daemon which would
+// resurrect apps from the store, then c.Start would start them a second time).
+func prepareSelfEnroll(st *store.Store, listenPort, enrollToken, fingerprint, hostname string) error {
+	return st.SaveServer(&config.ServerConfig{
+		Address:     "localhost:" + listenPort,
+		Name:        hostname,
+		Token:       enrollToken,
+		Fingerprint: fingerprint,
+	})
+}
+
+// runSelfEnroll boots the fleet server + dashboard in-process, then enrolls the
+// ONE default-store daemon against it and starts the yaml's apps on that daemon.
+// Ctrl-C stops the server; the daemon and its apps keep running — stop them with
+// `marshal stop <name>` / stop the daemon with `marshal kill`.
 func runSelfEnroll(cmd *cobra.Command, dataDir, listen, httpListen, tlsCert, tlsKey, yamlPath string) error {
 	if dataDir == "" {
 		dataDir = defaultServerDataDir()
@@ -60,8 +76,6 @@ func runSelfEnroll(cmd *cobra.Command, dataDir, listen, httpListen, tlsCert, tls
 		return fmt.Errorf("mint enroll token: %w", err)
 	}
 
-	// Prepare the in-process agent's store: the localhost server block + the apps
-	// (daemon.Run auto-resurrects from the store).
 	_, port, err := net.SplitHostPort(listen)
 	if err != nil {
 		return fmt.Errorf("parse --listen %q: %w", listen, err)
@@ -70,17 +84,15 @@ func runSelfEnroll(cmd *cobra.Command, dataDir, listen, httpListen, tlsCert, tls
 	if name == "" {
 		name = "local"
 	}
-	agentDir := filepath.Join(dataDir, "agent")
-	st := store.NewAt(agentDir)
-	if err := st.EnsureDir(); err != nil {
+
+	// Write the localhost server block into the DEFAULT store (not a separate
+	// agent sub-dir). client.Connect will auto-spawn the daemon which will pick
+	// up this server block and enroll against the co-located server.
+	st, err := store.New()
+	if err != nil {
 		return err
 	}
-	if err := st.SaveServer(&config.ServerConfig{
-		Address: "localhost:" + port, Name: name, Token: enroll, Fingerprint: fp,
-	}); err != nil {
-		return err
-	}
-	if err := st.Save(cfg.Apps); err != nil {
+	if err := prepareSelfEnroll(st, port, enroll, fp, name); err != nil {
 		return err
 	}
 
@@ -93,25 +105,49 @@ func runSelfEnroll(cmd *cobra.Command, dataDir, listen, httpListen, tlsCert, tls
 
 	fmt.Fprintf(out, "marshal: fleet server on %s (data %s)\n", lis.Addr(), dataDir)
 	fmt.Fprintf(out, "marshal: dashboard on https://localhost%s — log in as 'admin'\n", httpListen)
-	fmt.Fprintf(out, "marshal: enrolling local agent %q with %d app(s); Ctrl-C to stop\n", name, len(cfg.Apps))
+	fmt.Fprintf(out, "marshal: starting %d app(s) on local daemon %q\n", len(cfg.Apps), name)
+	fmt.Fprintf(out, "marshal: Ctrl-C stops the server; apps keep running (stop with `marshal stop <name>`, daemon with `marshal kill`)\n")
 
-	// Run the server and the agent concurrently; the agent's fleet client retries
-	// until the server is listening, so startup order doesn't matter.
-	errCh := make(chan error, 2)
+	// Start the server in the background; the daemon is auto-spawned by
+	// client.Connect below.
+	errCh := make(chan error, 1)
 	go func() { errCh <- server.ServeDir(ctx, lis, dataDir, tlsCert, tlsKey, httpListen) }()
-	go func() { errCh <- daemon.Run(ctx, st) }()
+
+	// Start apps on the local daemon via the normal client path. client.Connect
+	// auto-spawns the daemon if it isn't running yet. The daemon will pick up the
+	// server block we wrote above and enroll against the in-process server.
+	c, conn, err := client.Connect(st)
+	if err != nil {
+		return fmt.Errorf("connect to local daemon: %w", err)
+	}
+	defer conn.Close()
+
+	startCtx, startCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer startCancel()
+
+	specs := make([]*pb.AppSpec, 0, len(cfg.Apps))
+	for _, a := range cfg.Apps {
+		specs = append(specs, appToSpec(a))
+	}
+	if _, err := c.Start(startCtx, &pb.StartRequest{Apps: specs}); err != nil {
+		return fmt.Errorf("start apps: %w", err)
+	}
+	// Persist apps so the daemon can resurrect them after a restart.
+	if _, err := c.Save(startCtx, &pb.Empty{}); err != nil {
+		return fmt.Errorf("save apps: %w", err)
+	}
+
+	fmt.Fprintf(out, "marshal: apps started — watching server (Ctrl-C to stop server only)\n")
 
 	<-ctx.Done()
-	// Surface the first non-context error from either side.
-	for i := 0; i < 2; i++ {
-		select {
-		case err := <-errCh:
-			if err != nil && ctx.Err() == nil {
-				return err
-			}
-		default:
+	// Surface the first non-context error from the server goroutine.
+	select {
+	case err := <-errCh:
+		if err != nil && ctx.Err() == nil {
+			return err
 		}
+	default:
 	}
-	fmt.Fprintln(out, "marshal: stopped")
+	fmt.Fprintln(out, "marshal: server stopped (daemon and apps are still running)")
 	return nil
 }

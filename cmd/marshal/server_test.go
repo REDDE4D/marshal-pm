@@ -3,7 +3,23 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/REDDE4D/marshal-pm/internal/store"
 )
+
+func TestPrepareSelfEnrollUsesDefaultStore(t *testing.T) {
+	st := store.NewAt(t.TempDir())
+	if err := prepareSelfEnroll(st, "9000", "enr", "fp", "h1"); err != nil {
+		t.Fatal(err)
+	}
+	sc, err := st.LoadServer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sc == nil || sc.Address != "localhost:9000" || sc.Token != "enr" || sc.Fingerprint != "fp" {
+		t.Fatalf("server block = %+v", sc)
+	}
+}
 
 func TestServerCmdInvalidListen(t *testing.T) {
 	cmd := serverCmd()
