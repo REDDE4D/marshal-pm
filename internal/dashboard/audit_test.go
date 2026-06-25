@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -22,7 +23,7 @@ func postLogin(t *testing.T, c *http.Client, base, jsonBody string) {
 
 func TestLoginRecordsSuccessAndInvalid(t *testing.T) {
 	auditPath := filepath.Join(t.TempDir(), "login-audit.log")
-	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", auditPath, nil)
+	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", audit.New(auditPath, audit.DefaultMaxBytes), nil)
 	srv := httptest.NewServer(h.mux)
 	defer srv.Close()
 	c := srv.Client()
@@ -50,7 +51,7 @@ func TestLoginRecordsSuccessAndInvalid(t *testing.T) {
 
 func TestLoginRecordsRateLimited(t *testing.T) {
 	auditPath := filepath.Join(t.TempDir(), "login-audit.log")
-	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", auditPath, nil)
+	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", audit.New(auditPath, audit.DefaultMaxBytes), nil)
 	srv := httptest.NewServer(h.mux)
 	defer srv.Close()
 	c := srv.Client()
@@ -69,6 +70,36 @@ func TestLoginRecordsRateLimited(t *testing.T) {
 	last := evs[len(evs)-1]
 	if last.Outcome != audit.OutcomeRateLimited {
 		t.Fatalf("last outcome = %q; want rate_limited", last.Outcome)
+	}
+}
+
+func TestLoginPerIPLockoutResistsUsernameRotation(t *testing.T) {
+	// An attacker who rotates the username on every attempt must not be able to
+	// dodge the lockout: the limiter also caps failures per source IP.
+	auditPath := filepath.Join(t.TempDir(), "login-audit.log")
+	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, nil, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", audit.New(auditPath, audit.DefaultMaxBytes), nil)
+	srv := httptest.NewServer(h.mux)
+	defer srv.Close()
+	c := srv.Client()
+
+	// 5 failures, each with a DIFFERENT username (fresh per-user bucket every time).
+	for i := 0; i < 5; i++ {
+		body := fmt.Sprintf(`{"User":"spray%d","Pass":"nope"}`, i)
+		resp, err := c.Post(srv.URL+"/api/login", "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+	// The 6th attempt, even with yet another fresh username, must be rate-limited
+	// because the per-IP cap has tripped.
+	resp, err := c.Post(srv.URL+"/api/login", "application/json", strings.NewReader(`{"User":"spray-final","Pass":"nope"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("status = %d; want 429 (per-IP lockout should resist username rotation)", resp.StatusCode)
 	}
 }
 

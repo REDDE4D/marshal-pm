@@ -51,14 +51,12 @@ type handler struct {
 
 // newHandler builds a *handler (with its mux) for the given session lifetime.
 // sessionsPath persists sessions to disk; "" keeps them in-memory.
-// auditPath enables the login audit log; "" disables it.
+// auditLog enables the login audit log; nil disables it. It is shared with the
+// server's gRPC interceptors so login and fleet auth events land in one file.
 // creds may be nil, which disables credential endpoints (they return 503).
-func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration, sessionsPath, auditPath string, creds Credentials) *handler {
+func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration, sessionsPath string, auditLog *audit.Log, creds Credentials) *handler {
 	files := staticFS()
-	var al *audit.Log
-	if auditPath != "" {
-		al = audit.New(auditPath, audit.DefaultMaxBytes)
-	}
+	al := auditLog
 	h := &handler{
 		lister:      lister,
 		metricsHist: metrics,
@@ -126,7 +124,7 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 // The returned http.Handler is safe to use with httptest servers in unit tests.
 // Credentials are disabled (nil) — use newHandler directly if you need them.
 func NewHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration) http.Handler {
-	return newHandler(lister, metrics, logs, controller, auth, ttl, "", "", nil).mux
+	return newHandler(lister, metrics, logs, controller, auth, ttl, "", nil, nil).mux
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -154,8 +152,13 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := clientIP(r)
+	// Two limiter keys: a per-(user,IP) bucket and a per-IP bucket. The per-IP
+	// bucket caps total failures from one source so an attacker cannot dodge the
+	// lockout by rotating the username field (each username would otherwise mint a
+	// fresh per-user bucket).
 	key := body.User + "|" + ip
-	if locked, wait := h.limiter.retryAfter(key); locked {
+	ipKey := "ip|" + ip
+	if locked, wait := lockedAny(h.limiter, key, ipKey); locked {
 		h.audit.Record(audit.Event{Time: time.Now().UTC(), User: body.User, IP: ip, Outcome: audit.OutcomeRateLimited})
 		secs := int(wait.Seconds())
 		if secs < 1 {
@@ -167,10 +170,14 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 	}
 	if !h.auth.VerifyDashboardUser(body.User, body.Pass) {
 		h.limiter.fail(key)
+		h.limiter.fail(ipKey)
 		h.audit.Record(audit.Event{Time: time.Now().UTC(), User: body.User, IP: ip, Outcome: audit.OutcomeInvalid})
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
+	// Reset only the per-user bucket on success. The per-IP bucket is intentionally
+	// NOT cleared, so possessing one valid credential can't wipe an in-progress
+	// brute-force counter for the whole IP.
 	h.limiter.reset(key)
 	stamp, _ := h.auth.DashboardCredentialStamp(body.User)
 	tok, err := h.sessions.create(body.User, stamp)

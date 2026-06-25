@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"marshal/internal/audit"
 	"marshal/internal/fleetauth"
 )
 
@@ -46,7 +47,12 @@ type AuthStore struct {
 	mu    sync.Mutex
 	data  authData
 	mtime time.Time
+	audit *audit.Log // optional; records gRPC auth failures. Set once at startup.
 }
+
+// SetAuditLog attaches an audit log so the gRPC interceptors record auth
+// failures. Call once during startup, before serving. A nil log disables it.
+func (a *AuthStore) SetAuditLog(l *audit.Log) { a.audit = l }
 
 // InitSecrets carries the plaintext tokens generated on first init.
 // It is non-nil only when auth.json is created for the first time.
@@ -222,14 +228,25 @@ func (a *AuthStore) enrollAgent(name string) (string, error) {
 }
 
 func (a *AuthStore) authAgent(token string) (string, bool) {
+	if token == "" {
+		return "", false
+	}
+	// Hash once, then compare against every agent with a constant-time compare
+	// and NO early return. Short-circuiting on the first match leaked, via the
+	// number of comparisons, information about set membership/position (the map
+	// is iterated in randomized order). Iterating the full set with a constant
+	// amount of work per agent removes that timing oracle.
+	want := []byte(fleetauth.HashToken(token))
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	matched := ""
+	found := false
 	for name, e := range a.data.Agents {
-		if fleetauth.VerifyToken(token, e.TokenHash) {
-			return name, true
+		if subtle.ConstantTimeCompare([]byte(e.TokenHash), want) == 1 {
+			matched, found = name, true
 		}
 	}
-	return "", false
+	return matched, found
 }
 
 func (a *AuthStore) removeAgent(name string) bool {

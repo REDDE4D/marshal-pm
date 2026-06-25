@@ -74,7 +74,8 @@ func (s *Store) Save(apps []config.App) error {
 	}
 	tmp := s.dumpPath() + ".tmp"
 	defer os.Remove(tmp)
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	// 0o600: dump.json serializes app Env, which commonly holds secrets.
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return fmt.Errorf("write dump: %w", err)
 	}
 	if err := os.Rename(tmp, s.dumpPath()); err != nil {

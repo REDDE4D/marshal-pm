@@ -23,7 +23,7 @@ func (f *fakeMinter) FleetAddress() string               { return f.addr }
 
 func newConnectHandler(t *testing.T, m EnrollMinter) *handler {
 	t.Helper()
-	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, &fakeController{}, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", "", nil)
+	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, &fakeController{}, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", nil, nil)
 	h.enroll = m
 	return h
 }
@@ -76,7 +76,7 @@ func TestConnectTokenReturnsMintedFields(t *testing.T) {
 }
 
 func TestConnectTokenUnavailableWhenNilMinter(t *testing.T) {
-	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, &fakeController{}, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", "", nil)
+	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, &fakeController{}, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", nil, nil)
 	// h.enroll left nil
 	srv := httptest.NewServer(h.mux)
 	defer srv.Close()

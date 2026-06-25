@@ -8,9 +8,14 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"sync"
 )
+
+// envWarnOnce ensures the env-key security notice is logged at most once per process.
+var envWarnOnce sync.Once
 
 // Box seals and opens secrets under a 32-byte master key.
 type Box struct{ key [32]byte }
@@ -28,6 +33,10 @@ func Load(dir string) (*Box, error) {
 			return nil, fmt.Errorf("MARSHAL_MASTER_KEY must be base64 of exactly 32 bytes")
 		}
 		copy(key[:], raw)
+		envWarnOnce.Do(func() {
+			log.Printf("secretbox: master key sourced from MARSHAL_MASTER_KEY env — " +
+				"readable via /proc/<pid>/environ and inherited by children; prefer the 0600 master.key file")
+		})
 		return &Box{key: key}, nil
 	}
 	path := filepath.Join(dir, "master.key")

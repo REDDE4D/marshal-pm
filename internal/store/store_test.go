@@ -41,6 +41,22 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSaveDumpIsPrivate(t *testing.T) {
+	// dump.json carries app Env, which may hold secrets — it must not be
+	// world/group readable.
+	s := NewAt(filepath.Join(t.TempDir(), "state"))
+	if err := s.Save([]config.App{{Name: "api", Cmd: "./server", Env: map[string]string{"DB_PASSWORD": "s3cret"}}}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	info, err := os.Stat(filepath.Join(s.Dir(), "dump.json"))
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("dump.json perm = %o, want 600", perm)
+	}
+}
+
 func TestLoadMissingReturnsEmpty(t *testing.T) {
 	s := NewAt(t.TempDir())
 	got, err := s.Load()

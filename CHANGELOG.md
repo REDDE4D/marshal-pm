@@ -12,6 +12,41 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-25
+
+### Added
+- **gRPC auth-failure auditing:** the fleet gRPC interceptors now record failed
+  admin/agent/enroll token attempts (source class + peer IP + outcome) to the same
+  `login-audit.log` surfaced by `marshal server audit`. Previously gRPC auth failures
+  left no record at all. The audit log is now created server-side and shared with the
+  dashboard login path (single writer), so it works even when the dashboard is disabled.
+
+### Security
+- **Git deploy argument-injection hardening:** `source.repo`, `source.ref`, and `source.subdir`
+  are now validated. Repo/ref values that git would interpret as command-line options (a leading
+  `-`, e.g. `--upload-pack=…`) and subdir values that escape the clone directory (absolute paths
+  or `..` traversal) are rejected. Validation runs both at config-parse time and again at the
+  deploy sink, so resurrected on-disk state (`dump.json`) is re-checked rather than trusted.
+- **Per-IP dashboard login lockout:** the login limiter now caps failures per source IP in
+  addition to per-(user, IP), so an attacker can no longer dodge the lockout by rotating the
+  username field. A successful login clears only the per-user bucket, never the per-IP counter.
+- **Constant-time agent-token lookup:** `authAgent` now hashes the presented token once and
+  compares it against every enrolled agent with a constant-time compare and no early return,
+  removing the timing oracle from the previous short-circuiting, map-order-dependent loop.
+- **Notification HTTP hardening:** the webhook/Slack/Telegram client now has a 30s timeout (a
+  black-hole endpoint can no longer hang a sender) and refuses to follow redirects (an
+  operator-configured URL that 30x-bounces to an internal address was an SSRF vector).
+- **Master-key env warning:** when the AES master key is sourced from `MARSHAL_MASTER_KEY`, the
+  server logs a one-time notice that env vars are readable via `/proc/<pid>/environ` and inherited
+  by child processes; the `0600` `master.key` file remains the recommended source.
+
+### Fixed
+- **`dump.json` written `0600` instead of `0644`:** the state dump serializes app `Env`, which
+  commonly holds secrets (DB passwords, API keys); it is no longer world/group readable.
+- **Registry memory bound:** disconnected agents whose last snapshot is older than the 7-day
+  retention window are now evicted from the in-memory fleet registry during the periodic prune,
+  so churning/ephemeral agent names can no longer grow the map without bound.
+
 ## [0.3.0] - 2026-06-24
 
 ### Changed
@@ -117,7 +152,8 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/REDDE4D/marshal-pm/releases/tag/v0.1.0

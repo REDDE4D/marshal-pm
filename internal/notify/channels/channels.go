@@ -2,8 +2,10 @@
 package channels
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"marshal/internal/notify"
 )
@@ -13,7 +15,16 @@ type httpDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
-var httpClient httpDoer = http.DefaultClient
+// httpClient is the default transport for webhook/slack/telegram channels. It has
+// an explicit timeout so a hostile or black-hole endpoint can't hang a sender, and
+// refuses to follow redirects (an operator-configured URL that 30x-bounces to an
+// internal address is an SSRF vector). Tests override this seam.
+var httpClient httpDoer = &http.Client{
+	Timeout: 30 * time.Second,
+	CheckRedirect: func(*http.Request, []*http.Request) error {
+		return errors.New("notify: refusing to follow redirect")
+	},
+}
 
 // New builds a Sender for the channel's type.
 func New(c notify.Channel, secrets map[string]string) (notify.Sender, error) {

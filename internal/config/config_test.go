@@ -262,6 +262,46 @@ func TestNoServerNoAppsIsInvalid(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsDangerousGitSource(t *testing.T) {
+	cases := []struct {
+		name string
+		src  GitSource
+	}{
+		{"ref option injection", GitSource{Repo: "https://x/y.git", Ref: "--upload-pack=touch /tmp/pwn"}},
+		{"ref leading dash", GitSource{Repo: "https://x/y.git", Ref: "-x"}},
+		{"repo leading dash", GitSource{Repo: "--repo", Ref: "main"}},
+		{"subdir parent escape", GitSource{Repo: "https://x/y.git", Subdir: "../../etc"}},
+		{"subdir absolute", GitSource{Repo: "https://x/y.git", Subdir: "/etc"}},
+		{"subdir sneaky escape", GitSource{Repo: "https://x/y.git", Subdir: "a/../../b"}},
+		{"repo empty", GitSource{Ref: "main"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := tc.src
+			cfg := &Config{Apps: []App{{Name: "api", Cmd: "./server", Source: &src}}}
+			if err := cfg.Prepare(); err == nil {
+				t.Fatalf("expected error for %s, got nil", tc.name)
+			}
+		})
+	}
+}
+
+func TestValidateAcceptsSafeGitSource(t *testing.T) {
+	cases := []GitSource{
+		{Repo: "https://x/y.git", Ref: "main"},
+		{Repo: "git@host:org/repo.git", Ref: "v1.2.3", Subdir: "services/api"},
+		{Repo: "ssh://git@host/repo.git", Subdir: "a/b/c"},
+		{Repo: "https://x/y.git", Ref: "feature/foo-bar"},
+	}
+	for i := range cases {
+		src := cases[i]
+		cfg := &Config{Apps: []App{{Name: "api", Cmd: "./server", Source: &src}}}
+		if err := cfg.Prepare(); err != nil {
+			t.Fatalf("unexpected error for %+v: %v", src, err)
+		}
+	}
+}
+
 func TestGitSourceCredentialRoundTrip(t *testing.T) {
 	src := GitSource{Repo: "https://x/y.git", Credential: "gh-ci"}
 	b, err := json.Marshal(src)

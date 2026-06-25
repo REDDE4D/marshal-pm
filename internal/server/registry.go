@@ -92,6 +92,23 @@ func (r *Registry) Close(name string) {
 	}
 }
 
+// Evict drops registry entries for agents whose stream is closed and whose last
+// snapshot predates cutoff, releasing their retained proc/host snapshots. Agents
+// with an open stream are never evicted regardless of age. Returns the number
+// removed. This bounds the registry under churning/ephemeral agent names.
+func (r *Registry) Evict(cutoff time.Time) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	removed := 0
+	for name, e := range r.agents {
+		if !e.streamOpen && e.lastSeen.Before(cutoff) {
+			delete(r.agents, name)
+			removed++
+		}
+	}
+	return removed
+}
+
 // SetMeta records host metadata for an agent (called on Hello).
 func (r *Registry) SetMeta(name string, m AgentMeta) {
 	r.mu.Lock()

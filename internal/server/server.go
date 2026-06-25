@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"marshal/internal/audit"
 	"marshal/internal/credstore"
 	"marshal/internal/dashboard"
 	"marshal/internal/logstore"
@@ -362,30 +363,40 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 	}
 	ss := newStores(dataDir)
 	ls := newLogStores(dataDir)
+	reg := NewRegistry(opts...)
 	go func() {
 		t := time.NewTicker(10 * time.Minute)
 		defer t.Stop()
-		const retentionMs = int64(7 * 24 * 60 * 60 * 1000)
+		const retention = 7 * 24 * time.Hour
+		const retentionMs = int64(retention / time.Millisecond)
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				cutoff := time.Now().UnixMilli() - retentionMs
+				now := time.Now()
+				cutoff := now.UnixMilli() - retentionMs
 				ss.pruneAll(cutoff)
 				ls.pruneAll(cutoff)
+				// Drop registry entries for agents disconnected past the
+				// retention window so ephemeral agent names can't grow the
+				// in-memory map unbounded.
+				reg.Evict(now.Add(-retention))
 			}
 		}
 	}()
-	reg := NewRegistry(opts...)
 	srv := NewServer(reg, ss, ls, auth)
 	go auth.ReloadLoop(ctx, 3*time.Second)
+	// One audit log shared by the dashboard login path and the gRPC auth
+	// interceptors, so both land in login-audit.log with a single writer. Created
+	// unconditionally so fleet auth failures are recorded even with the dashboard off.
+	auditLog := audit.New(filepath.Join(dataDir, "login-audit.log"), audit.DefaultMaxBytes)
+	auth.SetAuditLog(auditLog)
 	if httpAddr != "" {
 		if !auth.HasDashboardUser() {
 			log.Printf("dashboard: no user set — run 'marshal server passwd'")
 		}
 		sessionsPath := filepath.Join(dataDir, "sessions.json")
-		auditPath := filepath.Join(dataDir, "login-audit.log")
 		creds, cerr := credstore.Open(dataDir)
 		if cerr != nil {
 			log.Printf("server: credentials disabled: %v", cerr)
@@ -415,7 +426,7 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 		}
 		em := enrollMinter{auth: auth, fp: fp, fleetAddr: lis.Addr().String()}
 		go func() {
-			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath, auditPath, cw, nw, channels.New, em); err != nil {
+			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath, auditLog, cw, nw, channels.New, em); err != nil {
 				log.Printf("dashboard: %v", err)
 			}
 		}()

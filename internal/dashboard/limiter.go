@@ -50,6 +50,22 @@ func (l *loginLimiter) retryAfter(key string) (bool, time.Duration) {
 	return false, 0
 }
 
+// lockedAny reports whether any of keys is currently locked, returning the
+// longest remaining wait among the locked ones.
+func lockedAny(l *loginLimiter, keys ...string) (bool, time.Duration) {
+	locked := false
+	var wait time.Duration
+	for _, k := range keys {
+		if lk, w := l.retryAfter(k); lk {
+			locked = true
+			if w > wait {
+				wait = w
+			}
+		}
+	}
+	return locked, wait
+}
+
 // fail records a failed attempt for key, engaging (or extending) a lock once the
 // failure count reaches the threshold.
 func (l *loginLimiter) fail(key string) {
