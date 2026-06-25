@@ -12,6 +12,15 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Security
+- **Per-IP gRPC auth throttle.** Repeated failed admin/agent/enroll token attempts from one
+  source IP now trip a lockout (10 consecutive failures → 5s, doubling to 5min), rejecting
+  further attempts with `ResourceExhausted` and an audited `rate_limited` event before any token
+  comparison. A successful auth resets the IP's counter, so several agents behind one NAT can't
+  be locked out by a single misconfigured (or hostile) peer — only an IP that is *purely*
+  failing is throttled. The login limiter was extracted to a shared `internal/ratelimit`
+  package used by both the dashboard and the fleet interceptors.
+
 ## [0.5.0] - 2026-06-25
 
 ### Added

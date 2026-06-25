@@ -2,16 +2,79 @@ package server
 
 import (
 	"context"
+	"net"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
 	"github.com/REDDE4D/marshal-pm/internal/audit"
+	"github.com/REDDE4D/marshal-pm/internal/ratelimit"
 )
+
+// peerCtx returns a context carrying a gRPC peer with the given IP, so peerIP()
+// resolves it in interceptor tests.
+func peerCtx(ip string) context.Context {
+	return peer.NewContext(context.Background(), &peer.Peer{
+		Addr: &net.TCPAddr{IP: net.ParseIP(ip), Port: 5555},
+	})
+}
+
+func TestInterceptorThrottlesRepeatedFailures(t *testing.T) {
+	dir := t.TempDir()
+	a, secrets, _ := loadOrInitAuth(dir)
+	// Low threshold for a fast test: 2 consecutive failures → lock.
+	a.SetThrottle(ratelimit.New(ratelimit.Policy{Threshold: 2, Base: time.Minute, Cap: time.Minute}, nil))
+	info := &grpc.UnaryServerInfo{FullMethod: "/marshal.v1.Fleet/ListFleet"}
+	noop := func(ctx context.Context, req any) (any, error) { return "ok", nil }
+
+	ctx := peerCtx("9.9.9.9")
+	bad := metadata.NewIncomingContext(ctx, metadata.Pairs("marshal-token", "nope"))
+
+	// Two failures trip the lock.
+	if _, err := a.unaryAuth(bad, nil, info, noop); status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("fail 1: code = %v, want PermissionDenied", status.Code(err))
+	}
+	if _, err := a.unaryAuth(bad, nil, info, noop); status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("fail 2: code = %v, want PermissionDenied", status.Code(err))
+	}
+	// Third attempt is rejected by the throttle BEFORE verifying the token.
+	if _, err := a.unaryAuth(bad, nil, info, noop); status.Code(err) != codes.ResourceExhausted {
+		t.Fatalf("throttled attempt: code = %v, want ResourceExhausted", status.Code(err))
+	}
+	// Even a VALID admin token is refused while the IP is locked.
+	good := metadata.NewIncomingContext(ctx, metadata.Pairs("marshal-token", secrets.AdminToken))
+	if _, err := a.unaryAuth(good, nil, info, noop); status.Code(err) != codes.ResourceExhausted {
+		t.Fatalf("valid token during lock: code = %v, want ResourceExhausted", status.Code(err))
+	}
+}
+
+func TestInterceptorThrottleResetsOnSuccess(t *testing.T) {
+	dir := t.TempDir()
+	a, secrets, _ := loadOrInitAuth(dir)
+	a.SetThrottle(ratelimit.New(ratelimit.Policy{Threshold: 2, Base: time.Minute, Cap: time.Minute}, nil))
+	info := &grpc.UnaryServerInfo{FullMethod: "/marshal.v1.Fleet/ListFleet"}
+	noop := func(ctx context.Context, req any) (any, error) { return "ok", nil }
+	ctx := peerCtx("8.8.8.8")
+
+	bad := metadata.NewIncomingContext(ctx, metadata.Pairs("marshal-token", "nope"))
+	good := metadata.NewIncomingContext(ctx, metadata.Pairs("marshal-token", secrets.AdminToken))
+
+	a.unaryAuth(bad, nil, info, noop) // fail 1
+	if _, err := a.unaryAuth(good, nil, info, noop); err != nil {
+		t.Fatalf("valid token rejected: %v", err)
+	}
+	// The success cleared the streak, so a single further failure must NOT lock.
+	a.unaryAuth(bad, nil, info, noop) // fail 1 again (not 2)
+	if _, err := a.unaryAuth(good, nil, info, noop); err != nil {
+		t.Fatalf("locked despite reset-on-success: %v", status.Code(err))
+	}
+}
 
 func TestInterceptorAuditsAuthFailures(t *testing.T) {
 	dir := t.TempDir()
