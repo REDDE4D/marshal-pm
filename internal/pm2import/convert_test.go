@@ -72,9 +72,9 @@ func TestConvertResolvesCwdAgainstBaseDir(t *testing.T) {
 	eco := Ecosystem{
 		BaseDir: "/home/tgbot/adminbot",
 		Apps: []PM2App{
-			{Name: "noCwd", Script: "src/index.js"},                          // → base dir
-			{Name: "relCwd", Script: "x.js", Cwd: "./dashboard-next"},        // → base/dashboard-next
-			{Name: "absCwd", Script: "y.js", Cwd: "/opt/svc"},                // unchanged
+			{Name: "noCwd", Script: "src/index.js"},                   // → base dir
+			{Name: "relCwd", Script: "x.js", Cwd: "./dashboard-next"}, // → base/dashboard-next
+			{Name: "absCwd", Script: "y.js", Cwd: "/opt/svc"},         // unchanged
 		},
 	}
 	cfg, _ := Convert(eco)
