@@ -163,6 +163,39 @@ func (s *Server) Delete(_ context.Context, sel *pb.Selector) (*pb.ProcList, erro
 	return s.mutate(s.mgr.Delete, sel)
 }
 
+// Reset zeroes the restart counters of the selected apps and prunes their
+// recorded restart events.
+func (s *Server) Reset(_ context.Context, sel *pb.Selector) (*pb.ProcList, error) {
+	snaps, err := s.mgr.ResetCounters(sel.GetTarget())
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "%v", err)
+	}
+	if s.estore != nil {
+		labels := make([]string, 0, len(snaps))
+		for _, sn := range snaps {
+			labels = append(labels, sn.Label)
+		}
+		_, _ = s.estore.DeleteLabels(labels)
+	}
+	return s.procList(snaps), nil
+}
+
+// Flush clears captured logs for the selected apps.
+func (s *Server) Flush(_ context.Context, sel *pb.Selector) (*pb.Ack, error) {
+	snaps, err := s.mgr.Describe(sel.GetTarget())
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "%v", err)
+	}
+	if s.logs != nil {
+		labels := make([]string, 0, len(snaps))
+		for _, sn := range snaps {
+			labels = append(labels, sn.Label)
+		}
+		_ = s.logs.Truncate(labels)
+	}
+	return &pb.Ack{Ok: true, Message: fmt.Sprintf("flushed %d instance(s)", len(snaps))}, nil
+}
+
 func (s *Server) Describe(_ context.Context, sel *pb.Selector) (*pb.ProcList, error) {
 	return s.mutate(s.mgr.Describe, sel)
 }
