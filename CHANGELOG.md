@@ -28,6 +28,12 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 - **`marshal list` (and every command that prints a process table) now renders a bordered table**
   with the state column colorized on a terminal (green online / red errored or stopped / yellow
   otherwise). Output to a pipe or file stays plain — no borders-breaking color codes.
+- **`marshal server startup --self-enroll` now enrolls the one local daemon** instead of running a
+  separate in-process agent under `<serverData>/agent`. There is now a single agent per host, so
+  `marshal list` and the dashboard agree. Ctrl-C stops the server/dashboard; supervised apps keep
+  running under the persistent daemon (stop them with `marshal stop`, the daemon with `marshal kill`).
+  Upgrade note: a host that used the old self-enroll agent should remove `<serverData>/agent` and
+  re-add its apps under the unified daemon.
 
 ### Fixed
 - **`marshal import pm2` now bakes an absolute `cwd` into every app.** PM2 resolves an app's script
