@@ -18,6 +18,8 @@ service Daemon {
   rpc Kill(Empty) returns (Ack);
   rpc Logs(LogRequest) returns (stream LogLine); // M3 — defined, not implemented
   rpc MetricsHistory(MetricsHistoryRequest) returns (MetricsHistoryResponse); // M5
+  rpc Reset(Selector) returns (ProcList);
+  rpc Flush(Selector) returns (Ack);
 }
 
 message Empty {}
@@ -51,6 +53,7 @@ message AppSpec {
   string kill_timeout = 9;
   optional LogRetention logs = 10; // M6 per-app retention override
   optional GitSource source = 11; // M21 git deploy; nil for command apps
+  int64 max_memory_restart = 12; // bytes; 0 = disabled
 }
 
 message StartRequest { repeated AppSpec apps = 1; }

@@ -201,6 +201,8 @@ message ControlOp {
     ReadFileRequest read_file = 8; // M23
     CommitRequest   commit    = 9; // M24
     Selector        reload    = 10; // M-G, rolling graceful restart
+    Selector        reset     = 11; // zero restart counters
+    Selector        flush     = 12; // clear logs
   }
 }
 
