@@ -2,13 +2,54 @@ package server
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"marshal/internal/audit"
 )
+
+func TestInterceptorAuditsAuthFailures(t *testing.T) {
+	dir := t.TempDir()
+	a, secrets, _ := loadOrInitAuth(dir)
+	auditPath := filepath.Join(dir, "audit.log")
+	a.SetAuditLog(audit.New(auditPath, audit.DefaultMaxBytes))
+
+	noop := func(ctx context.Context, req any) (any, error) { return "ok", nil }
+	uinfo := &grpc.UnaryServerInfo{FullMethod: "/marshal.v1.Fleet/ListFleet"}
+	sinfo := &grpc.StreamServerInfo{FullMethod: "/marshal.v1.Fleet/Connect"}
+	snoop := func(srv any, stream grpc.ServerStream) error { return nil }
+
+	// 1) bad admin token, 2) missing admin token, 3) bad agent token, 4) bad enroll token.
+	bad := metadata.NewIncomingContext(context.Background(), metadata.Pairs("marshal-token", "nope"))
+	_, _ = a.unaryAuth(bad, nil, uinfo, noop)
+	_, _ = a.unaryAuth(context.Background(), nil, uinfo, noop)
+	_ = a.streamAuth(nil, &mockServerStream{ctx: metadata.NewIncomingContext(context.Background(),
+		metadata.Pairs("marshal-token", "bad-agent"))}, sinfo, snoop)
+	_ = a.streamAuth(nil, &mockServerStream{ctx: metadata.NewIncomingContext(context.Background(),
+		metadata.Pairs("marshal-enroll", "bad-enroll"))}, sinfo, snoop)
+
+	// A valid admin call must NOT be recorded as a failure.
+	good := metadata.NewIncomingContext(context.Background(), metadata.Pairs("marshal-token", secrets.AdminToken))
+	_, _ = a.unaryAuth(good, nil, uinfo, noop)
+
+	events, err := audit.Read(auditPath, audit.ReadOptions{})
+	if err != nil {
+		t.Fatalf("read audit: %v", err)
+	}
+	if len(events) != 4 {
+		t.Fatalf("recorded %d events, want 4 failures: %+v", len(events), events)
+	}
+	for _, ev := range events {
+		if ev.Outcome != audit.OutcomeInvalid {
+			t.Errorf("outcome = %q, want %q", ev.Outcome, audit.OutcomeInvalid)
+		}
+	}
+}
 
 // mockServerStream is a minimal grpc.ServerStream for interceptor tests.
 // Only Context() is meaningful; all other methods are no-ops.

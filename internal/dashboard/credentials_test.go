@@ -51,7 +51,7 @@ func TestCredentialsDisabledWhenNil(t *testing.T) {
 
 func newTestHandlerWithCreds(t *testing.T, creds Credentials) *handler {
 	t.Helper()
-	return newHandler(nil, nil, nil, nil, nil, time.Hour, "", "", creds)
+	return newHandler(nil, nil, nil, nil, nil, time.Hour, "", nil, creds)
 }
 
 // TestCreateSSHCredentialReturnsPublicKey verifies that POST /api/credentials

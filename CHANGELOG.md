@@ -12,6 +12,13 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Added
+- **gRPC auth-failure auditing:** the fleet gRPC interceptors now record failed
+  admin/agent/enroll token attempts (source class + peer IP + outcome) to the same
+  `login-audit.log` surfaced by `marshal server audit`. Previously gRPC auth failures
+  left no record at all. The audit log is now created server-side and shared with the
+  dashboard login path (single writer), so it works even when the dashboard is disabled.
+
 ### Security
 - **Git deploy argument-injection hardening:** `source.repo`, `source.ref`, and `source.subdir`
   are now validated. Repo/ref values that git would interpret as command-line options (a leading

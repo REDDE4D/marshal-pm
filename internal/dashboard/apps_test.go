@@ -360,7 +360,7 @@ func TestDeployAttachesResolvedCredential(t *testing.T) {
 		t.Fatal(err)
 	}
 	fc := &fakeController{res: &pb.ControlResult{Ok: true}}
-	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fc, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", "", cs)
+	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, fc, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", nil, cs)
 
 	body := `{"agent":"a1","source":{"type":"git","name":"priv","repo":"https://x/y.git","credential":"gh-ci"}}`
 	rec := httptest.NewRecorder()
@@ -384,7 +384,7 @@ func TestDeployUnknownCredential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, &fakeController{}, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", "", cs)
+	h := newHandler(fakeLister{}, &fakeMetrics{}, &fakeLogs{}, &fakeController{}, fakeAuth{user: "admin", pass: "pw"}, time.Hour, "", nil, cs)
 	body := `{"agent":"a1","source":{"type":"git","name":"priv","repo":"https://x/y.git","credential":"nope"}}`
 	rec := httptest.NewRecorder()
 	h.apps(rec, authedRequest(t, "POST", "/api/apps", body))

@@ -2,11 +2,14 @@ package server
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"marshal/internal/audit"
 )
 
 type ctxKey int
@@ -28,13 +31,27 @@ func metaToken(ctx context.Context, key string) string {
 	return vals[0]
 }
 
+// recordAuthFailure appends a failed gRPC auth attempt to the audit log (no-op
+// when no log is attached). source identifies the credential class (admin /
+// agent / enroll) in the User field; the password is never present here.
+func (a *AuthStore) recordAuthFailure(ctx context.Context, source string) {
+	a.audit.Record(audit.Event{
+		Time:    time.Now().UTC(),
+		User:    "fleet:" + source,
+		IP:      peerIP(ctx),
+		Outcome: audit.OutcomeInvalid,
+	})
+}
+
 // unaryAuth requires a valid admin token on every unary operator RPC.
 func (a *AuthStore) unaryAuth(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	tok := metaToken(ctx, "marshal-token")
 	if tok == "" {
+		a.recordAuthFailure(ctx, "admin")
 		return nil, status.Error(codes.Unauthenticated, "missing admin token")
 	}
 	if !a.verifyAdmin(tok) {
+		a.recordAuthFailure(ctx, "admin")
 		return nil, status.Error(codes.PermissionDenied, "invalid admin token")
 	}
 	return handler(ctx, req)
@@ -56,6 +73,7 @@ func (a *AuthStore) streamAuth(srv any, ss grpc.ServerStream, _ *grpc.StreamServ
 			ctx = context.WithValue(ctx, keyAgentName, name)
 			return handler(srv, &wrappedStream{ServerStream: ss, ctx: ctx})
 		}
+		a.recordAuthFailure(ctx, "agent")
 		return status.Error(codes.PermissionDenied, "invalid agent token")
 	}
 	if enroll := metaToken(ctx, "marshal-enroll"); enroll != "" {
@@ -63,8 +81,10 @@ func (a *AuthStore) streamAuth(srv any, ss grpc.ServerStream, _ *grpc.StreamServ
 			ctx = context.WithValue(ctx, keyEnrolling, true)
 			return handler(srv, &wrappedStream{ServerStream: ss, ctx: ctx})
 		}
+		a.recordAuthFailure(ctx, "enroll")
 		return status.Error(codes.PermissionDenied, "invalid enrollment token")
 	}
+	a.recordAuthFailure(ctx, "agent")
 	return status.Error(codes.Unauthenticated, "missing agent or enrollment token")
 }
 

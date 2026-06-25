@@ -51,14 +51,12 @@ type handler struct {
 
 // newHandler builds a *handler (with its mux) for the given session lifetime.
 // sessionsPath persists sessions to disk; "" keeps them in-memory.
-// auditPath enables the login audit log; "" disables it.
+// auditLog enables the login audit log; nil disables it. It is shared with the
+// server's gRPC interceptors so login and fleet auth events land in one file.
 // creds may be nil, which disables credential endpoints (they return 503).
-func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration, sessionsPath, auditPath string, creds Credentials) *handler {
+func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration, sessionsPath string, auditLog *audit.Log, creds Credentials) *handler {
 	files := staticFS()
-	var al *audit.Log
-	if auditPath != "" {
-		al = audit.New(auditPath, audit.DefaultMaxBytes)
-	}
+	al := auditLog
 	h := &handler{
 		lister:      lister,
 		metricsHist: metrics,
@@ -126,7 +124,7 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 // The returned http.Handler is safe to use with httptest servers in unit tests.
 // Credentials are disabled (nil) — use newHandler directly if you need them.
 func NewHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, ttl time.Duration) http.Handler {
-	return newHandler(lister, metrics, logs, controller, auth, ttl, "", "", nil).mux
+	return newHandler(lister, metrics, logs, controller, auth, ttl, "", nil, nil).mux
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
