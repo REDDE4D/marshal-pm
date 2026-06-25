@@ -12,7 +12,23 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Added
+- **`marshal stop`/`restart`/`delete` accept a `marshal.yaml`**, like `marshal start` does. Passing a
+  config file targets every app it defines (an app that isn't running is warned about, not fatal),
+  so `marshal stop marshal.yaml` works instead of looking for an app literally named `marshal.yaml`.
+
+### Changed
+- **`marshal list` (and every command that prints a process table) now renders a bordered table**
+  with the state column colorized on a terminal (green online / red errored or stopped / yellow
+  otherwise). Output to a pipe or file stays plain — no borders-breaking color codes.
+
 ### Fixed
+- **`marshal import pm2` now bakes an absolute `cwd` into every app.** PM2 resolves an app's script
+  relative to the ecosystem file's directory and defaults `cwd` to it; Marshal copied the (often
+  empty) `cwd` verbatim, so a relative `script` like `src/index.js` resolved against the *daemon's*
+  working directory (`$HOME` or `/` under launchd/systemd) — e.g. `/home/tgbot/src/index.js`
+  (`MODULE_NOT_FOUND`). The generated `marshal.yaml` is now self-contained: an absent `cwd` defaults
+  to the ecosystem directory and a relative one (e.g. `./dashboard-next`) is joined onto it.
 - **`marshal import pm2` now diagnoses ESM ecosystem files instead of reporting a bare "no apps
   found".** When a project's `package.json` sets `"type":"module"`, node treats `ecosystem.config.js`
   as an ES module and silently ignores its CommonJS `module.exports`, so the importer received an
