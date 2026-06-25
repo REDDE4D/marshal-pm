@@ -185,6 +185,16 @@ apps:
   - { name: ghost, cmd: node, args: ["src/index.js"], env_file: .env.ghost }
 ```
 
+**Migrating from PM2?** Convert an existing ecosystem file in one step:
+
+```bash
+marshal import pm2 ecosystem.config.js -o marshal.yaml
+```
+
+`.js`/`.cjs` files are evaluated with `node`, so dynamic config (env loaders, spreads) resolves
+exactly as PM2 would; `.json`/`.yaml` are read directly. Anything without a Marshal equivalent
+(cluster mode, `watch`, `cron_restart`) is reported as a warning.
+
 ```bash
 ./marshal start marshal.yaml     # start under the background daemon
 ./marshal list                   # see managed processes
