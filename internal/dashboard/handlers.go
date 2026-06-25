@@ -54,6 +54,7 @@ type handler struct {
 	notifBuild  notify.BuildFunc
 	enroll      EnrollMinter
 	updater     UpdateStatus
+	acks        Acks
 	// scanHost performs a one-time SSH host-key scan (TOFU). The default
 	// implementation shells out to ssh-keyscan; tests inject a stub.
 	scanHost func(hostport string) (string, error)
@@ -107,6 +108,7 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 	mux.HandleFunc("GET /api/logs/download", h.requireSession(h.logsDownload))
 	mux.HandleFunc("GET /api/logstats", h.requireSession(h.logstats))
 	mux.HandleFunc("GET /api/errors", h.requireSession(h.errors))
+	mux.HandleFunc("POST /api/errors/ack", h.requireSession(h.ackError))
 	mux.HandleFunc("POST /api/control", h.requireSession(h.control))
 	mux.HandleFunc("POST /api/fleet/connect-token", h.requireSession(h.connectToken))
 	mux.HandleFunc("POST /api/apps", h.requireSession(h.apps))

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/REDDE4D/marshal-pm/internal/ackstore"
 	"github.com/REDDE4D/marshal-pm/internal/audit"
 	"github.com/REDDE4D/marshal-pm/internal/credstore"
 	"github.com/REDDE4D/marshal-pm/internal/dashboard"
@@ -432,8 +433,14 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 		upd := updatecheck.New(version.String(),
 			updatecheck.WithEnabled(os.Getenv("MARSHAL_NO_UPDATE_CHECK") == ""))
 		go upd.Run(ctx)
+		var acks dashboard.Acks // true nil on failure (typed-nil would defeat the nil check)
+		if as, aerr := ackstore.Open(filepath.Join(dataDir, "error-acks.json")); aerr != nil {
+			log.Printf("server: error acknowledgement disabled: %v", aerr)
+		} else {
+			acks = as
+		}
 		go func() {
-			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath, auditLog, cw, nw, channels.New, em, upd); err != nil {
+			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath, auditLog, cw, nw, channels.New, em, upd, acks); err != nil {
 				log.Printf("dashboard: %v", err)
 			}
 		}()

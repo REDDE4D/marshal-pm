@@ -138,6 +138,16 @@ select.inp{ font-family:var(--i); }
 .chart{ background:var(--bg); padding:14px 18px; }
 .chart .cap{ font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin-bottom:10px; display:flex; justify-content:space-between; }
 
+/* Error acknowledge button + dimmed acked rows. */
+.lr.dim{ opacity:.45; }
+.ackbtn{
+  height:24px; padding:0 9px; border:1px solid var(--line); border-radius:5px;
+  color:var(--dim); font-size:10.5px; letter-spacing:.04em; text-transform:uppercase;
+  font-family:var(--i); background:#0C0E12;
+}
+.ackbtn:hover{ color:var(--olive); border-color:#2F3A27; background:rgba(157,193,90,.08); }
+.ackbtn.on{ color:var(--olive); border-color:#2F3A27; }
+
 /* Metric chart hover: crosshair + a value/time readout. */
 .mc-wrap{ position:relative; }
 .mc-readout{
