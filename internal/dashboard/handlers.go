@@ -152,8 +152,13 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := clientIP(r)
+	// Two limiter keys: a per-(user,IP) bucket and a per-IP bucket. The per-IP
+	// bucket caps total failures from one source so an attacker cannot dodge the
+	// lockout by rotating the username field (each username would otherwise mint a
+	// fresh per-user bucket).
 	key := body.User + "|" + ip
-	if locked, wait := h.limiter.retryAfter(key); locked {
+	ipKey := "ip|" + ip
+	if locked, wait := lockedAny(h.limiter, key, ipKey); locked {
 		h.audit.Record(audit.Event{Time: time.Now().UTC(), User: body.User, IP: ip, Outcome: audit.OutcomeRateLimited})
 		secs := int(wait.Seconds())
 		if secs < 1 {
@@ -165,10 +170,14 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 	}
 	if !h.auth.VerifyDashboardUser(body.User, body.Pass) {
 		h.limiter.fail(key)
+		h.limiter.fail(ipKey)
 		h.audit.Record(audit.Event{Time: time.Now().UTC(), User: body.User, IP: ip, Outcome: audit.OutcomeInvalid})
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
+	// Reset only the per-user bucket on success. The per-IP bucket is intentionally
+	// NOT cleared, so possessing one valid credential can't wipe an in-progress
+	// brute-force counter for the whole IP.
 	h.limiter.reset(key)
 	stamp, _ := h.auth.DashboardCredentialStamp(body.User)
 	tok, err := h.sessions.create(body.User, stamp)

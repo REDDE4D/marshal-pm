@@ -25,6 +25,18 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
   `-`, e.g. `--upload-pack=…`) and subdir values that escape the clone directory (absolute paths
   or `..` traversal) are rejected. Validation runs both at config-parse time and again at the
   deploy sink, so resurrected on-disk state (`dump.json`) is re-checked rather than trusted.
+- **Per-IP dashboard login lockout:** the login limiter now caps failures per source IP in
+  addition to per-(user, IP), so an attacker can no longer dodge the lockout by rotating the
+  username field. A successful login clears only the per-user bucket, never the per-IP counter.
+- **Constant-time agent-token lookup:** `authAgent` now hashes the presented token once and
+  compares it against every enrolled agent with a constant-time compare and no early return,
+  removing the timing oracle from the previous short-circuiting, map-order-dependent loop.
+- **Notification HTTP hardening:** the webhook/Slack/Telegram client now has a 30s timeout (a
+  black-hole endpoint can no longer hang a sender) and refuses to follow redirects (an
+  operator-configured URL that 30x-bounces to an internal address was an SSRF vector).
+- **Master-key env warning:** when the AES master key is sourced from `MARSHAL_MASTER_KEY`, the
+  server logs a one-time notice that env vars are readable via `/proc/<pid>/environ` and inherited
+  by child processes; the `0600` `master.key` file remains the recommended source.
 
 ### Fixed
 - **`dump.json` written `0600` instead of `0644`:** the state dump serializes app `Env`, which
