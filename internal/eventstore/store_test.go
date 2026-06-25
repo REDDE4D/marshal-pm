@@ -71,3 +71,30 @@ func TestPruneDeletesOld(t *testing.T) {
 		t.Fatalf("after prune a#0 = %+v, want {1, 5000}", roll["a#0"])
 	}
 }
+
+func TestDeleteLabels(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "r.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, l := range []string{"a#0", "a#0", "b#0"} {
+		if err := s.Record(l, 1000); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n, err := s.DeleteLabels([]string{"a#0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("deleted %d, want 2", n)
+	}
+	r, _ := s.Rollups(0)
+	if _, ok := r["a#0"]; ok {
+		t.Fatalf("a#0 should be gone, got %+v", r["a#0"])
+	}
+	if r["b#0"].Count24h != 1 {
+		t.Fatalf("b#0 count = %d, want 1", r["b#0"].Count24h)
+	}
+}
