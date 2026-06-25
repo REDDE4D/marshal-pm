@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 type agentEntry struct {

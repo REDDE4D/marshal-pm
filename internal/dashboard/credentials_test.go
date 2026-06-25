@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/credstore"
+	"github.com/REDDE4D/marshal-pm/internal/credstore"
 )
 
 func TestCredentialsCRUD(t *testing.T) {

@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/client"
-	"marshal/internal/daemon"
-	"marshal/internal/pb"
-	"marshal/internal/store"
+	"github.com/REDDE4D/marshal-pm/internal/client"
+	"github.com/REDDE4D/marshal-pm/internal/daemon"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/store"
 
 	"google.golang.org/grpc"
 )

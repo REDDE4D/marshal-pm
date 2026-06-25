@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/logstore"
+	"github.com/REDDE4D/marshal-pm/internal/logstore"
 )
 
 type fakeLogs struct {

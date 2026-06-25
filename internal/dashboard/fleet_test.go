@@ -3,7 +3,7 @@ package dashboard
 import (
 	"testing"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 type fakeLister struct{ agents []*pb.AgentState }

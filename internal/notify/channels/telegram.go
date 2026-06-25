@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"marshal/internal/notify"
+	"github.com/REDDE4D/marshal-pm/internal/notify"
 )
 
 type telegram struct {

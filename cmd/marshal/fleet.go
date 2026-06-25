@@ -15,9 +15,9 @@ import (
 	"google.golang.org/grpc/metadata"
 	"gopkg.in/yaml.v3"
 
-	"marshal/internal/config"
-	"marshal/internal/fleetauth"
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/fleetauth"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 func fleetCmd() *cobra.Command {

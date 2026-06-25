@@ -11,7 +11,7 @@ ui:
 
 # Build the marshal binary, stamping the version via -ldflags.
 build:
-	go build -ldflags "-X marshal/internal/version.Version=$(VERSION)" -o marshal ./cmd/marshal
+	go build -ldflags "-X github.com/REDDE4D/marshal-pm/internal/version.Version=$(VERSION)" -o marshal ./cmd/marshal
 
 # Print the version that `make build` would stamp.
 version:

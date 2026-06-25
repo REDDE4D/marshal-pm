@@ -500,6 +500,22 @@ export type ErrorsResponse = {
   truncated: boolean;
 };
 
+export type UpdateStatus = {
+  enabled: boolean;
+  current: string;
+  latest: string;
+  outdated: boolean;
+  checked_at: string;
+  outdated_agents: string[];
+};
+
+export async function getUpdate(): Promise<UpdateStatus> {
+  const r = await fetch("/api/update");
+  if (r.status === 401) throw new Error("unauthorized");
+  if (!r.ok) throw new Error(`update ${r.status}`);
+  return (await r.json()) as UpdateStatus;
+}
+
 export async function getErrors(range: string, agent?: string): Promise<ErrorsResponse> {
   const q = new URLSearchParams({ range });
   if (agent) q.set("agent", agent);

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"marshal/internal/notify"
+	"github.com/REDDE4D/marshal-pm/internal/notify"
 )
 
 type fakeDoer struct {

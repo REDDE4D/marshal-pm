@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/config"
 )
 
 func TestPathsUnderBase(t *testing.T) {

@@ -12,6 +12,24 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-25
+
+### Added
+- **More install methods.** Releases now also ship **`.deb`/`.rpm` packages** (binary +
+  shell completions + a disabled-by-default `marshal.service`) and a multi-arch **Docker
+  image of the fleet server + dashboard** at `ghcr.io/redde4d/marshal`. The Go module path
+  was renamed to `github.com/REDDE4D/marshal-pm`, so `go install
+  github.com/REDDE4D/marshal-pm/cmd/marshal@latest` now works.
+- **Update-available notifier.** The server checks once a day (anonymously, via GitHub's
+  `/releases/latest` redirect — no API token, no identifiers) whether a newer Marshal
+  release exists and surfaces a dismissible banner in the dashboard, which also flags any
+  connected agents running an older version. It never downloads or replaces anything —
+  update via your install method. Opt out with `MARSHAL_NO_UPDATE_CHECK=1`.
+
+### Changed
+- **Module path renamed** from `marshal` to `github.com/REDDE4D/marshal-pm` (enables
+  `go install`; no behavior change).
+
 ## [0.4.1] - 2026-06-25
 
 ### Build / tooling
@@ -163,7 +181,8 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.2.0...v0.3.0

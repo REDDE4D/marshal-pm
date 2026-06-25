@@ -19,3 +19,9 @@ data/
 # OS
 .DS_Store
 .superpowers/
+
+# Claude Code local session data / worktrees
+.claude/
+
+# GoReleaser-generated shell completions (built during release)
+/completions/

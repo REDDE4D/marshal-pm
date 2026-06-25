@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/fleetauth"
-	"marshal/internal/pb"
-	"marshal/internal/server"
+	"github.com/REDDE4D/marshal-pm/internal/fleetauth"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/server"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

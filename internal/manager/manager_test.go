@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/config"
-	"marshal/internal/supervisor"
+	"github.com/REDDE4D/marshal-pm/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/supervisor"
 )
 
 func sleepApp(name string, instances int) config.App {

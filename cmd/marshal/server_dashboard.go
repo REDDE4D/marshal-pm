@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"marshal/internal/server"
+	"github.com/REDDE4D/marshal-pm/internal/server"
 )
 
 func serverPasswdCmd() *cobra.Command {

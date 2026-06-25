@@ -3,7 +3,7 @@ package server
 import (
 	"testing"
 
-	"marshal/internal/logstore"
+	"github.com/REDDE4D/marshal-pm/internal/logstore"
 )
 
 func TestLogStoresLazyOpenAndHas(t *testing.T) {

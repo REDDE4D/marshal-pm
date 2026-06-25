@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"marshal/internal/config"
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 func TestConfineNew(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 func TestControlUnknownAgentErrors(t *testing.T) {

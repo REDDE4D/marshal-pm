@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 // FleetController is the write side of the fleet. *server.Server satisfies it.

@@ -3,7 +3,7 @@ package daemon
 import (
 	"testing"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 func TestAppSpecToConfigCopiesGitSource(t *testing.T) {
