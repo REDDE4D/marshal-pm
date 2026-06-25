@@ -20,7 +20,6 @@ export function ControlButtons({ agent, proc, state, connected }: { agent: strin
   }
   function ask(op: Op, label: string) {
     setMsg(""); setPending({ op, label });
-    window.setTimeout(() => setPending((p) => (p?.op === op ? null : p)), 3000);
   }
 
   if (busy) return <span className="ctl"><span className="ctl-msg">…</span></span>;

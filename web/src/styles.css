@@ -263,3 +263,22 @@ select.inp{ font-family:var(--i); }
 }
 .updbar-x:hover{ color:var(--bright); background:var(--line); }
 .updbar-x:focus-visible{ outline:2px solid var(--sky); outline-offset:1px; }
+
+/* Field affordances (Task 3): required marker, hint, error */
+.field .req { color: var(--dim); }
+.field .hint { margin: 4px 0 0; font-size: 11px; color: var(--dim); }
+.field .err { margin: 4px 0 0; font-size: 11px; color: var(--rose); }
+
+/* EmptyState (Task 4): muted placeholder for empty lists */
+.empty-state { padding: 22px; color: var(--dim); font-size: 13px; }
+.empty-state-action { margin-top: 8px; }
+
+/* StatusMessage (Task 5): inline feedback */
+.status-msg { margin-left: 12px; font-size: 12px; }
+.status-msg.success { color: var(--teal); }
+.status-msg.error { color: var(--rose); }
+.status-msg.info { color: var(--dim); }
+
+/* ConfirmDialog / PromptDialog (Task 6) */
+.dialog-body { margin: 0 0 16px; color: var(--dim); font-size: 13px; }
+.dialog-label { display: block; margin-bottom: 6px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; }
