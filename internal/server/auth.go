@@ -21,6 +21,7 @@ import (
 
 	"github.com/REDDE4D/marshal-pm/internal/audit"
 	"github.com/REDDE4D/marshal-pm/internal/fleetauth"
+	"github.com/REDDE4D/marshal-pm/internal/ratelimit"
 )
 
 type authAgentEntry struct {
@@ -41,18 +42,30 @@ type authData struct {
 	Users           map[string]dashboardUser  `json:"users,omitempty"`
 }
 
+// grpcThrottlePolicy is the default per-IP lockout for gRPC auth failures: 10
+// consecutive failures → 5s lock, doubling up to 5min. Higher threshold than the
+// dashboard since agents reconnect; a success resets the IP (see ratelimit).
+func grpcThrottlePolicy() ratelimit.Policy {
+	return ratelimit.Policy{Threshold: 10, Base: 5 * time.Second, Cap: 5 * time.Minute}
+}
+
 // AuthStore holds the persisted auth tokens for a Marshal server instance.
 type AuthStore struct {
-	path  string
-	mu    sync.Mutex
-	data  authData
-	mtime time.Time
-	audit *audit.Log // optional; records gRPC auth failures. Set once at startup.
+	path     string
+	mu       sync.Mutex
+	data     authData
+	mtime    time.Time
+	audit    *audit.Log         // optional; records gRPC auth failures. Set once at startup.
+	throttle *ratelimit.Limiter // per-IP gRPC auth-failure lockout.
 }
 
 // SetAuditLog attaches an audit log so the gRPC interceptors record auth
 // failures. Call once during startup, before serving. A nil log disables it.
 func (a *AuthStore) SetAuditLog(l *audit.Log) { a.audit = l }
+
+// SetThrottle overrides the per-IP gRPC auth throttle (used by tests; a default
+// is installed at construction).
+func (a *AuthStore) SetThrottle(l *ratelimit.Limiter) { a.throttle = l }
 
 // InitSecrets carries the plaintext tokens generated on first init.
 // It is non-nil only when auth.json is created for the first time.
@@ -76,7 +89,11 @@ func LoadOrInitAuth(dir string) (*AuthStore, *InitSecrets, error) {
 		return nil, nil, fmt.Errorf("create data dir: %w", err)
 	}
 	path := filepath.Join(dir, "auth.json")
-	a := &AuthStore{path: path, data: authData{Agents: map[string]authAgentEntry{}, Users: map[string]dashboardUser{}}}
+	a := &AuthStore{
+		path:     path,
+		data:     authData{Agents: map[string]authAgentEntry{}, Users: map[string]dashboardUser{}},
+		throttle: ratelimit.New(grpcThrottlePolicy(), nil),
+	}
 	b, err := os.ReadFile(path)
 	if err == nil {
 		if err := json.Unmarshal(b, &a.data); err != nil {

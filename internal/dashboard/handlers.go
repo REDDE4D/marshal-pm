@@ -14,9 +14,18 @@ import (
 
 	"github.com/REDDE4D/marshal-pm/internal/audit"
 	"github.com/REDDE4D/marshal-pm/internal/notify"
+	"github.com/REDDE4D/marshal-pm/internal/ratelimit"
 )
 
 const sessionCookie = "marshal_session"
+
+// Dashboard login lockout policy: 5 consecutive failures → 1-minute lock,
+// doubling each cycle up to 15 minutes.
+const (
+	lockoutThreshold = 5
+	lockoutBase      = time.Minute
+	lockoutCap       = 15 * time.Minute
+)
 
 // Authenticator verifies dashboard credentials. *server.AuthStore satisfies it.
 type Authenticator interface {
@@ -35,7 +44,7 @@ type handler struct {
 	controller  FleetController
 	auth        Authenticator
 	sessions    *sessionStore
-	limiter     *loginLimiter
+	limiter     *ratelimit.Limiter
 	audit       *audit.Log
 	files       fs.FS
 	static      http.Handler
@@ -65,7 +74,7 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 		controller:  controller,
 		auth:        auth,
 		sessions:    newSessionStore(ttl, nil, sessionsPath),
-		limiter:     newLoginLimiter(nil),
+		limiter:     ratelimit.New(ratelimit.Policy{Threshold: lockoutThreshold, Base: lockoutBase, Cap: lockoutCap}, nil),
 		audit:       al,
 		files:       files,
 		static:      http.FileServer(http.FS(files)),
@@ -160,7 +169,7 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 	// fresh per-user bucket).
 	key := body.User + "|" + ip
 	ipKey := "ip|" + ip
-	if locked, wait := lockedAny(h.limiter, key, ipKey); locked {
+	if locked, wait := h.limiter.LockedAny(key, ipKey); locked {
 		h.audit.Record(audit.Event{Time: time.Now().UTC(), User: body.User, IP: ip, Outcome: audit.OutcomeRateLimited})
 		secs := int(wait.Seconds())
 		if secs < 1 {
@@ -171,8 +180,8 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !h.auth.VerifyDashboardUser(body.User, body.Pass) {
-		h.limiter.fail(key)
-		h.limiter.fail(ipKey)
+		h.limiter.Fail(key)
+		h.limiter.Fail(ipKey)
 		h.audit.Record(audit.Event{Time: time.Now().UTC(), User: body.User, IP: ip, Outcome: audit.OutcomeInvalid})
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
@@ -180,7 +189,7 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 	// Reset only the per-user bucket on success. The per-IP bucket is intentionally
 	// NOT cleared, so possessing one valid credential can't wipe an in-progress
 	// brute-force counter for the whole IP.
-	h.limiter.reset(key)
+	h.limiter.Reset(key)
 	stamp, _ := h.auth.DashboardCredentialStamp(body.User)
 	tok, err := h.sessions.create(body.User, stamp)
 	if err != nil {

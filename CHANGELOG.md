@@ -12,6 +12,24 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-25
+
+### Added
+- **Per-app `env_file`.** An app may name a dotenv file (`env_file: .env.aegis`) whose
+  `KEY=VALUE` lines are loaded and merged into its environment, with inline `env:` taking
+  precedence. Resolved relative to the `marshal.yaml` directory; supports `#` comments, a
+  leading `export `, and quoted values. Lets several apps share one script with per-app env
+  files (the common PM2 ecosystem pattern) without inlining secrets into the YAML.
+
+### Security
+- **Per-IP gRPC auth throttle.** Repeated failed admin/agent/enroll token attempts from one
+  source IP now trip a lockout (10 consecutive failures → 5s, doubling to 5min), rejecting
+  further attempts with `ResourceExhausted` and an audited `rate_limited` event before any token
+  comparison. A successful auth resets the IP's counter, so several agents behind one NAT can't
+  be locked out by a single misconfigured (or hostile) peer — only an IP that is *purely*
+  failing is throttled. The login limiter was extracted to a shared `internal/ratelimit`
+  package used by both the dashboard and the fleet interceptors.
+
 ## [0.5.0] - 2026-06-25
 
 ### Added
@@ -181,7 +199,8 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.3.0...v0.4.0

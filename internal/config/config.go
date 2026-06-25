@@ -82,17 +82,23 @@ type ServerConfig struct {
 
 // App is one supervised application definition.
 type App struct {
-	Name        string            `yaml:"name" json:"name"`
-	Cmd         string            `yaml:"cmd" json:"cmd"`
-	Args        []string          `yaml:"args" json:"args"`
-	Cwd         string            `yaml:"cwd" json:"cwd"`
-	Instances   int               `yaml:"instances" json:"instances"`
-	Env         map[string]string `yaml:"env" json:"env"`
-	Restart     RestartMode       `yaml:"restart" json:"restart"`
-	MaxRestarts int               `yaml:"max_restarts" json:"max_restarts"`
-	KillTimeout Duration          `yaml:"kill_timeout" json:"kill_timeout"`
-	Logs        *LogRetention     `yaml:"logs" json:"logs,omitempty"`
-	Source      *GitSource        `yaml:"source" json:"source,omitempty"` // M21 git deploy
+	Name      string            `yaml:"name" json:"name"`
+	Cmd       string            `yaml:"cmd" json:"cmd"`
+	Args      []string          `yaml:"args" json:"args"`
+	Cwd       string            `yaml:"cwd" json:"cwd"`
+	Instances int               `yaml:"instances" json:"instances"`
+	Env       map[string]string `yaml:"env" json:"env"`
+	// EnvFile names a dotenv file (KEY=VALUE lines) loaded at config-load time and
+	// merged into Env, with inline Env taking precedence. Resolved relative to the
+	// marshal.yaml directory (absolute paths are used as-is). It is a load-time
+	// directive only — after loading, Env holds the merged result — so it is not
+	// persisted to JSON/dump.json.
+	EnvFile     string        `yaml:"env_file" json:"-"`
+	Restart     RestartMode   `yaml:"restart" json:"restart"`
+	MaxRestarts int           `yaml:"max_restarts" json:"max_restarts"`
+	KillTimeout Duration      `yaml:"kill_timeout" json:"kill_timeout"`
+	Logs        *LogRetention `yaml:"logs" json:"logs,omitempty"`
+	Source      *GitSource    `yaml:"source" json:"source,omitempty"` // M21 git deploy
 }
 
 // GitSource describes deploying an app from a git repository (M21).
@@ -110,13 +116,85 @@ type Config struct {
 	Apps   []App         `yaml:"apps"`
 }
 
-// Load reads and parses a marshal.yaml file from disk.
+// Load reads and parses a marshal.yaml file from disk. Per-app env_file
+// directives are resolved relative to the file's directory and merged into Env
+// before defaults/validation.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read config: %w", err)
 	}
-	return Parse(data)
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse config: %w", err)
+	}
+	if err := cfg.loadEnvFiles(filepath.Dir(path)); err != nil {
+		return nil, err
+	}
+	if err := cfg.Prepare(); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+// loadEnvFiles reads each app's env_file (relative to baseDir, or absolute) and
+// merges its KEY=VALUE pairs into the app's Env. Inline Env wins on collision.
+func (c *Config) loadEnvFiles(baseDir string) error {
+	for i := range c.Apps {
+		a := &c.Apps[i]
+		if a.EnvFile == "" {
+			continue
+		}
+		path := a.EnvFile
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(baseDir, path)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("app %q: read env_file %q: %w", a.Name, a.EnvFile, err)
+		}
+		fileEnv := parseDotEnv(data)
+		if a.Env == nil {
+			a.Env = map[string]string{}
+		}
+		for k, v := range fileEnv {
+			if _, inline := a.Env[k]; !inline { // inline Env takes precedence
+				a.Env[k] = v
+			}
+		}
+	}
+	return nil
+}
+
+// parseDotEnv parses dotenv content: KEY=VALUE per line, ignoring blanks and
+// '#' comments. A leading "export " is stripped, key and value are trimmed, and
+// a matched pair of surrounding single or double quotes is removed from the
+// value. Only the first '=' splits the line, so values may contain '='.
+func parseDotEnv(data []byte) map[string]string {
+	out := map[string]string{}
+	for _, raw := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		i := strings.IndexByte(line, '=')
+		if i <= 0 { // no '=' or empty key
+			continue
+		}
+		key := strings.TrimSpace(line[:i])
+		if key == "" {
+			continue
+		}
+		val := strings.TrimSpace(line[i+1:])
+		if len(val) >= 2 {
+			if (val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'') {
+				val = val[1 : len(val)-1]
+			}
+		}
+		out[key] = val
+	}
+	return out
 }
 
 // Parse decodes YAML bytes, applies defaults, and validates.
