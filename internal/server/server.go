@@ -24,6 +24,8 @@ import (
 	"github.com/REDDE4D/marshal-pm/internal/notify/channels"
 	"github.com/REDDE4D/marshal-pm/internal/pb"
 	"github.com/REDDE4D/marshal-pm/internal/secretbox"
+	"github.com/REDDE4D/marshal-pm/internal/updatecheck"
+	"github.com/REDDE4D/marshal-pm/internal/version"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -425,8 +427,13 @@ func ServeDir(ctx context.Context, lis net.Listener, dataDir, certPath, keyPath,
 			nw = notifStore
 		}
 		em := enrollMinter{auth: auth, fp: fp, fleetAddr: lis.Addr().String()}
+		// Background update check (opt-out via MARSHAL_NO_UPDATE_CHECK). Anonymous,
+		// daily, best-effort; surfaces an "update available" hint in the dashboard.
+		upd := updatecheck.New(version.String(),
+			updatecheck.WithEnabled(os.Getenv("MARSHAL_NO_UPDATE_CHECK") == ""))
+		go upd.Run(ctx)
 		go func() {
-			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath, auditLog, cw, nw, channels.New, em); err != nil {
+			if err := dashboard.Serve(ctx, httpAddr, reg, ss, ls, srv, auth, cert, sessionsPath, auditLog, cw, nw, channels.New, em, upd); err != nil {
 				log.Printf("dashboard: %v", err)
 			}
 		}()

@@ -20,11 +20,12 @@ import (
 // enroll may be nil, which disables the agent connect-token endpoint (returns 503);
 // when non-nil it mints and rotates the single shared enroll token used by
 // the Connect Agent modal to generate agent connect commands.
-func Serve(ctx context.Context, addr string, lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, cert tls.Certificate, sessionsPath string, auditLog *audit.Log, creds Credentials, notifs Notifications, notifBuild notify.BuildFunc, enroll EnrollMinter) error {
+func Serve(ctx context.Context, addr string, lister FleetLister, metrics MetricsHistory, logs LogsHistory, controller FleetController, auth Authenticator, cert tls.Certificate, sessionsPath string, auditLog *audit.Log, creds Credentials, notifs Notifications, notifBuild notify.BuildFunc, enroll EnrollMinter, updater UpdateStatus) error {
 	h := newHandler(lister, metrics, logs, controller, auth, 24*time.Hour, sessionsPath, auditLog, creds)
 	h.notifs = notifs
 	h.notifBuild = notifBuild
 	h.enroll = enroll
+	h.updater = updater
 	go h.sessions.sweepLoop(ctx, time.Hour)
 	srv := &http.Server{
 		Addr:      addr,
