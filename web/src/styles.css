@@ -263,3 +263,8 @@ select.inp{ font-family:var(--i); }
 }
 .updbar-x:hover{ color:var(--bright); background:var(--line); }
 .updbar-x:focus-visible{ outline:2px solid var(--sky); outline-offset:1px; }
+
+/* Field affordances (Task 3): required marker, hint, error */
+.field .req { color: var(--dim); }
+.field .hint { margin: 4px 0 0; font-size: 11px; color: var(--dim); }
+.field .err { margin: 4px 0 0; font-size: 11px; color: var(--rose); }
