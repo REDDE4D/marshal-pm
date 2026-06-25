@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/audit"
+	"github.com/REDDE4D/marshal-pm/internal/audit"
 )
 
 func postLogin(t *testing.T, c *http.Client, base, jsonBody string) {

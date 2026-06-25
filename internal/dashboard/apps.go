@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 // commandSource is the "command" variant of an app-creation source. It maps

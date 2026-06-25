@@ -104,14 +104,31 @@ brew install REDDE4D/tap/marshal
 curl -fsSL https://raw.githubusercontent.com/REDDE4D/marshal-pm/main/install.sh | sh
 ```
 
-Or grab a prebuilt archive for your OS/arch from the
-[releases page](https://github.com/REDDE4D/marshal-pm/releases).
-
-**From source** (requires the Go toolchain):
+**Debian / RPM** — `.deb` and `.rpm` packages are attached to each
+[release](https://github.com/REDDE4D/marshal-pm/releases); they install the binary, shell
+completions, and a (disabled-by-default) `marshal.service`:
 
 ```bash
-make build            # builds ./marshal, version stamped from git tags
+sudo dpkg -i marshal_*_linux_amd64.deb     # or: sudo rpm -i marshal_*_linux_amd64.rpm
+sudo systemctl enable --now marshal        # optional: run the daemon as a service
 ```
+
+**Docker** — the central **fleet server + dashboard** (not the per-host agent) ships as a
+container:
+
+```bash
+docker run -p 9000:9000 -p 9001:9001 -v marshal-data:/data ghcr.io/redde4d/marshal:latest
+```
+
+**Go** (requires the Go toolchain):
+
+```bash
+go install github.com/REDDE4D/marshal-pm/cmd/marshal@latest
+```
+
+Or grab a prebuilt archive for your OS/arch from the
+[releases page](https://github.com/REDDE4D/marshal-pm/releases), or build from source with
+`make build` (stamps the version from git tags).
 
 Supported platforms: linux and macOS, amd64 and arm64. (Windows is not supported — Marshal
 relies on unix process groups and service managers.)

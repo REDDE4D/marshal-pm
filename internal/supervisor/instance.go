@@ -8,8 +8,8 @@ import (
 	"syscall"
 	"time"
 
-	"marshal/internal/config"
-	"marshal/internal/proc"
+	"github.com/REDDE4D/marshal-pm/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/proc"
 )
 
 // Policy is the resolved restart policy for one instance.

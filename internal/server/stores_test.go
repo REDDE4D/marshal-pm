@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/metricstore"
+	"github.com/REDDE4D/marshal-pm/internal/metricstore"
 )
 
 func TestStoresLazyOpenAndHas(t *testing.T) {

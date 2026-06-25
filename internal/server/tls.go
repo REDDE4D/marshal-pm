@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"marshal/internal/fleetauth"
+	"github.com/REDDE4D/marshal-pm/internal/fleetauth"
 )
 
 // LoadOrCreateCert returns a TLS certificate and its fingerprint. When certPath

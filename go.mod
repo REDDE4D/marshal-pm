@@ -1,4 +1,4 @@
-module marshal
+module github.com/REDDE4D/marshal-pm
 
 go 1.26.4
 

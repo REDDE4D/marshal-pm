@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"marshal/internal/secretbox"
+	"github.com/REDDE4D/marshal-pm/internal/secretbox"
 )
 
 func testStore(t *testing.T) (*Store, string) {

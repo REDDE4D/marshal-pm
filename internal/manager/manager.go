@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"marshal/internal/config"
-	"marshal/internal/proc"
-	"marshal/internal/supervisor"
+	"github.com/REDDE4D/marshal-pm/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/proc"
+	"github.com/REDDE4D/marshal-pm/internal/supervisor"
 )
 
 // InstanceSnapshot is a labeled view of one supervised instance.

@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 // confine resolves a caller-supplied relative path against a trusted root and

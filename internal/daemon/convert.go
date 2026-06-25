@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"time"
 
-	"marshal/internal/config"
-	"marshal/internal/eventstore"
-	"marshal/internal/manager"
-	"marshal/internal/metrics"
-	"marshal/internal/pb"
-	"marshal/internal/supervisor"
+	"github.com/REDDE4D/marshal-pm/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/eventstore"
+	"github.com/REDDE4D/marshal-pm/internal/manager"
+	"github.com/REDDE4D/marshal-pm/internal/metrics"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/supervisor"
 )
 
 // appSpecToConfig converts a wire AppSpec into a defaulted, validated config.App.

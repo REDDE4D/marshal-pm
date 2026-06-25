@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"marshal/internal/secretbox"
+	"github.com/REDDE4D/marshal-pm/internal/secretbox"
 )
 
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)

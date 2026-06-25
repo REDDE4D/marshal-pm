@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/audit"
+	"github.com/REDDE4D/marshal-pm/internal/audit"
 )
 
 func runAudit(t *testing.T, args ...string) string {

@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"marshal/internal/audit"
-	"marshal/internal/fleetauth"
+	"github.com/REDDE4D/marshal-pm/internal/audit"
+	"github.com/REDDE4D/marshal-pm/internal/fleetauth"
 )
 
 type authAgentEntry struct {

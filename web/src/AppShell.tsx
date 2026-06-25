@@ -1,8 +1,9 @@
 import { ReactNode, useEffect, useState } from "react";
 import { useRoute, navigate, logsHref } from "./router";
 import { navItemFor } from "./lib/nav";
-import { getErrors } from "./api";
+import { getErrors, getUpdate, UpdateStatus } from "./api";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { UpdateBanner } from "./UpdateBanner";
 
 interface AppShellProps {
   ctx: ReactNode;
@@ -15,6 +16,7 @@ export function AppShell({ ctx, right, onLogout, children }: AppShellProps) {
   const route = useRoute();
   const active = navItemFor(route);
   const [badge, setBadge] = useState(0);
+  const [update, setUpdate] = useState<UpdateStatus | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,6 +35,21 @@ export function AppShell({ ctx, right, onLogout, children }: AppShellProps) {
     return () => {
       cancelled = true;
       clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    // The update check changes at most daily; one fetch on mount is enough.
+    getUpdate()
+      .then((u) => {
+        if (!cancelled) setUpdate(u);
+      })
+      .catch(() => {
+        /* swallow — the banner is non-essential */
+      });
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -99,6 +116,8 @@ export function AppShell({ ctx, right, onLogout, children }: AppShellProps) {
             <button className="lnk" onClick={onLogout}>sign out</button>
           </div>
         </div>
+
+        {update && <UpdateBanner update={update} />}
 
         <ErrorBoundary>
           <div className="content">{children}</div>

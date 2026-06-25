@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"marshal/internal/config"
-	"marshal/internal/deploy"
-	"marshal/internal/manager"
-	"marshal/internal/pb"
-	"marshal/internal/store"
+	"github.com/REDDE4D/marshal-pm/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/deploy"
+	"github.com/REDDE4D/marshal-pm/internal/manager"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/store"
 )
 
 type fakeDeployHost struct{ sources map[string]config.GitSource }

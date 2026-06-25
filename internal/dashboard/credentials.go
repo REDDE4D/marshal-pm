@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"marshal/internal/credstore"
+	"github.com/REDDE4D/marshal-pm/internal/credstore"
 )
 
 // Credentials is the subset of credstore.Store the dashboard needs.

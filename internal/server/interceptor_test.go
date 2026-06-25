@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"marshal/internal/audit"
+	"github.com/REDDE4D/marshal-pm/internal/audit"
 )
 
 func TestInterceptorAuditsAuthFailures(t *testing.T) {

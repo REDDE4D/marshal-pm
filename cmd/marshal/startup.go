@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"marshal/internal/startup"
-	"marshal/internal/store"
+	"github.com/REDDE4D/marshal-pm/internal/startup"
+	"github.com/REDDE4D/marshal-pm/internal/store"
 )
 
 func resolveConfig(system bool) (startup.Config, error) {

@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"marshal/internal/pb"
-	"marshal/internal/store"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/store"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

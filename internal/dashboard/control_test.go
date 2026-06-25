@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 type fakeController struct {

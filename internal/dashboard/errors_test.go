@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/logstore"
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/logstore"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 // errLogs is a fakeLogs whose StderrSince returns canned lines per agent.

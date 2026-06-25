@@ -17,9 +17,9 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 
-	"marshal/internal/fleetauth"
-	"marshal/internal/pb"
-	"marshal/internal/server"
+	"github.com/REDDE4D/marshal-pm/internal/fleetauth"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/server"
 )
 
 func TestFleetMetricsCmdShape(t *testing.T) {

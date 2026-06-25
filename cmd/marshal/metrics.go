@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 func metricsCmd() *cobra.Command {

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 // errDisconnected is returned by dispatch when the agent's session is torn down

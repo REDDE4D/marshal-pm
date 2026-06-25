@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"marshal/internal/audit"
-	"marshal/internal/notify"
+	"github.com/REDDE4D/marshal-pm/internal/audit"
+	"github.com/REDDE4D/marshal-pm/internal/notify"
 )
 
 const sessionCookie = "marshal_session"
@@ -44,6 +44,7 @@ type handler struct {
 	notifs      Notifications
 	notifBuild  notify.BuildFunc
 	enroll      EnrollMinter
+	updater     UpdateStatus
 	// scanHost performs a one-time SSH host-key scan (TOFU). The default
 	// implementation shells out to ssh-keyscan; tests inject a stub.
 	scanHost func(hostport string) (string, error)
@@ -90,6 +91,7 @@ func newHandler(lister FleetLister, metrics MetricsHistory, logs LogsHistory, co
 	mux.HandleFunc("POST /api/login", h.login)
 	mux.HandleFunc("POST /api/logout", h.logout)
 	mux.HandleFunc("GET /api/session", h.requireSession(h.session))
+	mux.HandleFunc("GET /api/update", h.requireSession(h.updateStatus))
 	mux.HandleFunc("GET /api/fleet", h.requireSession(h.fleet))
 	mux.HandleFunc("GET /api/metrics", h.requireSession(h.metrics))
 	mux.HandleFunc("GET /api/logs", h.requireSession(h.logs))

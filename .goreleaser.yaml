@@ -14,6 +14,11 @@ project_name: marshal
 before:
   hooks:
     - go mod download
+    # Generate shell completions bundled into the .deb/.rpm packages.
+    - mkdir -p completions
+    - sh -c "go run ./cmd/marshal completion bash > completions/marshal.bash"
+    - sh -c "go run ./cmd/marshal completion zsh  > completions/marshal.zsh"
+    - sh -c "go run ./cmd/marshal completion fish > completions/marshal.fish"
 
 builds:
   - id: marshal
@@ -32,7 +37,7 @@ builds:
     # Stamp the same version variable the Makefile uses, with the v-prefixed tag
     # so `marshal --version` matches a `make build` from the same tag.
     ldflags:
-      - -s -w -X marshal/internal/version.Version={{ .Tag }}
+      - -s -w -X github.com/REDDE4D/marshal-pm/internal/version.Version={{ .Tag }}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
@@ -43,6 +48,31 @@ archives:
       - README.md
       - LICENSE
       - CHANGELOG.md
+
+# Linux packages: ship the binary, a (disabled-by-default) systemd unit, and
+# shell completions. Attached to the GitHub Release as .deb and .rpm assets.
+nfpms:
+  - id: marshal
+    package_name: marshal
+    vendor: REDDE4D
+    homepage: "https://github.com/REDDE4D/marshal-pm"
+    maintainer: "REDDE4D <noreply@users.noreply.github.com>"
+    description: "Free, self-hosted process & fleet manager — an open alternative to PM2 / PM2 Plus"
+    license: "GPL-3.0-only"
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    contents:
+      - src: packaging/marshal.service
+        dst: /usr/lib/systemd/system/marshal.service
+        type: "config|noreplace"
+      - src: completions/marshal.bash
+        dst: /usr/share/bash-completion/completions/marshal
+      - src: completions/marshal.zsh
+        dst: /usr/share/zsh/site-functions/_marshal
+      - src: completions/marshal.fish
+        dst: /usr/share/fish/vendor_completions.d/marshal.fish
 
 checksum:
   name_template: "checksums.txt"
@@ -82,6 +112,46 @@ brews:
       bin.install "marshal"
     test: |
       system "#{bin}/marshal", "--version"
+
+# Multi-arch container image of the fleet server, pushed to GHCR. Built per-arch
+# then stitched into a single manifest. CI provides buildx + QEMU + a GHCR login.
+dockers:
+  - id: marshal-amd64
+    goos: linux
+    goarch: amd64
+    dockerfile: packaging/Dockerfile
+    use: buildx
+    image_templates:
+      - "ghcr.io/redde4d/marshal:{{ .Version }}-amd64"
+      - "ghcr.io/redde4d/marshal:latest-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.source=https://github.com/REDDE4D/marshal-pm"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.licenses=GPL-3.0-only"
+  - id: marshal-arm64
+    goos: linux
+    goarch: arm64
+    dockerfile: packaging/Dockerfile
+    use: buildx
+    image_templates:
+      - "ghcr.io/redde4d/marshal:{{ .Version }}-arm64"
+      - "ghcr.io/redde4d/marshal:latest-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.source=https://github.com/REDDE4D/marshal-pm"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.licenses=GPL-3.0-only"
+
+docker_manifests:
+  - name_template: "ghcr.io/redde4d/marshal:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/redde4d/marshal:{{ .Version }}-amd64"
+      - "ghcr.io/redde4d/marshal:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/redde4d/marshal:latest"
+    image_templates:
+      - "ghcr.io/redde4d/marshal:latest-amd64"
+      - "ghcr.io/redde4d/marshal:latest-arm64"
 
 release:
   github:

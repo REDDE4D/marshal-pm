@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"marshal/internal/config"
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 // confineNew is confine's sibling for paths that may not exist yet (create /

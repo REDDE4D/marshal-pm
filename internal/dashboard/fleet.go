@@ -1,6 +1,6 @@
 package dashboard
 
-import "marshal/internal/pb"
+import "github.com/REDDE4D/marshal-pm/internal/pb"
 
 // FleetLister is the read side of the live registry the dashboard renders.
 // *server.Registry satisfies it.

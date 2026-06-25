@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/logs"
-	"marshal/internal/manager"
-	"marshal/internal/metrics"
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/logs"
+	"github.com/REDDE4D/marshal-pm/internal/manager"
+	"github.com/REDDE4D/marshal-pm/internal/metrics"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

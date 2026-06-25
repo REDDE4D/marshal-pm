@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 // Lister is the subset of *server.Registry the detector reads.

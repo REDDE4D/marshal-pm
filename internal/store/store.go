@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"marshal/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/config"
 )
 
 // Store resolves paths within the state directory.

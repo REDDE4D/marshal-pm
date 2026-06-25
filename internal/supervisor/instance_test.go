@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/config"
-	"marshal/internal/proc"
+	"github.com/REDDE4D/marshal-pm/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/proc"
 )
 
 func testPolicy(mode config.RestartMode) Policy {

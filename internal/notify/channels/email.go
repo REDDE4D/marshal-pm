@@ -6,7 +6,7 @@ import (
 	"net/smtp"
 	"strings"
 
-	"marshal/internal/notify"
+	"github.com/REDDE4D/marshal-pm/internal/notify"
 )
 
 // smtpSend is the SMTP seam; tests override it.

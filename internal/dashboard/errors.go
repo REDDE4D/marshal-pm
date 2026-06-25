@@ -3,7 +3,7 @@ package dashboard
 import (
 	"net/http"
 
-	"marshal/internal/errsig"
+	"github.com/REDDE4D/marshal-pm/internal/errsig"
 )
 
 const (

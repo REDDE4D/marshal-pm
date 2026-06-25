@@ -3,12 +3,12 @@ package daemon
 import (
 	"time"
 
-	"marshal/internal/eventstore"
-	"marshal/internal/fleet"
-	"marshal/internal/logs"
-	"marshal/internal/metrics"
-	"marshal/internal/metricstore"
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/eventstore"
+	"github.com/REDDE4D/marshal-pm/internal/fleet"
+	"github.com/REDDE4D/marshal-pm/internal/logs"
+	"github.com/REDDE4D/marshal-pm/internal/metrics"
+	"github.com/REDDE4D/marshal-pm/internal/metricstore"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 // fleetSnapshot returns a SnapshotFunc over the manager's current instances,

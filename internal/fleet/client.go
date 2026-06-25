@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 
 	"github.com/shirou/gopsutil/v3/host"
 	"google.golang.org/grpc"

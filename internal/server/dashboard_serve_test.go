@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"marshal/internal/dashboard"
-	"marshal/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/dashboard"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
 )
 
 // emptyLister is a minimal dashboard.FleetLister stub for tests that don't

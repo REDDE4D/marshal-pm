@@ -12,10 +12,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"marshal/internal/client"
-	"marshal/internal/config"
-	"marshal/internal/pb"
-	"marshal/internal/store"
+	"github.com/REDDE4D/marshal-pm/internal/client"
+	"github.com/REDDE4D/marshal-pm/internal/config"
+	"github.com/REDDE4D/marshal-pm/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/store"
 )
 
 // withClient connects to (or spawns) the daemon and runs fn.

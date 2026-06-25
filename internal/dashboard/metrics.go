@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"marshal/internal/metricstore"
+	"github.com/REDDE4D/marshal-pm/internal/metricstore"
 )
 
 // MetricsHistory is the read side of stored CPU/mem history. *server.stores satisfies it.
