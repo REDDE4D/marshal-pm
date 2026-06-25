@@ -16,6 +16,10 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 - **`marshal stop`/`restart`/`delete` accept a `marshal.yaml`**, like `marshal start` does. Passing a
   config file targets every app it defines (an app that isn't running is warned about, not fatal),
   so `marshal stop marshal.yaml` works instead of looking for an app literally named `marshal.yaml`.
+- **`marshal enroll <server> --token --fingerprint` / `marshal unenroll`** join or leave a central
+  server from a host's local daemon. Once enrolled, every app on the host (everything `marshal start`
+  manages) appears in that server's dashboard automatically — no per-app step. The daemon now watches
+  its server config and connects/reconnects live, so enrolling no longer requires a daemon restart.
 
 ### Changed
 - **`marshal start`'s help now spells out that it's local-only** — apps it starts show in `marshal
