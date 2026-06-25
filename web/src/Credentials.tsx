@@ -59,7 +59,6 @@ export function Credentials({ onLogout: _onLogout }: { onLogout: () => void }) {
         show("success", "key generated");
       } else {
         const msg = res.error || "error";
-        setError(msg);
         show("error", msg);
       }
     } else {
@@ -73,7 +72,6 @@ export function Credentials({ onLogout: _onLogout }: { onLogout: () => void }) {
         show("success", "credential added");
       } else {
         const msg = res.error || "error";
-        setError(msg);
         show("error", msg);
       }
     }
