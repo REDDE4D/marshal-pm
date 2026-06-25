@@ -12,6 +12,8 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-06-25
+
 ### Build / tooling
 - **Prebuilt binary distribution.** Releases now ship cross-compiled archives
   (linux/darwin × amd64/arm64) with checksums via GoReleaser, driven by the
@@ -161,7 +163,8 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.1.0...v0.2.0
