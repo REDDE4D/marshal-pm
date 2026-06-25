@@ -278,3 +278,7 @@ select.inp{ font-family:var(--i); }
 .status-msg.success { color: var(--teal); }
 .status-msg.error { color: var(--rose); }
 .status-msg.info { color: var(--dim); }
+
+/* ConfirmDialog / PromptDialog (Task 6) */
+.dialog-body { margin: 0 0 16px; color: var(--dim); font-size: 13px; }
+.dialog-label { display: block; margin-bottom: 6px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; }
