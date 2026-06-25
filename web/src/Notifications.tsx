@@ -6,6 +6,8 @@ import {
 } from "./api";
 import { SectionHeader, LedgerHeader, LedgerRow } from "./components/Ledger";
 import { Toggle, Chip, Field, Input, Button } from "./components/Controls";
+import { EmptyState } from "./components/EmptyState";
+import { useStatus, StatusMessage } from "./components/StatusMessage";
 
 const EVENT_TYPES = ["crash", "restart_loop", "agent_down", "agent_up", "deploy_fail", "recovered"];
 const CHANNEL_TYPES = ["webhook", "telegram", "slack", "email"];
@@ -92,7 +94,7 @@ function ChannelSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => v
   const [name, setName] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [fields, setFields] = useState<Record<string, string>>({});
-  const [msg, setMsg] = useState("");
+  const { status, show } = useStatus();
 
   async function submit() {
     const config: Record<string, string> = {};
@@ -100,11 +102,13 @@ function ChannelSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => v
     for (const f of CONFIG_FIELDS[type]) config[f] = fields[f] ?? "";
     for (const f of SECRET_FIELDS[type]) if (fields[f]) secrets[f] = fields[f];
     const res = await putChannel({ name, type, enabled, config, secrets });
-    setMsg(res.ok ? "saved" : res.error ?? "error");
     if (res.ok) {
+      show("success", "saved");
       setName("");
       setFields({});
       onChange();
+    } else {
+      show("error", res.error ?? "error");
     }
   }
 
@@ -118,7 +122,9 @@ function ChannelSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => v
         count={`${cfg.channels.length} configured`}
       />
 
-      {cfg.channels.length > 0 && (
+      {cfg.channels.length === 0 ? (
+        <EmptyState message="No channels yet — fill the form below and click Add channel." />
+      ) : (
         <>
           <LedgerHeader cols={CHANNEL_COLS}>
             <div>Name</div>
@@ -139,7 +145,11 @@ function ChannelSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => v
                   variant: undefined,
                   onClick: async () => {
                     const r = await testChannel(c.name);
-                    setMsg(r.ok ? "test sent" : r.error ?? "test failed");
+                    if (r.ok) {
+                      show("success", "test sent");
+                    } else {
+                      show("error", r.error ?? "test failed");
+                    }
                   },
                 },
                 {
@@ -186,7 +196,7 @@ function ChannelSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => v
               ))}
             </select>
           </Field>
-          <Field label="name">
+          <Field label="name" required hint="A label for this channel, e.g. tgbot — separate from the bot token">
             <Input
               placeholder="channel-name"
               value={name}
@@ -221,14 +231,10 @@ function ChannelSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => v
       </div>
 
       <div className="actions">
-        <Button onClick={submit} disabled={!name.trim()}>
-          + add channel
+        <Button onClick={submit} disabledReason={name.trim() ? undefined : "Enter a channel name first"}>
+          Add channel
         </Button>
-        {msg && (
-          <span className="sub" style={{ marginLeft: "12px", color: msg === "saved" || msg === "test sent" ? "var(--teal)" : "var(--rose)" }}>
-            {msg}
-          </span>
-        )}
+        <StatusMessage status={status} />
       </div>
     </>
   );
@@ -244,7 +250,7 @@ function RuleSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => void
   const [agent, setAgent] = useState("*");
   const [process, setProcess] = useState("*");
   const [chans, setChans] = useState<string[]>([]);
-  const [msg, setMsg] = useState("");
+  const { status, show } = useStatus();
 
   function toggle(list: string[], v: string, set: (x: string[]) => void) {
     set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
@@ -253,12 +259,14 @@ function RuleSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => void
   async function submit() {
     const rule: NotifRule = { name, enabled: true, events, agent, process, channels: chans };
     const res = await putRule(rule);
-    setMsg(res.ok ? "saved" : res.error ?? "error");
     if (res.ok) {
+      show("success", "saved");
       setName("");
       setEvents([]);
       setChans([]);
       onChange();
+    } else {
+      show("error", res.error ?? "error");
     }
   }
 
@@ -270,7 +278,9 @@ function RuleSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => void
         count={`${cfg.rules.length} rule${cfg.rules.length !== 1 ? "s" : ""}`}
       />
 
-      {cfg.rules.length > 0 && (
+      {cfg.rules.length === 0 ? (
+        <EmptyState message="No rules yet — events won't notify until a rule routes them to a channel." />
+      ) : (
         <>
           <LedgerHeader cols={RULE_COLS}>
             <div>Name</div>
@@ -399,14 +409,10 @@ function RuleSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => void
       </div>
 
       <div className="actions">
-        <Button onClick={submit} disabled={!name.trim()}>
-          + add rule
+        <Button onClick={submit} disabledReason={name.trim() ? undefined : "Enter a rule name first"}>
+          Add rule
         </Button>
-        {msg && (
-          <span className="sub" style={{ marginLeft: "12px", color: msg === "saved" ? "var(--teal)" : "var(--rose)" }}>
-            {msg}
-          </span>
-        )}
+        <StatusMessage status={status} />
       </div>
     </>
   );
@@ -428,8 +434,7 @@ function SettingsSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => 
     }
     return init;
   });
-  const [msg, setMsg] = useState("");
-  const [ok, setOk] = useState(true);
+  const { status, show } = useStatus();
   const [testing, setTesting] = useState(false);
 
   const enabledCount = cfg.channels.filter((c) => c.enabled).length;
@@ -439,19 +444,15 @@ function SettingsSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => 
     try {
       const r = await testAllChannels();
       if (r.error) {
-        setOk(false);
-        setMsg(r.error);
+        show("error", r.error);
       } else if (r.results.length === 0) {
-        setOk(false);
-        setMsg("no enabled channels to test");
+        show("error", "no enabled channels to test");
       } else {
         const failed = r.results.filter((x) => !x.ok);
         if (failed.length === 0) {
-          setOk(true);
-          setMsg(`test sent to ${r.sent} channel${r.sent === 1 ? "" : "s"}`);
+          show("success", `test sent to ${r.sent} channel${r.sent === 1 ? "" : "s"}`);
         } else {
-          setOk(false);
-          setMsg(`${r.sent} sent · ${failed.map((f) => `${f.name}: ${f.error}`).join("; ")}`);
+          show("error", `${r.sent} sent · ${failed.map((f) => `${f.name}: ${f.error}`).join("; ")}`);
         }
       }
     } finally {
@@ -470,9 +471,12 @@ function SettingsSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => 
       cooldown_overrides: co,
       coalesce_window_seconds: coalesce,
     });
-    setOk(res.ok);
-    setMsg(res.ok ? "saved" : res.error ?? "save failed");
-    if (res.ok) onChange();
+    if (res.ok) {
+      show("success", "saved");
+      onChange();
+    } else {
+      show("error", res.error ?? "save failed");
+    }
   }
 
   return (
@@ -561,11 +565,7 @@ function SettingsSection({ cfg, onChange }: { cfg: NotifConfig; onChange: () => 
         >
           {testing ? "sending…" : "send test notification"}
         </Button>
-        {msg && (
-          <span className="sub" style={{ marginLeft: "12px", color: ok ? "var(--teal)" : "var(--rose)" }}>
-            {msg}
-          </span>
-        )}
+        <StatusMessage status={status} />
       </div>
     </>
   );
