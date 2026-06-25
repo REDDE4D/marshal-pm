@@ -15,12 +15,17 @@ import (
 )
 
 func serverCmd() *cobra.Command {
-	var listen, dataDir, tlsCert, tlsKey, httpListen string
+	var listen, dataDir, tlsCert, tlsKey, httpListen, selfEnroll string
 	cmd := &cobra.Command{
 		Use:   "server",
 		Short: "Run the Marshal central server (fleet aggregation)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if selfEnroll != "" {
+				// Single-host quickstart: server + dashboard + a local agent
+				// running the given marshal.yaml, all in one process.
+				return runSelfEnroll(cmd, dataDir, listen, httpListen, tlsCert, tlsKey, selfEnroll)
+			}
 			if dataDir == "" {
 				dataDir = defaultServerDataDir()
 			}
@@ -52,7 +57,8 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringVar(&tlsCert, "tls-cert", "", "path to TLS cert PEM (default <data-dir>/cert.pem, generated if absent)")
 	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "path to TLS key PEM (default <data-dir>/key.pem)")
 	cmd.Flags().StringVar(&httpListen, "http-listen", "", "address for the web dashboard (e.g. :9001); disabled if empty")
-	cmd.AddCommand(serverFingerprintCmd(), serverTokenCmd(), serverAgentCmd(), serverPasswdCmd(), serverAuditCmd())
+	cmd.Flags().StringVar(&selfEnroll, "self-enroll", "", "single-host quickstart: also run a local agent for this marshal.yaml and show it in the dashboard (dashboard defaults to :9001)")
+	cmd.AddCommand(serverFingerprintCmd(), serverTokenCmd(), serverAgentCmd(), serverPasswdCmd(), serverAuditCmd(), serverStartupCmd())
 	return cmd
 }
 

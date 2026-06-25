@@ -12,6 +12,28 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-25
+
+### Added
+- **Single-host quickstart: `marshal server --self-enroll <marshal.yaml>`.** One command boots
+  the fleet server + dashboard (defaults to `:9001`), enrolls an in-process local agent against
+  it, and supervises the apps in the file — so a single host gets a working dashboard without the
+  multi-step token/fingerprint enrollment dance.
+- **`marshal server startup`.** Installs a boot service (systemd/launchd) for the fleet server +
+  dashboard — the server-side counterpart of `marshal startup` (which runs the agent). With
+  `--self-enroll <marshal.yaml>` it installs the single-host quickstart as a service; `--remove`
+  uninstalls; `--system` installs a root-level unit.
+- **PM2 ecosystem import.** `marshal import pm2 <ecosystem.config.js|.json|.yaml>` converts a
+  PM2 ecosystem file to a `marshal.yaml`. `.js`/`.cjs` files are evaluated with `node`, so
+  dynamic config (env loaders, spreads, etc.) resolves exactly as it would under PM2; `.json`
+  and `.yaml` are read directly. Maps `script`/`interpreter`/`node_args` → `cmd`/`args` (with
+  interpreter inferred from the script extension), plus `cwd`, `env`, `env_file`, `instances`,
+  `autorestart`, `max_restarts`, and `kill_timeout`. Fields with no equivalent (cluster mode,
+  `watch`, `cron_restart`, `instances: "max"`) are reported as warnings. Output goes to stdout
+  or, with `-o`, to a `0600` file (it may contain resolved secrets); `--split-env` instead
+  writes each app's env to a `0600` `<name>.env` file referenced via `env_file:`, keeping
+  resolved secrets out of the generated `marshal.yaml`.
+
 ### Fixed
 - **install.sh PATH guidance.** When the binary lands in `~/.local/bin` (the fallback when
   `/usr/local/bin` isn't writable) and that directory isn't on `PATH`, the installer now prints
@@ -213,7 +235,8 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/REDDE4D/marshal-pm/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.4.1...v0.5.0

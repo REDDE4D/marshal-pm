@@ -10,10 +10,9 @@ import (
 
 type launchd struct{}
 
-const launchdLabel = "com.marshal.daemon"
-
 func (launchd) InstallPlan(c Config) Plan {
 	content := renderLaunchdPlist(c)
+	launchdLabel := c.launchdLabelFor()
 	file := launchdLabel + ".plist"
 	if c.System {
 		unit := "/Library/LaunchDaemons/" + file
@@ -59,10 +58,12 @@ func renderLaunchdPlist(c Config) string {
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
 	b.WriteString(`<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">` + "\n")
 	b.WriteString(`<plist version="1.0">` + "\n<dict>\n")
-	stringElem(&b, "Label", launchdLabel)
+	stringElem(&b, "Label", c.launchdLabelFor())
 	b.WriteString("  <key>ProgramArguments</key>\n  <array>\n")
 	arrayString(&b, c.Binary)
-	arrayString(&b, "daemon")
+	for _, a := range c.args() {
+		arrayString(&b, a)
+	}
 	b.WriteString("  </array>\n")
 	boolElem(&b, "RunAtLoad", true)
 	boolElem(&b, "KeepAlive", true)
