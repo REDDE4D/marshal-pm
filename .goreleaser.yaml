@@ -1,0 +1,91 @@
+# GoReleaser config for Marshal — cross-compiles the (pure-Go, CGO-free) binary
+# for linux/darwin × amd64/arm64, attaches archives + checksums to the GitHub
+# Release, and publishes a Homebrew formula to REDDE4D/homebrew-tap.
+#
+# Triggered by .github/workflows/release.yml on a `v*` tag push. To dry-run
+# locally: `goreleaser build --snapshot --clean` (or `goreleaser check`).
+#
+# Windows is intentionally omitted: Marshal uses unix process-group syscalls
+# (syscall.SysProcAttr.Setsid) and unix service managers (systemd/launchd).
+version: 2
+
+project_name: marshal
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: marshal
+    main: ./cmd/marshal
+    binary: marshal
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    # Stamp the same version variable the Makefile uses, with the v-prefixed tag
+    # so `marshal --version` matches a `make build` from the same tag.
+    ldflags:
+      - -s -w -X marshal/internal/version.Version={{ .Tag }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: marshal
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+
+# NOTE: we publish a Homebrew *formula* (`brews`), not a cask. GoReleaser marks
+# `brews` deprecated in favour of `homebrew_casks`, but Homebrew casks are
+# macOS-only — a formula is what lets `brew install` work on Linux too, which
+# matters for a server-side process manager. The CI workflow pins GoReleaser to
+# `~> v2`, so this keeps working until (and if) we migrate at the v3 boundary.
+brews:
+  - name: marshal
+    repository:
+      owner: REDDE4D
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/REDDE4D/marshal-pm"
+    description: "Free, self-hosted process & fleet manager — an open alternative to PM2 / PM2 Plus"
+    license: "GPL-3.0-only"
+    commit_author:
+      name: goreleaser-bot
+      email: goreleaser-bot@users.noreply.github.com
+    install: |
+      bin.install "marshal"
+    test: |
+      system "#{bin}/marshal", "--version"
+
+release:
+  github:
+    owner: REDDE4D
+    name: marshal-pm
+  prerelease: auto
+  draft: false

@@ -12,6 +12,15 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Build / tooling
+- **Prebuilt binary distribution.** Releases now ship cross-compiled archives
+  (linux/darwin × amd64/arm64) with checksums via GoReleaser, driven by the
+  existing `v*` tag push. Adds a **Homebrew formula** published to
+  `REDDE4D/homebrew-tap` (`brew install REDDE4D/tap/marshal`, Linux + macOS) and a
+  `curl … | sh` [install script](install.sh). README gains an Install section.
+  Requires a `HOMEBREW_TAP_GITHUB_TOKEN` Actions secret + a `REDDE4D/homebrew-tap`
+  repo for the formula push (the binary release works without them).
+
 ## [0.4.0] - 2026-06-25
 
 ### Added
