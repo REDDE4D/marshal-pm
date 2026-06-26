@@ -54,6 +54,27 @@ func (s *Server) handleFleetCommand(cmd *pb.Command) *pb.ControlResult {
 	case *pb.ControlOp_Reload:
 		snaps, err = s.mgr.Reload(v.Reload.GetTarget())
 
+	case *pb.ControlOp_Reset_:
+		snaps, err = s.mgr.ResetCounters(v.Reset_.GetTarget())
+		if err == nil && s.estore != nil {
+			labels := make([]string, 0, len(snaps))
+			for _, sn := range snaps {
+				labels = append(labels, sn.Label)
+			}
+			_, _ = s.estore.DeleteLabels(labels)
+		}
+
+	case *pb.ControlOp_Flush:
+		var fsnaps []manager.InstanceSnapshot
+		fsnaps, err = s.mgr.Describe(v.Flush.GetTarget())
+		if err == nil && s.logs != nil {
+			labels := make([]string, 0, len(fsnaps))
+			for _, sn := range fsnaps {
+				labels = append(labels, sn.Label)
+			}
+			_ = s.logs.Truncate(labels)
+		}
+
 	case *pb.ControlOp_Delete:
 		snaps, err = s.mgr.Delete(v.Delete.GetTarget())
 		forgot := false
@@ -62,6 +83,15 @@ func (s *Server) handleFleetCommand(cmd *pb.Command) *pb.ControlResult {
 		}
 		if err != nil && forgot {
 			err = nil // the target was a failed/in-flight deploy, now cleared
+		}
+		if err == nil && s.guard != nil {
+			seen := map[string]bool{}
+			for _, sn := range snaps {
+				if !seen[sn.Name] {
+					seen[sn.Name] = true
+					s.guard.Remove(sn.Name)
+				}
+			}
 		}
 		if err == nil && s.store != nil {
 			_ = s.store.Save(s.mgr.Specs())

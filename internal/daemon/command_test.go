@@ -10,6 +10,8 @@ import (
 
 	"github.com/REDDE4D/marshal-pm/internal/config"
 	"github.com/REDDE4D/marshal-pm/internal/deploy"
+	"github.com/REDDE4D/marshal-pm/internal/eventstore"
+	"github.com/REDDE4D/marshal-pm/internal/logs"
 	"github.com/REDDE4D/marshal-pm/internal/manager"
 	"github.com/REDDE4D/marshal-pm/internal/pb"
 	"github.com/REDDE4D/marshal-pm/internal/store"
@@ -369,5 +371,35 @@ func TestCredFromProtoHTTPS(t *testing.T) {
 	}
 	if (credFromProto(nil)) != (deploy.Credential{}) {
 		t.Fatal("nil credential must map to zero value")
+	}
+}
+
+func TestHandleFleetCommandResetAndFlush(t *testing.T) {
+	s := newCommandTestServer(t)
+	defer s.mgr.StopAll()
+	s.logs = logs.NewRegistry(t.TempDir())
+	es, err := eventstore.Open(filepath.Join(t.TempDir(), "r.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer es.Close()
+	s.estore = es
+
+	start := &pb.Command{RequestId: 1, Op: &pb.ControlOp{Op: &pb.ControlOp_Start{
+		Start: &pb.StartRequest{Apps: []*pb.AppSpec{sleepLongSpec("app1")}}}}}
+	if res := s.handleFleetCommand(start); !res.GetOk() {
+		t.Fatalf("start failed: %s", res.GetError())
+	}
+
+	reset := &pb.Command{RequestId: 2, Op: &pb.ControlOp{Op: &pb.ControlOp_Reset_{
+		Reset_: &pb.Selector{Target: "app1"}}}}
+	if res := s.handleFleetCommand(reset); !res.GetOk() {
+		t.Fatalf("reset failed: %s", res.GetError())
+	}
+
+	flush := &pb.Command{RequestId: 3, Op: &pb.ControlOp{Op: &pb.ControlOp_Flush{
+		Flush: &pb.Selector{Target: "app1"}}}}
+	if res := s.handleFleetCommand(flush); !res.GetOk() {
+		t.Fatalf("flush failed: %s", res.GetError())
 	}
 }

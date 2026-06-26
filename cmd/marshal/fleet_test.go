@@ -254,3 +254,15 @@ func (s *controlStub) FleetControl(ctx context.Context, req *pb.FleetControlRequ
 	s.capturedToken <- tok
 	return &pb.FleetControlResponse{Result: &pb.ControlResult{Ok: true}}, nil
 }
+
+func TestFleetResetFlushRegistered(t *testing.T) {
+	have := map[string]bool{}
+	for _, c := range fleetCmd().Commands() {
+		have[strings.Fields(c.Use)[0]] = true
+	}
+	for _, name := range []string{"reset", "flush"} {
+		if !have[name] {
+			t.Errorf("fleet subcommand %q not registered", name)
+		}
+	}
+}

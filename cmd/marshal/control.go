@@ -40,15 +40,16 @@ func withClient(fn func(context.Context, pb.DaemonClient) error) error {
 
 func appToSpec(a config.App) *pb.AppSpec {
 	spec := &pb.AppSpec{
-		Name:        a.Name,
-		Cmd:         a.Cmd,
-		Args:        a.Args,
-		Cwd:         a.Cwd,
-		Instances:   int32(a.Instances),
-		Env:         a.Env,
-		Restart:     string(a.Restart),
-		MaxRestarts: int32(a.MaxRestarts),
-		KillTimeout: a.KillTimeout.Duration.String(),
+		Name:             a.Name,
+		Cmd:              a.Cmd,
+		Args:             a.Args,
+		Cwd:              a.Cwd,
+		Instances:        int32(a.Instances),
+		Env:              a.Env,
+		Restart:          string(a.Restart),
+		MaxRestarts:      int32(a.MaxRestarts),
+		KillTimeout:      a.KillTimeout.Duration.String(),
+		MaxMemoryRestart: int64(a.MaxMemoryRestart.Bytes),
 	}
 	if a.Logs != nil {
 		lr := &pb.LogRetention{}
@@ -163,6 +164,30 @@ func selectorCmd(use, short string, call func(context.Context, pb.DaemonClient, 
 					agg.Procs = append(agg.Procs, list.GetProcs()...)
 				}
 				printProcs(cmd, agg)
+				return nil
+			})
+		},
+	}
+}
+
+// flushCmd clears captured logs for app(s). The selector argument is optional
+// and defaults to "all" (matching `pm2 flush`).
+func flushCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "flush [name|id|all]",
+		Short: "Clear captured logs for app(s) (default: all)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := "all"
+			if len(args) == 1 {
+				target = args[0]
+			}
+			return withClient(func(ctx context.Context, c pb.DaemonClient) error {
+				ack, err := c.Flush(ctx, &pb.Selector{Target: target})
+				if err != nil {
+					return err
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), "marshal:", ack.GetMessage())
 				return nil
 			})
 		},
@@ -508,11 +533,38 @@ func logsCmd() *cobra.Command {
 	return cmd
 }
 
+// logPalette is the set of ANSI foreground colors cycled for per-app log prefixes.
+var logPalette = []string{
+	"\x1b[36m", // cyan
+	"\x1b[32m", // green
+	"\x1b[33m", // yellow
+	"\x1b[35m", // magenta
+	"\x1b[34m", // blue
+	"\x1b[91m", // bright red
+}
+
+const ansiReset = "\x1b[0m"
+
+// labelColor maps a label to a stable color from logPalette (FNV-1a hash).
+func labelColor(label string) string {
+	var h uint32 = 2166136261
+	for i := 0; i < len(label); i++ {
+		h ^= uint32(label[i])
+		h *= 16777619
+	}
+	return logPalette[int(h)%len(logPalette)]
+}
+
 // printLogLine writes a tagged log line: stdout lines to stdout, stderr to stderr.
+// The "name#idx" prefix is colorized when the destination is a terminal.
 func printLogLine(cmd *cobra.Command, ln *pb.LogLine) {
 	w := cmd.OutOrStdout()
 	if ln.GetStderr() {
 		w = cmd.ErrOrStderr()
 	}
-	fmt.Fprintf(w, "%s#%d | %s\n", ln.GetName(), ln.GetInstanceId(), ln.GetLine())
+	prefix := fmt.Sprintf("%s#%d", ln.GetName(), ln.GetInstanceId())
+	if isTerminal(w) {
+		prefix = labelColor(prefix) + prefix + ansiReset
+	}
+	fmt.Fprintf(w, "%s | %s\n", prefix, ln.GetLine())
 }

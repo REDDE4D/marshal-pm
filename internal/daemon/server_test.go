@@ -2,9 +2,11 @@ package daemon
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/REDDE4D/marshal-pm/internal/eventstore"
 	"github.com/REDDE4D/marshal-pm/internal/logs"
 	"github.com/REDDE4D/marshal-pm/internal/manager"
 	"github.com/REDDE4D/marshal-pm/internal/metrics"
@@ -137,5 +139,53 @@ func TestWithFleetPollIntervalSetsOption(t *testing.T) {
 	WithFleetPollInterval(250 * time.Millisecond)(&o)
 	if o.fleetPoll != 250*time.Millisecond {
 		t.Fatalf("fleetPoll = %v, want 250ms", o.fleetPoll)
+	}
+}
+
+func TestResetAndFlush(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	reg := logs.NewRegistry(t.TempDir())
+	es, err := eventstore.Open(filepath.Join(t.TempDir(), "r.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer es.Close()
+	srv := &Server{mgr: manager.New(ctx), logs: reg, estore: es}
+	defer srv.mgr.StopAll()
+
+	if _, err := srv.Start(ctx, &pb.StartRequest{Apps: []*pb.AppSpec{sleepSpec("a", 1)}}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	// Reset prunes the eventstore for the app's labels.
+	if err := es.Record("a#0", 1000); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.Reset(ctx, &pb.Selector{Target: "a"}); err != nil {
+		t.Fatalf("Reset: %v", err)
+	}
+	if r, _ := es.Rollups(0); r["a#0"].Count24h != 0 {
+		t.Fatalf("eventstore not pruned: %+v", r["a#0"])
+	}
+
+	// Flush clears the ring for the app's labels.
+	if _, err := reg.For("a#0").Writer(false).Write([]byte("hi\n")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.Flush(ctx, &pb.Selector{Target: "a"}); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	if n := len(reg.For("a#0").Backfill(0)); n != 0 {
+		t.Fatalf("ring = %d after flush, want 0", n)
+	}
+}
+
+func TestResetUnknownIsNotFound(t *testing.T) {
+	srv, done := newTestServer(t)
+	defer done()
+	_, err := srv.Reset(context.Background(), &pb.Selector{Target: "ghost"})
+	if status.Code(err) != codes.NotFound {
+		t.Fatalf("got %v, want NotFound", err)
 	}
 }

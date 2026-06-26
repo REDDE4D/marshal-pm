@@ -86,6 +86,26 @@ func (r *Registry) Remove(label string) {
 	}
 }
 
+// Truncate clears the logs of the existing sinks for the given labels. Unknown
+// labels are skipped. Errors from individual sinks are joined; the first is returned.
+func (r *Registry) Truncate(labels []string) error {
+	r.mu.Lock()
+	sinks := make([]*Sink, 0, len(labels))
+	for _, l := range labels {
+		if s, ok := r.sinks[l]; ok {
+			sinks = append(sinks, s)
+		}
+	}
+	r.mu.Unlock()
+	var firstErr error
+	for _, s := range sinks {
+		if err := s.Truncate(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
 // ResolveLabeled returns the existing sinks for labels, skipping unknown ones,
 // preserving the input order.
 func (r *Registry) ResolveLabeled(labels []string) []Labeled {

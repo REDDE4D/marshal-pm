@@ -436,6 +436,54 @@ func TestReloadAbortsOnContextCancel(t *testing.T) {
 	m.StopAll()
 }
 
+func TestResetCountersZeroesAfterCrashes(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := New(ctx)
+	defer m.StopAll()
+
+	// A command that fails immediately accrues restarts under restart=on-failure.
+	app := config.App{
+		Name: "crasher", Cmd: "sh", Args: []string{"-c", "exit 1"},
+		Instances: 1, Restart: config.RestartOnFailure, MaxRestarts: 100,
+	}
+	if _, err := m.Add(app); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait until at least one restart is recorded.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		snaps, _ := m.Describe("crasher")
+		if len(snaps) == 1 && snaps[0].Restarts >= 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("never accrued a restart")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// Stop freezes the counter (the supervisor loop exits on ctx cancel).
+	if _, err := m.Stop("crasher"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.ResetCounters("crasher"); err != nil {
+		t.Fatal(err)
+	}
+	snaps, _ := m.Describe("crasher")
+	if snaps[0].Restarts != 0 {
+		t.Fatalf("restarts = %d after reset, want 0", snaps[0].Restarts)
+	}
+}
+
+func TestResetCountersUnknownSelector(t *testing.T) {
+	m := New(context.Background())
+	if _, err := m.ResetCounters("ghost"); err == nil {
+		t.Fatal("expected error for unknown selector")
+	}
+}
+
 func TestWithLogsCapturesOutputAndRemovesOnDelete(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

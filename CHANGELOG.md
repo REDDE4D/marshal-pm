@@ -12,6 +12,24 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Added
+- **`marshal reset <name|id|all>`** zeroes an app's restart counters — the lifetime total, the
+  crash-loop counter, and the trailing 24h restart-event history — so `marshal list`/`describe` and
+  the dashboard's `restarts_24h` all return to zero. It does not restart the process or reset uptime
+  (mirrors `pm2 reset`). Also available as `marshal fleet reset <agent> <sel>` and a dashboard control.
+- **`marshal flush [name|id|all]`** clears an app's captured logs — the active log files, their rotated
+  backups, and the in-memory ring — so `marshal logs` starts fresh. The selector is optional and
+  defaults to all (mirrors `pm2 flush`). Also `marshal fleet flush <agent> <sel>` and a dashboard control.
+- **`max_memory_restart` per-app config** (e.g. `max_memory_restart: 300M`) auto-restarts an app when
+  its RSS exceeds the limit for 3 consecutive metric samples (~10–15s at the default 5s tick), so a
+  momentary spike won't trigger it. Accepts `K`/`M`/`G` (1024-based) or a plain byte count. Settable
+  from the dashboard's add-app form too. Note: because restarts are issued per app, a multi-instance
+  app restarts all of its instances when any one exceeds the limit (per-instance restart is a future
+  refinement).
+- **Color-coded per-app prefix in `marshal logs … -f`**: when output is a terminal, each line's
+  `name#idx` prefix is colorized (stable per app) so an interleaved multi-app tail is easy to scan.
+  Piped/redirected output stays plain.
+
 ## [0.11.0] - 2026-06-25
 
 ### Added

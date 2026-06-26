@@ -56,6 +56,11 @@ func rootCmd() *cobra.Command {
 			func(ctx context.Context, c pb.DaemonClient, sel *pb.Selector) (*pb.ProcList, error) {
 				return c.Delete(ctx, sel)
 			}),
+		selectorCmd("reset <name|id|all>", "Reset restart counter(s) for app(s)",
+			func(ctx context.Context, c pb.DaemonClient, sel *pb.Selector) (*pb.ProcList, error) {
+				return c.Reset(ctx, sel)
+			}),
+		flushCmd(),
 		listCmd(),
 		describeCmd(),
 		logsCmd(),

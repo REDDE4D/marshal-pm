@@ -291,6 +291,26 @@ func waitInstanceOnline(ctx context.Context, in *managedInstance, timeout time.D
 	}
 }
 
+// ResetCounters zeroes the restart counters of the selected apps' instances and
+// returns their refreshed snapshots. It does not restart anything.
+func (m *Manager) ResetCounters(sel string) ([]InstanceSnapshot, error) {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+	m.mu.Lock()
+	apps, err := m.resolve(sel)
+	if err != nil {
+		m.mu.Unlock()
+		return nil, err
+	}
+	insts := collectInstances(apps)
+	m.mu.Unlock()
+
+	for _, in := range insts {
+		in.inst.ResetCounters()
+	}
+	return m.Describe(sel)
+}
+
 // Delete stops the selected apps and removes them from management.
 func (m *Manager) Delete(sel string) ([]InstanceSnapshot, error) {
 	m.opMu.Lock()

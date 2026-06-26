@@ -17,33 +17,35 @@ import (
 // backend defaults (instances→1, restart→always, max_restarts→16, kill_timeout→5s)
 // applied by config.Prepare on the agent.
 type commandSource struct {
-	Type        string            `json:"type"`
-	Name        string            `json:"name"`
-	Cmd         string            `json:"cmd"`
-	Args        []string          `json:"args"`
-	Cwd         string            `json:"cwd"`
-	Instances   int32             `json:"instances"`
-	Env         map[string]string `json:"env"`
-	Restart     string            `json:"restart"`
-	MaxRestarts int32             `json:"max_restarts"`
-	KillTimeout string            `json:"kill_timeout"`
+	Type             string            `json:"type"`
+	Name             string            `json:"name"`
+	Cmd              string            `json:"cmd"`
+	Args             []string          `json:"args"`
+	Cwd              string            `json:"cwd"`
+	Instances        int32             `json:"instances"`
+	Env              map[string]string `json:"env"`
+	Restart          string            `json:"restart"`
+	MaxRestarts      int32             `json:"max_restarts"`
+	KillTimeout      string            `json:"kill_timeout"`
+	MaxMemoryRestart int64             `json:"max_memory_restart"`
 }
 
 // gitSource is the "git" variant of an app-creation source. Name and repo are
 // required; the rest fall through to agent defaults.
 type gitSource struct {
-	Type       string            `json:"type"`
-	Name       string            `json:"name"`
-	Cmd        string            `json:"cmd"`
-	Args       []string          `json:"args"`
-	Instances  int32             `json:"instances"`
-	Env        map[string]string `json:"env"`
-	Restart    string            `json:"restart"`
-	Repo       string            `json:"repo"`
-	Ref        string            `json:"ref"`
-	Build      string            `json:"build"`
-	Subdir     string            `json:"subdir"`
-	Credential string            `json:"credential"` // M22: credstore name to resolve on deploy
+	Type             string            `json:"type"`
+	Name             string            `json:"name"`
+	Cmd              string            `json:"cmd"`
+	Args             []string          `json:"args"`
+	Instances        int32             `json:"instances"`
+	Env              map[string]string `json:"env"`
+	Restart          string            `json:"restart"`
+	Repo             string            `json:"repo"`
+	Ref              string            `json:"ref"`
+	Build            string            `json:"build"`
+	Subdir           string            `json:"subdir"`
+	Credential       string            `json:"credential"` // M22: credstore name to resolve on deploy
+	MaxMemoryRestart int64             `json:"max_memory_restart"`
 }
 
 type addAppRequest struct {
@@ -159,15 +161,16 @@ func (h *handler) dispatchApp(w http.ResponseWriter, r *http.Request, agent, nam
 // startOp builds a ControlOp_Start carrying one AppSpec from a command source.
 func startOp(s commandSource) *pb.ControlOp {
 	spec := &pb.AppSpec{
-		Name:        s.Name,
-		Cmd:         s.Cmd,
-		Args:        s.Args,
-		Cwd:         s.Cwd,
-		Instances:   s.Instances,
-		Env:         s.Env,
-		Restart:     s.Restart,
-		MaxRestarts: s.MaxRestarts,
-		KillTimeout: s.KillTimeout,
+		Name:             s.Name,
+		Cmd:              s.Cmd,
+		Args:             s.Args,
+		Cwd:              s.Cwd,
+		Instances:        s.Instances,
+		Env:              s.Env,
+		Restart:          s.Restart,
+		MaxRestarts:      s.MaxRestarts,
+		KillTimeout:      s.KillTimeout,
+		MaxMemoryRestart: s.MaxMemoryRestart,
 	}
 	return &pb.ControlOp{Op: &pb.ControlOp_Start{Start: &pb.StartRequest{Apps: []*pb.AppSpec{spec}}}}
 }
@@ -176,13 +179,14 @@ func startOp(s commandSource) *pb.ControlOp {
 // cred is the resolved secret to attach to the op (may be nil for unauthenticated repos).
 func deployOp(g gitSource, cred *pb.GitCredential) *pb.ControlOp {
 	spec := &pb.AppSpec{
-		Name:      g.Name,
-		Cmd:       g.Cmd,
-		Args:      g.Args,
-		Instances: g.Instances,
-		Env:       g.Env,
-		Restart:   g.Restart,
-		Source:    &pb.GitSource{Repo: g.Repo, Ref: g.Ref, Build: g.Build, Subdir: g.Subdir, Credential: g.Credential},
+		Name:             g.Name,
+		Cmd:              g.Cmd,
+		Args:             g.Args,
+		Instances:        g.Instances,
+		Env:              g.Env,
+		Restart:          g.Restart,
+		MaxMemoryRestart: g.MaxMemoryRestart,
+		Source:           &pb.GitSource{Repo: g.Repo, Ref: g.Ref, Build: g.Build, Subdir: g.Subdir, Credential: g.Credential},
 	}
 	return &pb.ControlOp{Op: &pb.ControlOp_Deploy{Deploy: &pb.DeployRequest{App: spec, Credential: cred}}}
 }
