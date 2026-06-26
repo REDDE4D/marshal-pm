@@ -12,6 +12,17 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Added
+- **Terminal "update available" hint.** The local daemon now runs the same update check the server
+  dashboard uses, and the CLI prints a one-line hint to stderr after a command when a newer release
+  exists (e.g. `marshal: update available — v0.13.0 (current v0.12.0) → …/releases/latest`). It is
+  best-effort: shown only on an interactive terminal, never spawns a daemon, and is silenced by
+  `MARSHAL_NO_UPDATE_CHECK`.
+
+### Changed
+- **Update checks now run every 6h instead of every 24h** (daemon and server), so new releases surface
+  sooner.
+
 ## [0.12.0] - 2026-06-26
 
 ### Added
