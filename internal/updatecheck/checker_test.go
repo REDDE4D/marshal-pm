@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func newTestServer(t *testing.T, tag string) *httptest.Server {
@@ -50,5 +51,11 @@ func TestCheckerDisabledOptsOut(t *testing.T) {
 	}
 	if s := c.Snapshot(); s.Latest != "" || s.Outdated {
 		t.Fatalf("disabled snapshot = %+v, want empty", s)
+	}
+}
+
+func TestDefaultIntervalIsSixHours(t *testing.T) {
+	if DefaultInterval != 6*time.Hour {
+		t.Fatalf("DefaultInterval = %v, want 6h", DefaultInterval)
 	}
 }

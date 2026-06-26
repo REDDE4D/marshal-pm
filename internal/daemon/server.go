@@ -27,6 +27,7 @@ import (
 	"github.com/REDDE4D/marshal-pm/internal/pb"
 	"github.com/REDDE4D/marshal-pm/internal/store"
 	"github.com/REDDE4D/marshal-pm/internal/supervisor"
+	"github.com/REDDE4D/marshal-pm/internal/updatecheck"
 	"github.com/REDDE4D/marshal-pm/internal/version"
 
 	"google.golang.org/grpc"
@@ -46,7 +47,8 @@ type Server struct {
 	kill             func()             // triggers daemon shutdown (set by Run)
 	logPolicyDefault logs.Policy        // effective default log policy (from WithLogRetention)
 	deployer         *deploy.Deployer
-	guard            *memguard.Guard // memory-limit restart guard (M-?)
+	guard            *memguard.Guard      // memory-limit restart guard (M-?)
+	updater          *updatecheck.Checker // background update-availability check
 }
 
 // launchApp admits one already-converted app into the manager and sets its log
@@ -212,6 +214,24 @@ func (s *Server) Flush(_ context.Context, sel *pb.Selector) (*pb.Ack, error) {
 		_ = s.logs.Truncate(labels)
 	}
 	return &pb.Ack{Ok: true, Message: fmt.Sprintf("flushed %d instance(s)", len(snaps))}, nil
+}
+
+// UpdateStatus reports the daemon's cached update-availability check.
+func (s *Server) UpdateStatus(_ context.Context, _ *pb.Empty) (*pb.UpdateInfo, error) {
+	if s.updater == nil {
+		return &pb.UpdateInfo{}, nil
+	}
+	r := s.updater.Snapshot()
+	var checked int64
+	if !r.CheckedAt.IsZero() {
+		checked = r.CheckedAt.Unix()
+	}
+	return &pb.UpdateInfo{
+		Current:       r.Current,
+		Latest:        r.Latest,
+		Outdated:      r.Outdated,
+		CheckedAtUnix: checked,
+	}, nil
 }
 
 func (s *Server) Describe(_ context.Context, sel *pb.Selector) (*pb.ProcList, error) {
@@ -389,6 +409,9 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 
 	serveCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	srv.updater = updatecheck.New(version.String(),
+		updatecheck.WithEnabled(os.Getenv("MARSHAL_NO_UPDATE_CHECK") == ""))
+	go srv.updater.Run(serveCtx)
 	run := func(cctx context.Context, tgt fleetTarget, fleetTok string) {
 		tlsCfg, tErr := fleetauth.ClientTLS(tgt.fingerprint, tgt.ca)
 		if tErr != nil {

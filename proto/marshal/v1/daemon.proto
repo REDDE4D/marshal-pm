@@ -20,6 +20,7 @@ service Daemon {
   rpc MetricsHistory(MetricsHistoryRequest) returns (MetricsHistoryResponse); // M5
   rpc Reset(Selector) returns (ProcList);
   rpc Flush(Selector) returns (Ack);
+  rpc UpdateStatus(Empty) returns (UpdateInfo);
 }
 
 message Empty {}
@@ -27,6 +28,13 @@ message Empty {}
 message Ack {
   bool ok = 1;
   string message = 2;
+}
+
+message UpdateInfo {
+  string current         = 1;
+  string latest          = 2; // empty until the first successful check
+  bool   outdated        = 3;
+  int64  checked_at_unix = 4; // 0 until the first successful check
 }
 
 // GitSource describes deploying an app from a git repository. It mirrors
