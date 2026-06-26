@@ -40,15 +40,16 @@ func withClient(fn func(context.Context, pb.DaemonClient) error) error {
 
 func appToSpec(a config.App) *pb.AppSpec {
 	spec := &pb.AppSpec{
-		Name:        a.Name,
-		Cmd:         a.Cmd,
-		Args:        a.Args,
-		Cwd:         a.Cwd,
-		Instances:   int32(a.Instances),
-		Env:         a.Env,
-		Restart:     string(a.Restart),
-		MaxRestarts: int32(a.MaxRestarts),
-		KillTimeout: a.KillTimeout.Duration.String(),
+		Name:             a.Name,
+		Cmd:              a.Cmd,
+		Args:             a.Args,
+		Cwd:              a.Cwd,
+		Instances:        int32(a.Instances),
+		Env:              a.Env,
+		Restart:          string(a.Restart),
+		MaxRestarts:      int32(a.MaxRestarts),
+		KillTimeout:      a.KillTimeout.Duration.String(),
+		MaxMemoryRestart: int64(a.MaxMemoryRestart.Bytes),
 	}
 	if a.Logs != nil {
 		lr := &pb.LogRetention{}

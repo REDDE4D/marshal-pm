@@ -199,3 +199,13 @@ func TestPrintLogLinePlainWhenNotTTY(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, "web#0 | hello\n")
 	}
 }
+
+func TestAppToSpecCarriesMaxMemoryRestart(t *testing.T) {
+	spec := appToSpec(config.App{
+		Name: "web", Cmd: "./web",
+		MaxMemoryRestart: config.ByteSize{Bytes: 300 << 20},
+	})
+	if spec.GetMaxMemoryRestart() != 300<<20 {
+		t.Fatalf("MaxMemoryRestart = %d, want %d", spec.GetMaxMemoryRestart(), 300<<20)
+	}
+}
