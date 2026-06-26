@@ -148,7 +148,7 @@ export type ControlResult = { ok: boolean; error?: string };
 export async function control(
   agent: string,
   selector: string,
-  action: "restart" | "stop" | "delete" | "reload",
+  action: "restart" | "stop" | "delete" | "reload" | "reset" | "flush",
 ): Promise<ControlResult> {
   const r = await fetch("/api/control", {
     method: "POST",
@@ -177,6 +177,7 @@ export type CommandSource = {
   restart?: string;
   max_restarts?: number;
   kill_timeout?: string;
+  max_memory_restart?: number;
 };
 
 // GitSource mirrors the backend "git" app source. repo and cmd are required;
@@ -194,6 +195,7 @@ export interface GitSource {
   build?: string;
   subdir?: string;
   credential?: string;
+  max_memory_restart?: number;
 }
 
 // addApp creates a new app on an agent via POST /api/apps. Like control() it
