@@ -8,7 +8,7 @@ import (
 )
 
 // DefaultInterval is how often the background poller re-checks for a release.
-const DefaultInterval = 24 * time.Hour
+const DefaultInterval = 6 * time.Hour
 
 // Checker periodically resolves the latest release and caches the comparison
 // against the running version. It is safe for concurrent use. A disabled checker

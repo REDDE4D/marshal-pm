@@ -40,6 +40,10 @@ func rootCmd() *cobra.Command {
 		Short:   "Marshal — a free process supervisor",
 		Version: version.String(),
 	}
+	root.PersistentPostRunE = func(cmd *cobra.Command, _ []string) error {
+		maybePrintUpdateBanner(cmd)
+		return nil
+	}
 	root.AddCommand(
 		runCmd(),
 		daemonCmd(),

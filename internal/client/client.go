@@ -38,6 +38,21 @@ func Connect(st *store.Store) (pb.DaemonClient, *grpc.ClientConn, error) {
 	return pb.NewDaemonClient(conn), conn, nil
 }
 
+// ConnectExisting dials the daemon only if it is already running; it never
+// spawns one. Returns an error when nothing is listening on the socket. The
+// caller must Close the returned conn on success.
+func ConnectExisting(st *store.Store) (pb.DaemonClient, *grpc.ClientConn, error) {
+	if !alive(st.SocketPath()) {
+		return nil, nil, fmt.Errorf("daemon not running")
+	}
+	conn, err := grpc.NewClient("unix:"+st.SocketPath(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, nil, fmt.Errorf("dial daemon: %w", err)
+	}
+	return pb.NewDaemonClient(conn), conn, nil
+}
+
 // alive reports whether something is accepting connections on the socket.
 func alive(sock string) bool {
 	c, err := net.DialTimeout("unix", sock, 200*time.Millisecond)
