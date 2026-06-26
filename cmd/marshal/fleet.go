@@ -41,6 +41,14 @@ func fleetCmd() *cobra.Command {
 		func(t string) *pb.ControlOp {
 			return &pb.ControlOp{Op: &pb.ControlOp_Delete{Delete: &pb.Selector{Target: t}}}
 		}))
+	cmd.AddCommand(fleetSelectorCmd("reset", "Reset restart counter(s) for app(s) on one agent",
+		func(t string) *pb.ControlOp {
+			return &pb.ControlOp{Op: &pb.ControlOp_Reset_{Reset_: &pb.Selector{Target: t}}}
+		}))
+	cmd.AddCommand(fleetSelectorCmd("flush", "Clear captured logs for app(s) on one agent",
+		func(t string) *pb.ControlOp {
+			return &pb.ControlOp{Op: &pb.ControlOp_Flush{Flush: &pb.Selector{Target: t}}}
+		}))
 	return cmd
 }
 

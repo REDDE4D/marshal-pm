@@ -182,3 +182,19 @@ func TestControlReloadHappyPath(t *testing.T) {
 		t.Fatalf("forwarded op type = %T, want *pb.ControlOp_Reload", fc.gotOp.GetOp())
 	}
 }
+
+func TestControlOpResetFlush(t *testing.T) {
+	if op := controlOp("reset", "web"); op == nil {
+		t.Fatal("reset action not mapped")
+	} else if r, ok := op.GetOp().(*pb.ControlOp_Reset_); !ok || r.Reset_.GetTarget() != "web" {
+		t.Fatalf("reset op = %T target mismatch", op.GetOp())
+	}
+	if op := controlOp("flush", "web"); op == nil {
+		t.Fatal("flush action not mapped")
+	} else if f, ok := op.GetOp().(*pb.ControlOp_Flush); !ok || f.Flush.GetTarget() != "web" {
+		t.Fatalf("flush op = %T target mismatch", op.GetOp())
+	}
+	if controlOp("bogus", "web") != nil {
+		t.Fatal("bogus action should be nil")
+	}
+}

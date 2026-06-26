@@ -240,20 +240,21 @@ func (x *GitSource) GetCredential() string {
 
 // AppSpec mirrors config.App. kill_timeout is a Go duration string ("5s").
 type AppSpec struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Cmd           string                 `protobuf:"bytes,2,opt,name=cmd,proto3" json:"cmd,omitempty"`
-	Args          []string               `protobuf:"bytes,3,rep,name=args,proto3" json:"args,omitempty"`
-	Cwd           string                 `protobuf:"bytes,4,opt,name=cwd,proto3" json:"cwd,omitempty"`
-	Instances     int32                  `protobuf:"varint,5,opt,name=instances,proto3" json:"instances,omitempty"`
-	Env           map[string]string      `protobuf:"bytes,6,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Restart       string                 `protobuf:"bytes,7,opt,name=restart,proto3" json:"restart,omitempty"` // always | on-failure | no
-	MaxRestarts   int32                  `protobuf:"varint,8,opt,name=max_restarts,json=maxRestarts,proto3" json:"max_restarts,omitempty"`
-	KillTimeout   string                 `protobuf:"bytes,9,opt,name=kill_timeout,json=killTimeout,proto3" json:"kill_timeout,omitempty"`
-	Logs          *LogRetention          `protobuf:"bytes,10,opt,name=logs,proto3,oneof" json:"logs,omitempty"`     // M6 per-app retention override
-	Source        *GitSource             `protobuf:"bytes,11,opt,name=source,proto3,oneof" json:"source,omitempty"` // M21 git deploy; nil for command apps
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Name             string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Cmd              string                 `protobuf:"bytes,2,opt,name=cmd,proto3" json:"cmd,omitempty"`
+	Args             []string               `protobuf:"bytes,3,rep,name=args,proto3" json:"args,omitempty"`
+	Cwd              string                 `protobuf:"bytes,4,opt,name=cwd,proto3" json:"cwd,omitempty"`
+	Instances        int32                  `protobuf:"varint,5,opt,name=instances,proto3" json:"instances,omitempty"`
+	Env              map[string]string      `protobuf:"bytes,6,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Restart          string                 `protobuf:"bytes,7,opt,name=restart,proto3" json:"restart,omitempty"` // always | on-failure | no
+	MaxRestarts      int32                  `protobuf:"varint,8,opt,name=max_restarts,json=maxRestarts,proto3" json:"max_restarts,omitempty"`
+	KillTimeout      string                 `protobuf:"bytes,9,opt,name=kill_timeout,json=killTimeout,proto3" json:"kill_timeout,omitempty"`
+	Logs             *LogRetention          `protobuf:"bytes,10,opt,name=logs,proto3,oneof" json:"logs,omitempty"`                                              // M6 per-app retention override
+	Source           *GitSource             `protobuf:"bytes,11,opt,name=source,proto3,oneof" json:"source,omitempty"`                                          // M21 git deploy; nil for command apps
+	MaxMemoryRestart int64                  `protobuf:"varint,12,opt,name=max_memory_restart,json=maxMemoryRestart,proto3" json:"max_memory_restart,omitempty"` // bytes; 0 = disabled
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *AppSpec) Reset() {
@@ -361,6 +362,13 @@ func (x *AppSpec) GetSource() *GitSource {
 		return x.Source
 	}
 	return nil
+}
+
+func (x *AppSpec) GetMaxMemoryRestart() int64 {
+	if x != nil {
+		return x.MaxMemoryRestart
+	}
+	return 0
 }
 
 type StartRequest struct {
@@ -1081,7 +1089,7 @@ const file_marshal_v1_daemon_proto_rawDesc = "" +
 	"\x06subdir\x18\x04 \x01(\tR\x06subdir\x12\x1e\n" +
 	"\n" +
 	"credential\x18\x05 \x01(\tR\n" +
-	"credential\"\xb6\x03\n" +
+	"credential\"\xe4\x03\n" +
 	"\aAppSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03cmd\x18\x02 \x01(\tR\x03cmd\x12\x12\n" +
@@ -1094,7 +1102,8 @@ const file_marshal_v1_daemon_proto_rawDesc = "" +
 	"\fkill_timeout\x18\t \x01(\tR\vkillTimeout\x121\n" +
 	"\x04logs\x18\n" +
 	" \x01(\v2\x18.marshal.v1.LogRetentionH\x00R\x04logs\x88\x01\x01\x122\n" +
-	"\x06source\x18\v \x01(\v2\x15.marshal.v1.GitSourceH\x01R\x06source\x88\x01\x01\x1a6\n" +
+	"\x06source\x18\v \x01(\v2\x15.marshal.v1.GitSourceH\x01R\x06source\x88\x01\x01\x12,\n" +
+	"\x12max_memory_restart\x18\f \x01(\x03R\x10maxMemoryRestart\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\a\n" +
@@ -1168,7 +1177,7 @@ const file_marshal_v1_daemon_proto_rawDesc = "" +
 	"\tLogStream\x12\x1a\n" +
 	"\x16LOG_STREAM_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11LOG_STREAM_STDOUT\x10\x01\x12\x15\n" +
-	"\x11LOG_STREAM_STDERR\x10\x022\xe9\x04\n" +
+	"\x11LOG_STREAM_STDERR\x10\x022\xce\x05\n" +
 	"\x06Daemon\x127\n" +
 	"\x05Start\x12\x18.marshal.v1.StartRequest\x1a\x14.marshal.v1.ProcList\x122\n" +
 	"\x04Stop\x12\x14.marshal.v1.Selector\x1a\x14.marshal.v1.ProcList\x125\n" +
@@ -1180,7 +1189,9 @@ const file_marshal_v1_daemon_proto_rawDesc = "" +
 	"\tResurrect\x12\x11.marshal.v1.Empty\x1a\x14.marshal.v1.ProcList\x12*\n" +
 	"\x04Kill\x12\x11.marshal.v1.Empty\x1a\x0f.marshal.v1.Ack\x125\n" +
 	"\x04Logs\x12\x16.marshal.v1.LogRequest\x1a\x13.marshal.v1.LogLine0\x01\x12W\n" +
-	"\x0eMetricsHistory\x12!.marshal.v1.MetricsHistoryRequest\x1a\".marshal.v1.MetricsHistoryResponseB\x18Z\x16marshal/internal/pb;pbb\x06proto3"
+	"\x0eMetricsHistory\x12!.marshal.v1.MetricsHistoryRequest\x1a\".marshal.v1.MetricsHistoryResponse\x123\n" +
+	"\x05Reset\x12\x14.marshal.v1.Selector\x1a\x14.marshal.v1.ProcList\x12.\n" +
+	"\x05Flush\x12\x14.marshal.v1.Selector\x1a\x0f.marshal.v1.AckB\x18Z\x16marshal/internal/pb;pbb\x06proto3"
 
 var (
 	file_marshal_v1_daemon_proto_rawDescOnce sync.Once
@@ -1233,19 +1244,23 @@ var file_marshal_v1_daemon_proto_depIdxs = []int32{
 	1,  // 15: marshal.v1.Daemon.Kill:input_type -> marshal.v1.Empty
 	9,  // 16: marshal.v1.Daemon.Logs:input_type -> marshal.v1.LogRequest
 	12, // 17: marshal.v1.Daemon.MetricsHistory:input_type -> marshal.v1.MetricsHistoryRequest
-	8,  // 18: marshal.v1.Daemon.Start:output_type -> marshal.v1.ProcList
-	8,  // 19: marshal.v1.Daemon.Stop:output_type -> marshal.v1.ProcList
-	8,  // 20: marshal.v1.Daemon.Restart:output_type -> marshal.v1.ProcList
-	8,  // 21: marshal.v1.Daemon.Delete:output_type -> marshal.v1.ProcList
-	8,  // 22: marshal.v1.Daemon.List:output_type -> marshal.v1.ProcList
-	8,  // 23: marshal.v1.Daemon.Describe:output_type -> marshal.v1.ProcList
-	2,  // 24: marshal.v1.Daemon.Save:output_type -> marshal.v1.Ack
-	8,  // 25: marshal.v1.Daemon.Resurrect:output_type -> marshal.v1.ProcList
-	2,  // 26: marshal.v1.Daemon.Kill:output_type -> marshal.v1.Ack
-	11, // 27: marshal.v1.Daemon.Logs:output_type -> marshal.v1.LogLine
-	14, // 28: marshal.v1.Daemon.MetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
-	18, // [18:29] is the sub-list for method output_type
-	7,  // [7:18] is the sub-list for method input_type
+	6,  // 18: marshal.v1.Daemon.Reset:input_type -> marshal.v1.Selector
+	6,  // 19: marshal.v1.Daemon.Flush:input_type -> marshal.v1.Selector
+	8,  // 20: marshal.v1.Daemon.Start:output_type -> marshal.v1.ProcList
+	8,  // 21: marshal.v1.Daemon.Stop:output_type -> marshal.v1.ProcList
+	8,  // 22: marshal.v1.Daemon.Restart:output_type -> marshal.v1.ProcList
+	8,  // 23: marshal.v1.Daemon.Delete:output_type -> marshal.v1.ProcList
+	8,  // 24: marshal.v1.Daemon.List:output_type -> marshal.v1.ProcList
+	8,  // 25: marshal.v1.Daemon.Describe:output_type -> marshal.v1.ProcList
+	2,  // 26: marshal.v1.Daemon.Save:output_type -> marshal.v1.Ack
+	8,  // 27: marshal.v1.Daemon.Resurrect:output_type -> marshal.v1.ProcList
+	2,  // 28: marshal.v1.Daemon.Kill:output_type -> marshal.v1.Ack
+	11, // 29: marshal.v1.Daemon.Logs:output_type -> marshal.v1.LogLine
+	14, // 30: marshal.v1.Daemon.MetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
+	8,  // 31: marshal.v1.Daemon.Reset:output_type -> marshal.v1.ProcList
+	2,  // 32: marshal.v1.Daemon.Flush:output_type -> marshal.v1.Ack
+	20, // [20:33] is the sub-list for method output_type
+	7,  // [7:20] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
 	7,  // [7:7] is the sub-list for extension extendee
 	0,  // [0:7] is the sub-list for field type_name

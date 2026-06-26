@@ -71,6 +71,75 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// ByteSize is a byte count that unmarshals from "300M"/"1G"/"512K" or a plain
+// integer. Suffixes are 1024-based; KB/MB/GB are accepted as aliases of K/M/G.
+type ByteSize struct{ Bytes uint64 }
+
+func parseByteSize(s string) (uint64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, nil
+	}
+	upper := strings.ToUpper(s)
+	mult := uint64(1)
+	switch {
+	case strings.HasSuffix(upper, "GB"):
+		mult, upper = 1<<30, strings.TrimSuffix(upper, "GB")
+	case strings.HasSuffix(upper, "G"):
+		mult, upper = 1<<30, strings.TrimSuffix(upper, "G")
+	case strings.HasSuffix(upper, "MB"):
+		mult, upper = 1<<20, strings.TrimSuffix(upper, "MB")
+	case strings.HasSuffix(upper, "M"):
+		mult, upper = 1<<20, strings.TrimSuffix(upper, "M")
+	case strings.HasSuffix(upper, "KB"):
+		mult, upper = 1<<10, strings.TrimSuffix(upper, "KB")
+	case strings.HasSuffix(upper, "K"):
+		mult, upper = 1<<10, strings.TrimSuffix(upper, "K")
+	case strings.HasSuffix(upper, "B"):
+		upper = strings.TrimSuffix(upper, "B")
+	}
+	n, err := strconv.ParseUint(strings.TrimSpace(upper), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid size %q: %w", s, err)
+	}
+	return n * mult, nil
+}
+
+// UnmarshalYAML parses a size string ("300M") or a bare integer (bytes).
+func (b *ByteSize) UnmarshalYAML(value *yaml.Node) error {
+	var s string
+	if err := value.Decode(&s); err != nil {
+		var n uint64
+		if err2 := value.Decode(&n); err2 == nil {
+			b.Bytes = n
+			return nil
+		}
+		return err
+	}
+	n, err := parseByteSize(s)
+	if err != nil {
+		return err
+	}
+	b.Bytes = n
+	return nil
+}
+
+// MarshalJSON renders the size as a plain byte count (for dump.json round-trips).
+func (b ByteSize) MarshalJSON() ([]byte, error) {
+	return []byte(strconv.FormatUint(b.Bytes, 10)), nil
+}
+
+// UnmarshalJSON parses either a number (bytes) or a quoted size string.
+func (b *ByteSize) UnmarshalJSON(data []byte) error {
+	s := strings.Trim(string(data), `"`)
+	n, err := parseByteSize(s)
+	if err != nil {
+		return err
+	}
+	b.Bytes = n
+	return nil
+}
+
 // ServerConfig points the agent at a central server. Presence enables fleet mode.
 type ServerConfig struct {
 	Address     string `yaml:"address" json:"address"`
@@ -93,12 +162,13 @@ type App struct {
 	// marshal.yaml directory (absolute paths are used as-is). It is a load-time
 	// directive only — after loading, Env holds the merged result — so it is not
 	// persisted to JSON/dump.json.
-	EnvFile     string        `yaml:"env_file" json:"-"`
-	Restart     RestartMode   `yaml:"restart" json:"restart"`
-	MaxRestarts int           `yaml:"max_restarts" json:"max_restarts"`
-	KillTimeout Duration      `yaml:"kill_timeout" json:"kill_timeout"`
-	Logs        *LogRetention `yaml:"logs" json:"logs,omitempty"`
-	Source      *GitSource    `yaml:"source" json:"source,omitempty"` // M21 git deploy
+	EnvFile          string        `yaml:"env_file" json:"-"`
+	Restart          RestartMode   `yaml:"restart" json:"restart"`
+	MaxRestarts      int           `yaml:"max_restarts" json:"max_restarts"`
+	KillTimeout      Duration      `yaml:"kill_timeout" json:"kill_timeout"`
+	MaxMemoryRestart ByteSize      `yaml:"max_memory_restart" json:"max_memory_restart,omitempty"`
+	Logs             *LogRetention `yaml:"logs" json:"logs,omitempty"`
+	Source           *GitSource    `yaml:"source" json:"source,omitempty"` // M21 git deploy
 }
 
 // GitSource describes deploying an app from a git repository (M21).

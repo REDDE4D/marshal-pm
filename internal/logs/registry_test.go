@@ -57,3 +57,17 @@ func TestRegistryPerAppPolicy(t *testing.T) {
 		t.Fatalf("api#0 did not get default policy: %+v", other.outFile)
 	}
 }
+
+func TestRegistryTruncate(t *testing.T) {
+	r := NewRegistry(t.TempDir())
+	s := r.For("app#0")
+	if _, err := s.Writer(false).Write([]byte("hello\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Truncate([]string{"app#0", "ghost#0"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(s.Backfill(0)); got != 0 {
+		t.Fatalf("ring = %d after truncate, want 0", got)
+	}
+}

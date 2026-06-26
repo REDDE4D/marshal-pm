@@ -45,3 +45,15 @@ func TestAppSpecToConfigReadsLogs(t *testing.T) {
 		t.Fatalf("omitted max_backups must stay nil")
 	}
 }
+
+func TestAppSpecToConfigCarriesMaxMemoryRestart(t *testing.T) {
+	app, err := appSpecToConfig(&pb.AppSpec{
+		Name: "web", Cmd: "./web", MaxMemoryRestart: 300 << 20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if app.MaxMemoryRestart.Bytes != 300<<20 {
+		t.Fatalf("MaxMemoryRestart = %d, want %d", app.MaxMemoryRestart.Bytes, 300<<20)
+	}
+}

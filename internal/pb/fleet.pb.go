@@ -1904,6 +1904,8 @@ type ControlOp struct {
 	//	*ControlOp_ReadFile
 	//	*ControlOp_Commit
 	//	*ControlOp_Reload
+	//	*ControlOp_Reset_
+	//	*ControlOp_Flush
 	Op            isControlOp_Op `protobuf_oneof:"op"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2036,6 +2038,24 @@ func (x *ControlOp) GetReload() *Selector {
 	return nil
 }
 
+func (x *ControlOp) GetReset_() *Selector {
+	if x != nil {
+		if x, ok := x.Op.(*ControlOp_Reset_); ok {
+			return x.Reset_
+		}
+	}
+	return nil
+}
+
+func (x *ControlOp) GetFlush() *Selector {
+	if x != nil {
+		if x, ok := x.Op.(*ControlOp_Flush); ok {
+			return x.Flush
+		}
+	}
+	return nil
+}
+
 type isControlOp_Op interface {
 	isControlOp_Op()
 }
@@ -2080,6 +2100,14 @@ type ControlOp_Reload struct {
 	Reload *Selector `protobuf:"bytes,10,opt,name=reload,proto3,oneof"` // M-G, rolling graceful restart
 }
 
+type ControlOp_Reset_ struct {
+	Reset_ *Selector `protobuf:"bytes,11,opt,name=reset,proto3,oneof"` // zero restart counters
+}
+
+type ControlOp_Flush struct {
+	Flush *Selector `protobuf:"bytes,12,opt,name=flush,proto3,oneof"` // clear logs
+}
+
 func (*ControlOp_Stop) isControlOp_Op() {}
 
 func (*ControlOp_Restart) isControlOp_Op() {}
@@ -2099,6 +2127,10 @@ func (*ControlOp_ReadFile) isControlOp_Op() {}
 func (*ControlOp_Commit) isControlOp_Op() {}
 
 func (*ControlOp_Reload) isControlOp_Op() {}
+
+func (*ControlOp_Reset_) isControlOp_Op() {}
+
+func (*ControlOp_Flush) isControlOp_Op() {}
 
 type ControlResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2530,7 +2562,7 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"credential\"8\n" +
 	"\fCommitResult\x12\x10\n" +
 	"\x03sha\x18\x01 \x01(\tR\x03sha\x12\x16\n" +
-	"\x06branch\x18\x02 \x01(\tR\x06branch\"\x9b\x04\n" +
+	"\x06branch\x18\x02 \x01(\tR\x06branch\"\xf7\x04\n" +
 	"\tControlOp\x12*\n" +
 	"\x04stop\x18\x01 \x01(\v2\x14.marshal.v1.SelectorH\x00R\x04stop\x120\n" +
 	"\arestart\x18\x02 \x01(\v2\x14.marshal.v1.SelectorH\x00R\arestart\x12.\n" +
@@ -2542,7 +2574,9 @@ const file_marshal_v1_fleet_proto_rawDesc = "" +
 	"\tread_file\x18\b \x01(\v2\x1b.marshal.v1.ReadFileRequestH\x00R\breadFile\x123\n" +
 	"\x06commit\x18\t \x01(\v2\x19.marshal.v1.CommitRequestH\x00R\x06commit\x12.\n" +
 	"\x06reload\x18\n" +
-	" \x01(\v2\x14.marshal.v1.SelectorH\x00R\x06reloadB\x04\n" +
+	" \x01(\v2\x14.marshal.v1.SelectorH\x00R\x06reload\x12,\n" +
+	"\x05reset\x18\v \x01(\v2\x14.marshal.v1.SelectorH\x00R\x05reset\x12,\n" +
+	"\x05flush\x18\f \x01(\v2\x14.marshal.v1.SelectorH\x00R\x05flushB\x04\n" +
 	"\x02op\"\xea\x01\n" +
 	"\rControlResult\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x14\n" +
@@ -2673,29 +2707,31 @@ var file_marshal_v1_fleet_proto_depIdxs = []int32{
 	20, // 30: marshal.v1.ControlOp.read_file:type_name -> marshal.v1.ReadFileRequest
 	26, // 31: marshal.v1.ControlOp.commit:type_name -> marshal.v1.CommitRequest
 	38, // 32: marshal.v1.ControlOp.reload:type_name -> marshal.v1.Selector
-	34, // 33: marshal.v1.ControlResult.procs:type_name -> marshal.v1.ProcInfo
-	22, // 34: marshal.v1.ControlResult.dir:type_name -> marshal.v1.DirListing
-	23, // 35: marshal.v1.ControlResult.file:type_name -> marshal.v1.FileContent
-	27, // 36: marshal.v1.ControlResult.commit:type_name -> marshal.v1.CommitResult
-	28, // 37: marshal.v1.Command.op:type_name -> marshal.v1.ControlOp
-	29, // 38: marshal.v1.CommandResult.result:type_name -> marshal.v1.ControlResult
-	28, // 39: marshal.v1.FleetControlRequest.op:type_name -> marshal.v1.ControlOp
-	29, // 40: marshal.v1.FleetControlResponse.result:type_name -> marshal.v1.ControlResult
-	2,  // 41: marshal.v1.Fleet.Connect:input_type -> marshal.v1.AgentMessage
-	8,  // 42: marshal.v1.Fleet.ListFleet:input_type -> marshal.v1.ListFleetRequest
-	17, // 43: marshal.v1.Fleet.FleetMetricsHistory:input_type -> marshal.v1.FleetMetricsHistoryRequest
-	15, // 44: marshal.v1.Fleet.FleetLogsHistory:input_type -> marshal.v1.FleetLogsHistoryRequest
-	32, // 45: marshal.v1.Fleet.FleetControl:input_type -> marshal.v1.FleetControlRequest
-	3,  // 46: marshal.v1.Fleet.Connect:output_type -> marshal.v1.ServerMessage
-	9,  // 47: marshal.v1.Fleet.ListFleet:output_type -> marshal.v1.ListFleetResponse
-	40, // 48: marshal.v1.Fleet.FleetMetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
-	16, // 49: marshal.v1.Fleet.FleetLogsHistory:output_type -> marshal.v1.FleetLogsHistoryResponse
-	33, // 50: marshal.v1.Fleet.FleetControl:output_type -> marshal.v1.FleetControlResponse
-	46, // [46:51] is the sub-list for method output_type
-	41, // [41:46] is the sub-list for method input_type
-	41, // [41:41] is the sub-list for extension type_name
-	41, // [41:41] is the sub-list for extension extendee
-	0,  // [0:41] is the sub-list for field type_name
+	38, // 33: marshal.v1.ControlOp.reset:type_name -> marshal.v1.Selector
+	38, // 34: marshal.v1.ControlOp.flush:type_name -> marshal.v1.Selector
+	34, // 35: marshal.v1.ControlResult.procs:type_name -> marshal.v1.ProcInfo
+	22, // 36: marshal.v1.ControlResult.dir:type_name -> marshal.v1.DirListing
+	23, // 37: marshal.v1.ControlResult.file:type_name -> marshal.v1.FileContent
+	27, // 38: marshal.v1.ControlResult.commit:type_name -> marshal.v1.CommitResult
+	28, // 39: marshal.v1.Command.op:type_name -> marshal.v1.ControlOp
+	29, // 40: marshal.v1.CommandResult.result:type_name -> marshal.v1.ControlResult
+	28, // 41: marshal.v1.FleetControlRequest.op:type_name -> marshal.v1.ControlOp
+	29, // 42: marshal.v1.FleetControlResponse.result:type_name -> marshal.v1.ControlResult
+	2,  // 43: marshal.v1.Fleet.Connect:input_type -> marshal.v1.AgentMessage
+	8,  // 44: marshal.v1.Fleet.ListFleet:input_type -> marshal.v1.ListFleetRequest
+	17, // 45: marshal.v1.Fleet.FleetMetricsHistory:input_type -> marshal.v1.FleetMetricsHistoryRequest
+	15, // 46: marshal.v1.Fleet.FleetLogsHistory:input_type -> marshal.v1.FleetLogsHistoryRequest
+	32, // 47: marshal.v1.Fleet.FleetControl:input_type -> marshal.v1.FleetControlRequest
+	3,  // 48: marshal.v1.Fleet.Connect:output_type -> marshal.v1.ServerMessage
+	9,  // 49: marshal.v1.Fleet.ListFleet:output_type -> marshal.v1.ListFleetResponse
+	40, // 50: marshal.v1.Fleet.FleetMetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
+	16, // 51: marshal.v1.Fleet.FleetLogsHistory:output_type -> marshal.v1.FleetLogsHistoryResponse
+	33, // 52: marshal.v1.Fleet.FleetControl:output_type -> marshal.v1.FleetControlResponse
+	48, // [48:53] is the sub-list for method output_type
+	43, // [43:48] is the sub-list for method input_type
+	43, // [43:43] is the sub-list for extension type_name
+	43, // [43:43] is the sub-list for extension extendee
+	0,  // [0:43] is the sub-list for field type_name
 }
 
 func init() { file_marshal_v1_fleet_proto_init() }
@@ -2726,6 +2762,8 @@ func file_marshal_v1_fleet_proto_init() {
 		(*ControlOp_ReadFile)(nil),
 		(*ControlOp_Commit)(nil),
 		(*ControlOp_Reload)(nil),
+		(*ControlOp_Reset_)(nil),
+		(*ControlOp_Flush)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

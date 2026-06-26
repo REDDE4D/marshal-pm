@@ -30,6 +30,8 @@ const (
 	Daemon_Kill_FullMethodName           = "/marshal.v1.Daemon/Kill"
 	Daemon_Logs_FullMethodName           = "/marshal.v1.Daemon/Logs"
 	Daemon_MetricsHistory_FullMethodName = "/marshal.v1.Daemon/MetricsHistory"
+	Daemon_Reset_FullMethodName          = "/marshal.v1.Daemon/Reset"
+	Daemon_Flush_FullMethodName          = "/marshal.v1.Daemon/Flush"
 )
 
 // DaemonClient is the client API for Daemon service.
@@ -50,6 +52,8 @@ type DaemonClient interface {
 	Kill(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Ack, error)
 	Logs(ctx context.Context, in *LogRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LogLine], error)
 	MetricsHistory(ctx context.Context, in *MetricsHistoryRequest, opts ...grpc.CallOption) (*MetricsHistoryResponse, error)
+	Reset(ctx context.Context, in *Selector, opts ...grpc.CallOption) (*ProcList, error)
+	Flush(ctx context.Context, in *Selector, opts ...grpc.CallOption) (*Ack, error)
 }
 
 type daemonClient struct {
@@ -179,6 +183,26 @@ func (c *daemonClient) MetricsHistory(ctx context.Context, in *MetricsHistoryReq
 	return out, nil
 }
 
+func (c *daemonClient) Reset(ctx context.Context, in *Selector, opts ...grpc.CallOption) (*ProcList, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProcList)
+	err := c.cc.Invoke(ctx, Daemon_Reset_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonClient) Flush(ctx context.Context, in *Selector, opts ...grpc.CallOption) (*Ack, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Ack)
+	err := c.cc.Invoke(ctx, Daemon_Flush_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServer is the server API for Daemon service.
 // All implementations must embed UnimplementedDaemonServer
 // for forward compatibility.
@@ -197,6 +221,8 @@ type DaemonServer interface {
 	Kill(context.Context, *Empty) (*Ack, error)
 	Logs(*LogRequest, grpc.ServerStreamingServer[LogLine]) error
 	MetricsHistory(context.Context, *MetricsHistoryRequest) (*MetricsHistoryResponse, error)
+	Reset(context.Context, *Selector) (*ProcList, error)
+	Flush(context.Context, *Selector) (*Ack, error)
 	mustEmbedUnimplementedDaemonServer()
 }
 
@@ -239,6 +265,12 @@ func (UnimplementedDaemonServer) Logs(*LogRequest, grpc.ServerStreamingServer[Lo
 }
 func (UnimplementedDaemonServer) MetricsHistory(context.Context, *MetricsHistoryRequest) (*MetricsHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method MetricsHistory not implemented")
+}
+func (UnimplementedDaemonServer) Reset(context.Context, *Selector) (*ProcList, error) {
+	return nil, status.Error(codes.Unimplemented, "method Reset not implemented")
+}
+func (UnimplementedDaemonServer) Flush(context.Context, *Selector) (*Ack, error) {
+	return nil, status.Error(codes.Unimplemented, "method Flush not implemented")
 }
 func (UnimplementedDaemonServer) mustEmbedUnimplementedDaemonServer() {}
 func (UnimplementedDaemonServer) testEmbeddedByValue()                {}
@@ -452,6 +484,42 @@ func _Daemon_MetricsHistory_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Daemon_Reset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Selector)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).Reset(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_Reset_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).Reset(ctx, req.(*Selector))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Daemon_Flush_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Selector)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).Flush(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_Flush_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).Flush(ctx, req.(*Selector))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Daemon_ServiceDesc is the grpc.ServiceDesc for Daemon service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -498,6 +566,14 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MetricsHistory",
 			Handler:    _Daemon_MetricsHistory_Handler,
+		},
+		{
+			MethodName: "Reset",
+			Handler:    _Daemon_Reset_Handler,
+		},
+		{
+			MethodName: "Flush",
+			Handler:    _Daemon_Flush_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -207,3 +207,31 @@ func TestPartialLineCapForcesFlush(t *testing.T) {
 		}
 	}
 }
+
+func TestSinkTruncate(t *testing.T) {
+	dir := t.TempDir()
+	s := newSink(dir, "app#0", time.Now)
+	w := s.Writer(false)
+	if _, err := w.Write([]byte("line1\nline2\n")); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Backfill(0)) == 0 {
+		t.Fatal("expected ring lines before truncate")
+	}
+	if err := s.Truncate(); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(s.Backfill(0)); got != 0 {
+		t.Fatalf("ring = %d after truncate, want 0", got)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "app#0.out.log"))
+	if len(b) != 0 {
+		t.Fatalf("active file len = %d, want 0", len(b))
+	}
+	if _, err := w.Write([]byte("line3\n")); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(s.Backfill(0)); got != 1 {
+		t.Fatalf("ring = %d after post-truncate write, want 1", got)
+	}
+}

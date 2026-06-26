@@ -5,6 +5,7 @@ package logs
 import (
 	"bytes"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -217,6 +218,42 @@ func (s *Sink) Close() error {
 		return e1
 	}
 	return e2
+}
+
+// Truncate empties the active log files, deletes rotated backups, and clears the
+// in-memory ring. Lumberjack keeps appending to the same path after an external
+// truncate, so no reopen is needed.
+func (s *Sink) Truncate() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil
+	}
+	s.ring = newRing(ringCap)
+	s.outPart = nil
+	s.errPart = nil
+	var firstErr error
+	for _, f := range []string{s.outFile.Filename, s.errFile.Filename} {
+		if err := os.Truncate(f, 0); err != nil && !os.IsNotExist(err) && firstErr == nil {
+			firstErr = err
+		}
+		matches, _ := filepath.Glob(rotatedGlob(f))
+		for _, m := range matches {
+			if m == f {
+				continue
+			}
+			_ = os.Remove(m)
+		}
+	}
+	return firstErr
+}
+
+// rotatedGlob returns a glob matching lumberjack's rotated siblings of filename,
+// e.g. for "dir/app#0.out.log" it yields "dir/app#0.out-*.log*" (covers .gz too).
+func rotatedGlob(filename string) string {
+	ext := filepath.Ext(filename)
+	prefix := strings.TrimSuffix(filename, ext)
+	return prefix + "-*" + ext + "*"
 }
 
 type writerFunc func([]byte) (int, error)

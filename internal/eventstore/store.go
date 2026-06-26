@@ -85,5 +85,20 @@ func (s *Store) Prune(beforeMs int64) (int64, error) {
 	return res.RowsAffected()
 }
 
+// DeleteLabels removes all restart events for the given labels and returns the
+// total number of rows deleted.
+func (s *Store) DeleteLabels(labels []string) (int64, error) {
+	var total int64
+	for _, l := range labels {
+		res, err := s.db.Exec(`DELETE FROM restarts WHERE label = ?`, l)
+		if err != nil {
+			return total, err
+		}
+		n, _ := res.RowsAffected()
+		total += n
+	}
+	return total, nil
+}
+
 // Close closes the database.
 func (s *Store) Close() error { return s.db.Close() }

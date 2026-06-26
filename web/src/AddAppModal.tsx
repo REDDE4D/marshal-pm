@@ -33,6 +33,7 @@ export function AddAppModal({
   const [restart, setRestart] = useState("always");
   const [maxRestarts, setMaxRestarts] = useState("");
   const [killTimeout, setKillTimeout] = useState("");
+  const [maxMemoryRestart, setMaxMemoryRestart] = useState("");
   const [creds, setCreds] = useState<CredentialMeta[]>([]);
   const [credential, setCredential] = useState("");
   const [busy, setBusy] = useState(false);
@@ -67,6 +68,7 @@ export function AddAppModal({
       if (build.trim()) gs.build = build.trim();
       if (subdir.trim()) gs.subdir = subdir.trim();
       if (credential) gs.credential = credential;
+      if (maxMemoryRestart.trim()) gs.max_memory_restart = Number(maxMemoryRestart) * 1024 * 1024;
       source = gs;
     } else {
       const cs: CommandSource = { type: "command", name: name.trim(), cmd: cmd.trim() };
@@ -77,6 +79,7 @@ export function AddAppModal({
       if (restart !== "always") cs.restart = restart;
       if (maxRestarts.trim()) cs.max_restarts = Number(maxRestarts);
       if (killTimeout.trim()) cs.kill_timeout = killTimeout.trim();
+      if (maxMemoryRestart.trim()) cs.max_memory_restart = Number(maxMemoryRestart) * 1024 * 1024;
       source = cs;
     }
 
@@ -234,6 +237,9 @@ export function AddAppModal({
                 </Field>
               </>
             )}
+            <Field label="max memory restart (MB, 0 = off)">
+              <Input value={maxMemoryRestart} onChange={(e) => setMaxMemoryRestart(e.target.value)} placeholder="0" inputMode="numeric" />
+            </Field>
           </div>
         )}
 
