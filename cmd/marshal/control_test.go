@@ -11,6 +11,7 @@ import (
 	"github.com/REDDE4D/marshal-pm/internal/config"
 	"github.com/REDDE4D/marshal-pm/internal/pb"
 	"github.com/REDDE4D/marshal-pm/internal/store"
+	"github.com/spf13/cobra"
 )
 
 // A bare name/id/all is a single literal selector; a path to a marshal.yaml
@@ -165,5 +166,36 @@ func TestResetAndFlushCommandsRegistered(t *testing.T) {
 		if !have[name] {
 			t.Errorf("root command %q not registered", name)
 		}
+	}
+}
+
+func TestLabelColorStableAndInPalette(t *testing.T) {
+	a := labelColor("web#0")
+	b := labelColor("web#0")
+	if a != b {
+		t.Fatalf("labelColor not stable: %q vs %q", a, b)
+	}
+	found := false
+	for _, c := range logPalette {
+		if c == a {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("labelColor returned %q not in palette", a)
+	}
+}
+
+func TestPrintLogLinePlainWhenNotTTY(t *testing.T) {
+	var buf bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&buf)
+	printLogLine(cmd, &pb.LogLine{Name: "web", InstanceId: 0, Line: "hello"})
+	got := buf.String()
+	if strings.Contains(got, "\x1b[") {
+		t.Fatalf("non-TTY output should not contain ANSI codes: %q", got)
+	}
+	if got != "web#0 | hello\n" {
+		t.Fatalf("got %q, want %q", got, "web#0 | hello\n")
 	}
 }
