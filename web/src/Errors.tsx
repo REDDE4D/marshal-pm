@@ -38,12 +38,29 @@ export function Errors() {
     return () => { live = false; };
   }, [range, tick]);
 
+  const [acking, setAcking] = useState(false);
+
   async function onAck(sig: ErrSignature) {
     try {
       await ackError(sig.id, !sig.acknowledged);
       setTick((t) => t + 1); // reload so the badge + counts update
     } catch {
       /* swallow — non-fatal */
+    }
+  }
+
+  const unacked = data?.signatures.filter((s) => !s.acknowledged) ?? [];
+
+  async function onAckAll() {
+    if (acking || unacked.length === 0) return;
+    setAcking(true);
+    try {
+      await Promise.all(unacked.map((s) => ackError(s.id, true)));
+    } catch {
+      /* swallow — non-fatal; reload reflects whatever stuck */
+    } finally {
+      setAcking(false);
+      setTick((t) => t + 1);
     }
   }
 
@@ -76,7 +93,19 @@ export function Errors() {
       <SectionHeader
         index="01"
         title="Exceptions"
-        right={<Segment<Range> options={RANGE_OPTIONS} value={range} onChange={setRange} />}
+        right={
+          <div className="secctl">
+            <button
+              className="ackbtn"
+              onClick={onAckAll}
+              disabled={acking || unacked.length === 0}
+              title="Acknowledge every unacknowledged exception in this window"
+            >
+              {acking ? "acking…" : `ack all${unacked.length > 0 ? ` · ${unacked.length}` : ""}`}
+            </button>
+            <Segment<Range> options={RANGE_OPTIONS} value={range} onChange={setRange} />
+          </div>
+        }
         count={data ? `${data.signatures.length} signatures` : undefined}
       />
 
@@ -115,7 +144,7 @@ export function Errors() {
                     <div className="nm rose" style={{ fontSize: "12px" }}>{sig.sample}</div>
                     <div className="sub">{sig.source ?? "—"}</div>
                   </div>
-                  <div className="v" style={{ fontSize: "11px", color: "var(--dim)" }}>
+                  <div className="v clip" style={{ fontSize: "11px", color: "var(--dim)" }}>
                     {sig.agent} / {sig.proc}
                     {sig.affected.length > 1 && ` · ${sig.affected.length} procs`}
                   </div>
