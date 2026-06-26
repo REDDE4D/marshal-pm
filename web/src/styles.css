@@ -77,6 +77,10 @@ button:disabled{ cursor:not-allowed; opacity:.45; }
 .lh{ height:34px; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); border-bottom:1px solid var(--line); }
 .lr{ height:52px; border-bottom:1px solid var(--line2); font-size:13px; position:relative; }
 .lr:hover{ background:var(--row); } .lr.clk{ cursor:pointer; }
+/* Grid cells must be allowed to shrink so long text truncates instead of
+   overflowing the fixed-height row and overlapping its neighbours. */
+.lr > *{ min-width:0; }
+.lr .nm, .lr .sub, .lr .clip{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .rr{ text-align:right; }
 .ix{ font-family:var(--m); font-size:11px; color:var(--faint); }
 .nm{ font-family:var(--m); color:var(--bright); font-size:14px; }
@@ -147,6 +151,10 @@ select.inp{ font-family:var(--i); }
 }
 .ackbtn:hover{ color:var(--olive); border-color:#2F3A27; background:rgba(157,193,90,.08); }
 .ackbtn.on{ color:var(--olive); border-color:#2F3A27; }
+.ackbtn:disabled{ opacity:.4; cursor:default; }
+.ackbtn:disabled:hover{ color:var(--dim); border-color:var(--line); background:#0C0E12; }
+/* Section-header control cluster (e.g. "Ack all" + range segment). */
+.secctl{ display:flex; align-items:center; gap:12px; }
 
 /* Metric chart hover: crosshair + a value/time readout. */
 .mc-wrap{ position:relative; }

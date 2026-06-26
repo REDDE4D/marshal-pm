@@ -12,6 +12,16 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Added
+- **"Ack all" control on the Exceptions page.** The dashboard errors page now has an `ack all · N`
+  button in the section header that acknowledges every unacknowledged exception in the current window
+  at once; it shows the outstanding count and disables itself when nothing is left to ack.
+
+### Fixed
+- **Exceptions page text overlap.** Long error messages, sources, and process labels are now truncated
+  with an ellipsis instead of wrapping and overflowing the fixed-height ledger rows, which had caused
+  text to overlap neighbouring rows and the ack buttons.
+
 ## [0.13.0] - 2026-06-26
 
 ### Added
