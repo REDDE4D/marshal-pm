@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -11,6 +13,7 @@ import (
 	"github.com/REDDE4D/marshal-pm/internal/manager"
 	"github.com/REDDE4D/marshal-pm/internal/metrics"
 	"github.com/REDDE4D/marshal-pm/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/updatecheck"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -187,5 +190,49 @@ func TestResetUnknownIsNotFound(t *testing.T) {
 	_, err := srv.Reset(context.Background(), &pb.Selector{Target: "ghost"})
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("got %v, want NotFound", err)
+	}
+}
+
+func TestUpdateStatusReportsSnapshot(t *testing.T) {
+	// Stub GitHub's /releases/latest redirect to a newer version.
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "https://github.com/x/y/releases/tag/v9.9.9")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer stub.Close()
+
+	chk := updatecheck.New("v0.1.0",
+		updatecheck.WithReleasesURL(stub.URL),
+		updatecheck.WithHTTPClient(stub.Client()))
+	// One synchronous refresh via a brief Run; cancel right after.
+	ctx, cancel := context.WithCancel(context.Background())
+	go chk.Run(ctx)
+	deadline := time.Now().Add(3 * time.Second)
+	for chk.Snapshot().Latest == "" {
+		if time.Now().After(deadline) {
+			t.Fatal("checker never refreshed")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+
+	srv := &Server{updater: chk}
+	info, err := srv.UpdateStatus(context.Background(), &pb.Empty{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.GetLatest() != "v9.9.9" || !info.GetOutdated() || info.GetCurrent() != "v0.1.0" {
+		t.Fatalf("got %+v, want latest v9.9.9 outdated current v0.1.0", info)
+	}
+}
+
+func TestUpdateStatusNilUpdater(t *testing.T) {
+	srv := &Server{}
+	info, err := srv.UpdateStatus(context.Background(), &pb.Empty{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.GetOutdated() || info.GetLatest() != "" {
+		t.Fatalf("nil updater should yield empty UpdateInfo, got %+v", info)
 	}
 }
