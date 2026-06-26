@@ -154,3 +154,16 @@ func TestPersistServer(t *testing.T) {
 		t.Fatalf("expected no fleet.json for a config without a server block, got %+v", g)
 	}
 }
+
+func TestResetAndFlushCommandsRegistered(t *testing.T) {
+	root := rootCmd()
+	have := map[string]bool{}
+	for _, c := range root.Commands() {
+		have[strings.Fields(c.Use)[0]] = true
+	}
+	for _, name := range []string{"reset", "flush"} {
+		if !have[name] {
+			t.Errorf("root command %q not registered", name)
+		}
+	}
+}

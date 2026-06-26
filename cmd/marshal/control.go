@@ -169,6 +169,30 @@ func selectorCmd(use, short string, call func(context.Context, pb.DaemonClient, 
 	}
 }
 
+// flushCmd clears captured logs for app(s). The selector argument is optional
+// and defaults to "all" (matching `pm2 flush`).
+func flushCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "flush [name|id|all]",
+		Short: "Clear captured logs for app(s) (default: all)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := "all"
+			if len(args) == 1 {
+				target = args[0]
+			}
+			return withClient(func(ctx context.Context, c pb.DaemonClient) error {
+				ack, err := c.Flush(ctx, &pb.Selector{Target: target})
+				if err != nil {
+					return err
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), "marshal:", ack.GetMessage())
+				return nil
+			})
+		},
+	}
+}
+
 // targetsFromArg resolves a stop/restart/delete argument. A path to an existing
 // .yaml/.yml file expands to the names of the apps it defines (fromFile=true);
 // anything else is a single literal selector (name/id/all).
