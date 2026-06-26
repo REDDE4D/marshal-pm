@@ -12,6 +12,8 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-06-26
+
 ### Added
 - **"Ack all" control on the Exceptions page.** The dashboard errors page now has an `ack all · N`
   button in the section header that acknowledges every unacknowledged exception in the current window
@@ -375,7 +377,8 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.10.0...v0.11.0
