@@ -15,14 +15,15 @@ import (
 // appSpecToConfig converts a wire AppSpec into a defaulted, validated config.App.
 func appSpecToConfig(s *pb.AppSpec) (config.App, error) {
 	app := config.App{
-		Name:        s.GetName(),
-		Cmd:         s.GetCmd(),
-		Args:        s.GetArgs(),
-		Cwd:         s.GetCwd(),
-		Instances:   int(s.GetInstances()),
-		Env:         s.GetEnv(),
-		Restart:     config.RestartMode(s.GetRestart()),
-		MaxRestarts: int(s.GetMaxRestarts()),
+		Name:             s.GetName(),
+		Cmd:              s.GetCmd(),
+		Args:             s.GetArgs(),
+		Cwd:              s.GetCwd(),
+		Instances:        int(s.GetInstances()),
+		Env:              s.GetEnv(),
+		Restart:          config.RestartMode(s.GetRestart()),
+		MaxRestarts:      int(s.GetMaxRestarts()),
+		MaxMemoryRestart: config.ByteSize{Bytes: uint64(s.GetMaxMemoryRestart())},
 	}
 	if kt := s.GetKillTimeout(); kt != "" {
 		d, err := time.ParseDuration(kt)

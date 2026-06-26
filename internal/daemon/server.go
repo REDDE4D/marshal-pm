@@ -21,6 +21,7 @@ import (
 	"github.com/REDDE4D/marshal-pm/internal/hostmetrics"
 	"github.com/REDDE4D/marshal-pm/internal/logs"
 	"github.com/REDDE4D/marshal-pm/internal/manager"
+	"github.com/REDDE4D/marshal-pm/internal/memguard"
 	"github.com/REDDE4D/marshal-pm/internal/metrics"
 	"github.com/REDDE4D/marshal-pm/internal/metricstore"
 	"github.com/REDDE4D/marshal-pm/internal/pb"
@@ -45,6 +46,7 @@ type Server struct {
 	kill             func()             // triggers daemon shutdown (set by Run)
 	logPolicyDefault logs.Policy        // effective default log policy (from WithLogRetention)
 	deployer         *deploy.Deployer
+	guard            *memguard.Guard // memory-limit restart guard (M-?)
 }
 
 // launchApp admits one already-converted app into the manager and sets its log
@@ -52,6 +54,9 @@ type Server struct {
 func (s *Server) launchApp(app config.App) ([]manager.InstanceSnapshot, error) {
 	if s.logs != nil {
 		s.logs.SetPolicy(app.Name, logPolicy(app, s.logPolicyDefault))
+	}
+	if s.guard != nil {
+		s.guard.SetLimit(app.Name, app.MaxMemoryRestart.Bytes)
 	}
 	return s.mgr.Add(app)
 }
@@ -160,7 +165,20 @@ func (s *Server) Restart(_ context.Context, sel *pb.Selector) (*pb.ProcList, err
 }
 
 func (s *Server) Delete(_ context.Context, sel *pb.Selector) (*pb.ProcList, error) {
-	return s.mutate(s.mgr.Delete, sel)
+	snaps, err := s.mgr.Delete(sel.GetTarget())
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "%v", err)
+	}
+	if s.guard != nil {
+		seen := map[string]bool{}
+		for _, sn := range snaps {
+			if !seen[sn.Name] {
+				seen[sn.Name] = true
+				s.guard.Remove(sn.Name)
+			}
+		}
+	}
+	return s.procList(snaps), nil
 }
 
 // Reset zeroes the restart counters of the selected apps and prunes their
@@ -327,16 +345,6 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 	if err != nil {
 		return fmt.Errorf("open metrics db: %w", err)
 	}
-	sampler.SetOnTick(func(m map[string]metrics.Sample) {
-		if len(m) == 0 {
-			return
-		}
-		samples := make([]metricstore.Sample, 0, len(m))
-		for label, sm := range m {
-			samples = append(samples, metricstore.Sample{Label: label, Cpu: sm.Cpu, Mem: sm.Mem})
-		}
-		_ = mdb.Append(time.Now().UnixMilli(), samples)
-	})
 	if apps, err := st.Load(); err == nil {
 		for _, app := range apps {
 			_, _ = mgr.Add(app)
@@ -357,6 +365,23 @@ func Run(ctx context.Context, st *store.Store, opts ...Option) error {
 	gs := grpc.NewServer()
 	srv := &Server{mgr: mgr, store: st, logs: reg, metrics: sampler, mdb: mdb, estore: estore, logPolicyDefault: cfg.logRetention}
 	srv.deployer = deploy.New(deployHost{srv}, deploy.ExecRunner{}, st.DeploysDir())
+	srv.guard = memguard.New(func(name string) { go func() { _, _ = mgr.Restart(name) }() }, log.Printf)
+	if apps, err := st.Load(); err == nil {
+		for _, app := range apps {
+			srv.guard.SetLimit(app.Name, app.MaxMemoryRestart.Bytes)
+		}
+	}
+	sampler.SetOnTick(func(m map[string]metrics.Sample) {
+		srv.guard.Check(m)
+		if len(m) == 0 {
+			return
+		}
+		samples := make([]metricstore.Sample, 0, len(m))
+		for label, sm := range m {
+			samples = append(samples, metricstore.Sample{Label: label, Cpu: sm.Cpu, Mem: sm.Mem})
+		}
+		_ = mdb.Append(time.Now().UnixMilli(), samples)
+	})
 	var once sync.Once
 	stopped := make(chan struct{})
 	srv.kill = func() { once.Do(func() { close(stopped) }) }
