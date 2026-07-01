@@ -12,6 +12,8 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-07-01
+
 ### Added
 - `stop`, `restart`, `delete`, and `reset` now accept multiple targets and
   comma-separated lists (e.g. `marshal restart 2 3`, `marshal delete 2,3`). An
@@ -393,7 +395,8 @@ introduces semantic versioning + this changelog.
 - `make build` now stamps the version from `git describe --tags` via `-ldflags`
   (`marshal --version` reports it); `make version` prints the resolved version.
 
-[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/REDDE4D/marshal-pm/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/REDDE4D/marshal-pm/compare/v0.11.0...v0.12.0
