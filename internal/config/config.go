@@ -151,6 +151,9 @@ type ServerConfig struct {
 
 // App is one supervised application definition.
 type App struct {
+	// ID is the daemon-assigned stable identifier, persisted in dump.json and
+	// reused across restarts/resurrect. It is never read from user YAML.
+	ID        int               `yaml:"-" json:"id,omitempty"`
 	Name      string            `yaml:"name" json:"name"`
 	Cmd       string            `yaml:"cmd" json:"cmd"`
 	Args      []string          `yaml:"args" json:"args"`
