@@ -238,6 +238,19 @@ func TestUpdateStatusNilUpdater(t *testing.T) {
 	}
 }
 
+func TestServerUpdateEnvNilStoreIsUnavailable(t *testing.T) {
+	// A Server with no store must return codes.Unavailable rather than panic.
+	srv, done := newTestServer(t) // store field is nil
+	defer done()
+
+	_, err := srv.UpdateEnv(context.Background(), &pb.UpdateEnvRequest{Apps: []*pb.AppSpec{
+		{Name: "anything", Env: map[string]string{"K": "v"}},
+	}})
+	if status.Code(err) != codes.Unavailable {
+		t.Fatalf("got %v, want Unavailable", err)
+	}
+}
+
 func TestServerUpdateEnvPersistsAndSkipsUnknown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

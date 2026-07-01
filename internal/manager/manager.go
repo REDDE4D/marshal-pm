@@ -71,7 +71,7 @@ type managedApp struct {
 type Manager struct {
 	ctx context.Context
 
-	// opMu serializes mutating operations (Add/Stop/Restart/Delete/StopAll) so a
+	// opMu serializes mutating operations (Add/Stop/Restart/Delete/StopAll/UpdateEnv) so a
 	// blocking stop cannot interleave with another mutator and orphan goroutines.
 	opMu sync.Mutex
 

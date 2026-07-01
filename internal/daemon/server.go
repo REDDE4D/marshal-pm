@@ -170,11 +170,17 @@ func (s *Server) Restart(_ context.Context, sel *pb.Selector) (*pb.ProcList, err
 // that aren't currently managed are skipped (not an error), so a config file
 // listing not-yet-started apps degrades gracefully. Updated apps are persisted.
 func (s *Server) UpdateEnv(_ context.Context, req *pb.UpdateEnvRequest) (*pb.ProcList, error) {
+	if s.store == nil {
+		return nil, status.Error(codes.Unavailable, "no store configured")
+	}
 	var out []manager.InstanceSnapshot
 	for _, spec := range req.GetApps() {
 		snaps, err := s.mgr.UpdateEnv(spec.GetName(), spec.GetEnv())
 		if err != nil {
-			continue // skip unknown/absent apps
+			// intentional skip-on-absent: manager returns an error only for an
+			// unknown/absent app; skipping lets a config file that lists
+			// not-yet-started apps degrade gracefully.
+			continue
 		}
 		out = append(out, snaps...)
 	}
