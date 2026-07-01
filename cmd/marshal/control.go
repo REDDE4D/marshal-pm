@@ -148,6 +148,26 @@ func selectorCmd(use, short string, call func(context.Context, pb.DaemonClient, 
 	}
 }
 
+func restartCmd() *cobra.Command {
+	var updateEnv bool
+	cmd := &cobra.Command{
+		Use:   "restart <name|id|all|marshal.yaml>...",
+		Short: "Restart app(s); with --update-env, reload env from a marshal.yaml first",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if updateEnv {
+				return runRestartUpdateEnv(cmd, args) // implemented in Group 3, Task 9
+			}
+			return runSelector(cmd, args, func(ctx context.Context, c pb.DaemonClient, sel *pb.Selector) (*pb.ProcList, error) {
+				return c.Restart(ctx, sel)
+			})
+		},
+	}
+	cmd.Flags().BoolVar(&updateEnv, "update-env", false,
+		"re-read env/env_file from the given marshal.yaml and apply it on restart")
+	return cmd
+}
+
 // runSelector expands args into targets and applies call to each. With multiple
 // targets (or a config-file expansion) an errored target warns and the loop
 // continues, returning a non-zero exit if any failed; a single explicit target
@@ -615,4 +635,9 @@ func printLogLine(cmd *cobra.Command, ln *pb.LogLine) {
 		prefix = labelColor(prefix) + prefix + ansiReset
 	}
 	fmt.Fprintf(w, "%s | %s\n", prefix, ln.GetLine())
+}
+
+// runRestartUpdateEnv is implemented in Group 3 (Task 9).
+func runRestartUpdateEnv(cmd *cobra.Command, args []string) error {
+	return fmt.Errorf("--update-env not yet implemented")
 }

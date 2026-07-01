@@ -227,6 +227,16 @@ func TestSelectorCmdAcceptsMultipleArgs(t *testing.T) {
 	}
 }
 
+func TestRestartCmdHasUpdateEnvFlagAndMultiArg(t *testing.T) {
+	cmd := restartCmd()
+	if cmd.Flags().Lookup("update-env") == nil {
+		t.Fatal("expected --update-env flag")
+	}
+	if err := cmd.Args(cmd, []string{"a", "b"}); err != nil {
+		t.Fatalf("restart should accept multiple args, got %v", err)
+	}
+}
+
 func TestExpandSelectorArgs(t *testing.T) {
 	cases := []struct {
 		name      string
