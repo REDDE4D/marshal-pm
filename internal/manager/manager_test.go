@@ -560,3 +560,20 @@ func TestAddDuplicateIncomingIDFallsBackToMaxPlusOne(t *testing.T) {
 		t.Fatalf("collision not resolved: got ID %d, want 4", snaps[0].ID)
 	}
 }
+
+func TestLoadWithoutIDsAssignsContiguousThenSpecsCarriesThem(t *testing.T) {
+	m := New(context.Background())
+	// Simulate a pre-upgrade dump.json: apps with ID == 0, added in order.
+	for _, name := range []string{"x", "y", "z"} {
+		if _, err := m.Add(config.App{Name: name, Cmd: "true", Instances: 1}); err != nil {
+			t.Fatalf("Add %s: %v", name, err)
+		}
+	}
+	specs := m.Specs()
+	want := map[string]int{"x": 1, "y": 2, "z": 3}
+	for _, s := range specs {
+		if s.ID != want[s.Name] {
+			t.Fatalf("Specs()[%s].ID = %d, want %d", s.Name, s.ID, want[s.Name])
+		}
+	}
+}

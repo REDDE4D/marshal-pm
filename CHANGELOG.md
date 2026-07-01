@@ -12,6 +12,13 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 
 ## [Unreleased]
 
+### Changed
+- App IDs are now stable: the daemon persists each app's ID in `dump.json` and
+  reuses it across restarts and `resurrect`. Existing installs migrate
+  automatically — the first daemon restart after upgrade renumbers apps to a
+  contiguous `1..N` and they stay fixed thereafter. This makes `restart <id>` /
+  `delete <id>` reliable.
+
 ## [0.14.0] - 2026-06-26
 
 ### Added
