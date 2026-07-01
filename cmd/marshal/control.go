@@ -135,39 +135,49 @@ func startCmd() *cobra.Command {
 }
 
 // selectorCmd builds stop/restart/delete, which share the same shape. The
-// argument is a selector (name/id/all) or — like `marshal start` — a path to a
-// marshal.yaml, in which case every app it defines is targeted.
+// arguments can be selectors (name/id/all), comma-separated lists, or paths to a
+// marshal.yaml; each expands to one or more targets.
 func selectorCmd(use, short string, call func(context.Context, pb.DaemonClient, *pb.Selector) (*pb.ProcList, error)) *cobra.Command {
 	return &cobra.Command{
 		Use:   use,
 		Short: short,
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			targets, fromFile, err := targetsFromArg(args[0])
-			if err != nil {
-				return err
-			}
-			return withClient(func(ctx context.Context, c pb.DaemonClient) error {
-				agg := &pb.ProcList{}
-				for _, t := range targets {
-					list, err := call(ctx, c, &pb.Selector{Target: t})
-					if err != nil {
-						// When expanding a config file, an app that isn't running
-						// shouldn't abort the others — warn and keep going. A single
-						// explicit selector still fails hard.
-						if fromFile {
-							fmt.Fprintf(cmd.ErrOrStderr(), "marshal: %s: %v\n", t, err)
-							continue
-						}
-						return err
-					}
-					agg.Procs = append(agg.Procs, list.GetProcs()...)
-				}
-				printProcs(cmd, agg)
-				return nil
-			})
+			return runSelector(cmd, args, call)
 		},
 	}
+}
+
+// runSelector expands args into targets and applies call to each. With multiple
+// targets (or a config-file expansion) an errored target warns and the loop
+// continues, returning a non-zero exit if any failed; a single explicit target
+// fails hard.
+func runSelector(cmd *cobra.Command, args []string, call func(context.Context, pb.DaemonClient, *pb.Selector) (*pb.ProcList, error)) error {
+	targets, multi, err := expandSelectorArgs(args)
+	if err != nil {
+		return err
+	}
+	return withClient(func(ctx context.Context, c pb.DaemonClient) error {
+		agg := &pb.ProcList{}
+		failed := false
+		for _, t := range targets {
+			list, err := call(ctx, c, &pb.Selector{Target: t})
+			if err != nil {
+				if multi {
+					fmt.Fprintf(cmd.ErrOrStderr(), "marshal: %s: %v\n", t, err)
+					failed = true
+					continue
+				}
+				return err
+			}
+			agg.Procs = append(agg.Procs, list.GetProcs()...)
+		}
+		printProcs(cmd, agg)
+		if failed {
+			return fmt.Errorf("one or more targets failed")
+		}
+		return nil
+	})
 }
 
 // flushCmd clears captured logs for app(s). The selector argument is optional

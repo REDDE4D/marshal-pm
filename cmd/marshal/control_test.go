@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -207,6 +208,22 @@ func TestAppToSpecCarriesMaxMemoryRestart(t *testing.T) {
 	})
 	if spec.GetMaxMemoryRestart() != 300<<20 {
 		t.Fatalf("MaxMemoryRestart = %d, want %d", spec.GetMaxMemoryRestart(), 300<<20)
+	}
+}
+
+func TestSelectorCmdAcceptsMultipleArgs(t *testing.T) {
+	cmd := selectorCmd("stop <name|id|all>", "stop", func(context.Context, pb.DaemonClient, *pb.Selector) (*pb.ProcList, error) {
+		return &pb.ProcList{}, nil
+	})
+	if cmd.Args == nil {
+		t.Fatal("expected an Args validator")
+	}
+	// MinimumNArgs(1): zero args is an error, two args is fine.
+	if err := cmd.Args(cmd, []string{}); err == nil {
+		t.Fatal("expected error for zero args")
+	}
+	if err := cmd.Args(cmd, []string{"a", "b"}); err != nil {
+		t.Fatalf("two args should be allowed, got %v", err)
 	}
 }
 
