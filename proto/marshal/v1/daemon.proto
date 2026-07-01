@@ -21,6 +21,7 @@ service Daemon {
   rpc Reset(Selector) returns (ProcList);
   rpc Flush(Selector) returns (Ack);
   rpc UpdateStatus(Empty) returns (UpdateInfo);
+  rpc UpdateEnv(UpdateEnvRequest) returns (ProcList);
 }
 
 message Empty {}
@@ -65,6 +66,10 @@ message AppSpec {
 }
 
 message StartRequest { repeated AppSpec apps = 1; }
+
+// UpdateEnvRequest carries apps whose env should be refreshed in place. Only
+// name and env are read; other AppSpec fields are ignored.
+message UpdateEnvRequest { repeated AppSpec apps = 1; }
 
 // Selector resolves to a name, a numeric id, or the literal "all".
 message Selector { string target = 1; }

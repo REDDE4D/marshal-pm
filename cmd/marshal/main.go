@@ -52,10 +52,7 @@ func rootCmd() *cobra.Command {
 			func(ctx context.Context, c pb.DaemonClient, sel *pb.Selector) (*pb.ProcList, error) {
 				return c.Stop(ctx, sel)
 			}),
-		selectorCmd("restart <name|id|all>", "Restart app(s)",
-			func(ctx context.Context, c pb.DaemonClient, sel *pb.Selector) (*pb.ProcList, error) {
-				return c.Restart(ctx, sel)
-			}),
+		restartCmd(),
 		selectorCmd("delete <name|id|all>", "Stop and remove app(s) from management",
 			func(ctx context.Context, c pb.DaemonClient, sel *pb.Selector) (*pb.ProcList, error) {
 				return c.Delete(ctx, sel)

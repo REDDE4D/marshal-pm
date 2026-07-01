@@ -135,39 +135,69 @@ func startCmd() *cobra.Command {
 }
 
 // selectorCmd builds stop/restart/delete, which share the same shape. The
-// argument is a selector (name/id/all) or — like `marshal start` — a path to a
-// marshal.yaml, in which case every app it defines is targeted.
+// arguments can be selectors (name/id/all), comma-separated lists, or paths to a
+// marshal.yaml; each expands to one or more targets.
 func selectorCmd(use, short string, call func(context.Context, pb.DaemonClient, *pb.Selector) (*pb.ProcList, error)) *cobra.Command {
 	return &cobra.Command{
 		Use:   use,
 		Short: short,
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			targets, fromFile, err := targetsFromArg(args[0])
-			if err != nil {
-				return err
+			return runSelector(cmd, args, call)
+		},
+	}
+}
+
+func restartCmd() *cobra.Command {
+	var updateEnv bool
+	cmd := &cobra.Command{
+		Use:   "restart <name|id|all|marshal.yaml>...",
+		Short: "Restart app(s); with --update-env, reload env from a marshal.yaml first",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if updateEnv {
+				return runRestartUpdateEnv(cmd, args) // implemented in Group 3, Task 9
 			}
-			return withClient(func(ctx context.Context, c pb.DaemonClient) error {
-				agg := &pb.ProcList{}
-				for _, t := range targets {
-					list, err := call(ctx, c, &pb.Selector{Target: t})
-					if err != nil {
-						// When expanding a config file, an app that isn't running
-						// shouldn't abort the others — warn and keep going. A single
-						// explicit selector still fails hard.
-						if fromFile {
-							fmt.Fprintf(cmd.ErrOrStderr(), "marshal: %s: %v\n", t, err)
-							continue
-						}
-						return err
-					}
-					agg.Procs = append(agg.Procs, list.GetProcs()...)
-				}
-				printProcs(cmd, agg)
-				return nil
+			return runSelector(cmd, args, func(ctx context.Context, c pb.DaemonClient, sel *pb.Selector) (*pb.ProcList, error) {
+				return c.Restart(ctx, sel)
 			})
 		},
 	}
+	cmd.Flags().BoolVar(&updateEnv, "update-env", false,
+		"re-read env/env_file from the given marshal.yaml and apply it on restart")
+	return cmd
+}
+
+// runSelector expands args into targets and applies call to each. With multiple
+// targets (or a config-file expansion) an errored target warns and the loop
+// continues, returning a non-zero exit if any failed; a single explicit target
+// fails hard.
+func runSelector(cmd *cobra.Command, args []string, call func(context.Context, pb.DaemonClient, *pb.Selector) (*pb.ProcList, error)) error {
+	targets, multi, err := expandSelectorArgs(args)
+	if err != nil {
+		return err
+	}
+	return withClient(func(ctx context.Context, c pb.DaemonClient) error {
+		agg := &pb.ProcList{}
+		failed := false
+		for _, t := range targets {
+			list, err := call(ctx, c, &pb.Selector{Target: t})
+			if err != nil {
+				if multi {
+					fmt.Fprintf(cmd.ErrOrStderr(), "marshal: %s: %v\n", t, err)
+					failed = true
+					continue
+				}
+				return err
+			}
+			agg.Procs = append(agg.Procs, list.GetProcs()...)
+		}
+		printProcs(cmd, agg)
+		if failed {
+			return fmt.Errorf("one or more targets failed")
+		}
+		return nil
+	})
 }
 
 // flushCmd clears captured logs for app(s). The selector argument is optional
@@ -224,6 +254,44 @@ func isConfigFile(arg string) bool {
 	}
 	info, err := os.Stat(arg)
 	return err == nil && !info.IsDir()
+}
+
+// expandSelectorArgs turns CLI args — each possibly a comma-separated list, a
+// name/id, or a marshal.yaml path — into a flat, de-duplicated target list.
+// multi is true when more than one target results or any arg was a config file,
+// which switches callers to warn-and-continue error handling. "all" anywhere
+// short-circuits to a single "all" target.
+func expandSelectorArgs(args []string) (targets []string, multi bool, err error) {
+	seen := map[string]bool{}
+	fromFile := false
+	for _, raw := range args {
+		for _, part := range strings.Split(raw, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			ts, ff, e := targetsFromArg(part)
+			if e != nil {
+				return nil, false, e
+			}
+			fromFile = fromFile || ff
+			for _, t := range ts {
+				if !seen[t] {
+					seen[t] = true
+					targets = append(targets, t)
+				}
+			}
+		}
+	}
+	if len(targets) == 0 {
+		return nil, false, fmt.Errorf("no targets given")
+	}
+	for _, t := range targets {
+		if t == "all" {
+			return []string{"all"}, false, nil
+		}
+	}
+	return targets, fromFile || len(targets) > 1, nil
 }
 
 // enrollmentHeader returns a one-line status string indicating whether the host
@@ -567,4 +635,53 @@ func printLogLine(cmd *cobra.Command, ln *pb.LogLine) {
 		prefix = labelColor(prefix) + prefix + ansiReset
 	}
 	fmt.Fprintf(w, "%s | %s\n", prefix, ln.GetLine())
+}
+
+// runRestartUpdateEnv re-reads env/env_file from the given marshal.yaml file(s)
+// and applies it to the matching running apps via the UpdateEnv RPC. It requires
+// at least one config-file argument, since the daemon cannot re-read env without
+// the file. Apps listed in the file but not currently running are warned, not failed.
+func runRestartUpdateEnv(cmd *cobra.Command, args []string) error {
+	var specs []*pb.AppSpec
+	requested := map[string]bool{}
+	for _, raw := range args {
+		for _, part := range strings.Split(raw, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			if !isConfigFile(part) {
+				return fmt.Errorf("marshal restart --update-env requires a marshal.yaml path "+
+					"(the daemon cannot re-read env without the config file); %q is not one", part)
+			}
+			cfg, err := config.Load(part)
+			if err != nil {
+				return err
+			}
+			for _, a := range cfg.Apps {
+				specs = append(specs, &pb.AppSpec{Name: a.Name, Env: a.Env})
+				requested[a.Name] = true
+			}
+		}
+	}
+	if len(specs) == 0 {
+		return fmt.Errorf("marshal restart --update-env: no apps found in the given config file(s)")
+	}
+	return withClient(func(ctx context.Context, c pb.DaemonClient) error {
+		list, err := c.UpdateEnv(ctx, &pb.UpdateEnvRequest{Apps: specs})
+		if err != nil {
+			return err
+		}
+		printProcs(cmd, list)
+		got := map[string]bool{}
+		for _, p := range list.GetProcs() {
+			got[p.GetName()] = true
+		}
+		for name := range requested {
+			if !got[name] {
+				fmt.Fprintf(cmd.ErrOrStderr(), "marshal: %s: not running; env not applied\n", name)
+			}
+		}
+		return nil
+	})
 }

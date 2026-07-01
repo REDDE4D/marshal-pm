@@ -172,3 +172,26 @@ func TestClearServerRemovesConfigAndToken(t *testing.T) {
 		t.Errorf("second ClearServer: %v", err)
 	}
 }
+
+func TestSaveLoadRoundTripsAppID(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dir)
+	s, err := New()
+	if err != nil {
+		t.Fatalf("store.New: %v", err)
+	}
+	in := []config.App{
+		{Name: "a", Cmd: "true", ID: 1},
+		{Name: "b", Cmd: "true", ID: 2},
+	}
+	if err := s.Save(in); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	out, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(out) != 2 || out[0].ID != 1 || out[1].ID != 2 {
+		t.Fatalf("IDs not round-tripped: %+v", out)
+	}
+}

@@ -166,6 +166,30 @@ func (s *Server) Restart(_ context.Context, sel *pb.Selector) (*pb.ProcList, err
 	return s.mutate(s.mgr.Restart, sel)
 }
 
+// UpdateEnv refreshes the env of each named app in place and restarts it. Apps
+// that aren't currently managed are skipped (not an error), so a config file
+// listing not-yet-started apps degrades gracefully. Updated apps are persisted.
+func (s *Server) UpdateEnv(_ context.Context, req *pb.UpdateEnvRequest) (*pb.ProcList, error) {
+	if s.store == nil {
+		return nil, status.Error(codes.Unavailable, "no store configured")
+	}
+	var out []manager.InstanceSnapshot
+	for _, spec := range req.GetApps() {
+		snaps, err := s.mgr.UpdateEnv(spec.GetName(), spec.GetEnv())
+		if err != nil {
+			// intentional skip-on-absent: manager returns an error only for an
+			// unknown/absent app; skipping lets a config file that lists
+			// not-yet-started apps degrade gracefully.
+			continue
+		}
+		out = append(out, snaps...)
+	}
+	if err := s.store.Save(s.mgr.Specs()); err != nil {
+		return nil, status.Errorf(codes.Internal, "persist: %v", err)
+	}
+	return s.procList(out), nil
+}
+
 func (s *Server) Delete(_ context.Context, sel *pb.Selector) (*pb.ProcList, error) {
 	snaps, err := s.mgr.Delete(sel.GetTarget())
 	if err != nil {

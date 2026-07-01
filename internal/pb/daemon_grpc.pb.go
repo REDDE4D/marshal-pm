@@ -33,6 +33,7 @@ const (
 	Daemon_Reset_FullMethodName          = "/marshal.v1.Daemon/Reset"
 	Daemon_Flush_FullMethodName          = "/marshal.v1.Daemon/Flush"
 	Daemon_UpdateStatus_FullMethodName   = "/marshal.v1.Daemon/UpdateStatus"
+	Daemon_UpdateEnv_FullMethodName      = "/marshal.v1.Daemon/UpdateEnv"
 )
 
 // DaemonClient is the client API for Daemon service.
@@ -56,6 +57,7 @@ type DaemonClient interface {
 	Reset(ctx context.Context, in *Selector, opts ...grpc.CallOption) (*ProcList, error)
 	Flush(ctx context.Context, in *Selector, opts ...grpc.CallOption) (*Ack, error)
 	UpdateStatus(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*UpdateInfo, error)
+	UpdateEnv(ctx context.Context, in *UpdateEnvRequest, opts ...grpc.CallOption) (*ProcList, error)
 }
 
 type daemonClient struct {
@@ -215,6 +217,16 @@ func (c *daemonClient) UpdateStatus(ctx context.Context, in *Empty, opts ...grpc
 	return out, nil
 }
 
+func (c *daemonClient) UpdateEnv(ctx context.Context, in *UpdateEnvRequest, opts ...grpc.CallOption) (*ProcList, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProcList)
+	err := c.cc.Invoke(ctx, Daemon_UpdateEnv_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServer is the server API for Daemon service.
 // All implementations must embed UnimplementedDaemonServer
 // for forward compatibility.
@@ -236,6 +248,7 @@ type DaemonServer interface {
 	Reset(context.Context, *Selector) (*ProcList, error)
 	Flush(context.Context, *Selector) (*Ack, error)
 	UpdateStatus(context.Context, *Empty) (*UpdateInfo, error)
+	UpdateEnv(context.Context, *UpdateEnvRequest) (*ProcList, error)
 	mustEmbedUnimplementedDaemonServer()
 }
 
@@ -287,6 +300,9 @@ func (UnimplementedDaemonServer) Flush(context.Context, *Selector) (*Ack, error)
 }
 func (UnimplementedDaemonServer) UpdateStatus(context.Context, *Empty) (*UpdateInfo, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateStatus not implemented")
+}
+func (UnimplementedDaemonServer) UpdateEnv(context.Context, *UpdateEnvRequest) (*ProcList, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateEnv not implemented")
 }
 func (UnimplementedDaemonServer) mustEmbedUnimplementedDaemonServer() {}
 func (UnimplementedDaemonServer) testEmbeddedByValue()                {}
@@ -554,6 +570,24 @@ func _Daemon_UpdateStatus_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Daemon_UpdateEnv_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateEnvRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).UpdateEnv(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_UpdateEnv_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).UpdateEnv(ctx, req.(*UpdateEnvRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Daemon_ServiceDesc is the grpc.ServiceDesc for Daemon service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -612,6 +646,10 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateStatus",
 			Handler:    _Daemon_UpdateStatus_Handler,
+		},
+		{
+			MethodName: "UpdateEnv",
+			Handler:    _Daemon_UpdateEnv_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

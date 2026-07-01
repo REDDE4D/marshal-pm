@@ -483,6 +483,52 @@ func (x *StartRequest) GetApps() []*AppSpec {
 	return nil
 }
 
+// UpdateEnvRequest carries apps whose env should be refreshed in place. Only
+// name and env are read; other AppSpec fields are ignored.
+type UpdateEnvRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Apps          []*AppSpec             `protobuf:"bytes,1,rep,name=apps,proto3" json:"apps,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateEnvRequest) Reset() {
+	*x = UpdateEnvRequest{}
+	mi := &file_marshal_v1_daemon_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateEnvRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateEnvRequest) ProtoMessage() {}
+
+func (x *UpdateEnvRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_marshal_v1_daemon_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateEnvRequest.ProtoReflect.Descriptor instead.
+func (*UpdateEnvRequest) Descriptor() ([]byte, []int) {
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *UpdateEnvRequest) GetApps() []*AppSpec {
+	if x != nil {
+		return x.Apps
+	}
+	return nil
+}
+
 // Selector resolves to a name, a numeric id, or the literal "all".
 type Selector struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -493,7 +539,7 @@ type Selector struct {
 
 func (x *Selector) Reset() {
 	*x = Selector{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[6]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -505,7 +551,7 @@ func (x *Selector) String() string {
 func (*Selector) ProtoMessage() {}
 
 func (x *Selector) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[6]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -518,7 +564,7 @@ func (x *Selector) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Selector.ProtoReflect.Descriptor instead.
 func (*Selector) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{6}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Selector) GetTarget() string {
@@ -555,7 +601,7 @@ type ProcInfo struct {
 
 func (x *ProcInfo) Reset() {
 	*x = ProcInfo{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[7]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -567,7 +613,7 @@ func (x *ProcInfo) String() string {
 func (*ProcInfo) ProtoMessage() {}
 
 func (x *ProcInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[7]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -580,7 +626,7 @@ func (x *ProcInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcInfo.ProtoReflect.Descriptor instead.
 func (*ProcInfo) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{7}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ProcInfo) GetId() int32 {
@@ -718,7 +764,7 @@ type ProcList struct {
 
 func (x *ProcList) Reset() {
 	*x = ProcList{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[8]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -730,7 +776,7 @@ func (x *ProcList) String() string {
 func (*ProcList) ProtoMessage() {}
 
 func (x *ProcList) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[8]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -743,7 +789,7 @@ func (x *ProcList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcList.ProtoReflect.Descriptor instead.
 func (*ProcList) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{8}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ProcList) GetProcs() []*ProcInfo {
@@ -766,7 +812,7 @@ type LogRequest struct {
 
 func (x *LogRequest) Reset() {
 	*x = LogRequest{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[9]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -778,7 +824,7 @@ func (x *LogRequest) String() string {
 func (*LogRequest) ProtoMessage() {}
 
 func (x *LogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[9]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -791,7 +837,7 @@ func (x *LogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogRequest.ProtoReflect.Descriptor instead.
 func (*LogRequest) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{9}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *LogRequest) GetTarget() string {
@@ -835,7 +881,7 @@ type LogRetention struct {
 
 func (x *LogRetention) Reset() {
 	*x = LogRetention{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[10]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -847,7 +893,7 @@ func (x *LogRetention) String() string {
 func (*LogRetention) ProtoMessage() {}
 
 func (x *LogRetention) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[10]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -860,7 +906,7 @@ func (x *LogRetention) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogRetention.ProtoReflect.Descriptor instead.
 func (*LogRetention) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{10}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *LogRetention) GetMaxSizeMb() int32 {
@@ -903,7 +949,7 @@ type LogLine struct {
 
 func (x *LogLine) Reset() {
 	*x = LogLine{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[11]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -915,7 +961,7 @@ func (x *LogLine) String() string {
 func (*LogLine) ProtoMessage() {}
 
 func (x *LogLine) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[11]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -928,7 +974,7 @@ func (x *LogLine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogLine.ProtoReflect.Descriptor instead.
 func (*LogLine) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{11}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *LogLine) GetName() string {
@@ -971,7 +1017,7 @@ type MetricsHistoryRequest struct {
 
 func (x *MetricsHistoryRequest) Reset() {
 	*x = MetricsHistoryRequest{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[12]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -983,7 +1029,7 @@ func (x *MetricsHistoryRequest) String() string {
 func (*MetricsHistoryRequest) ProtoMessage() {}
 
 func (x *MetricsHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[12]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -996,7 +1042,7 @@ func (x *MetricsHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MetricsHistoryRequest.ProtoReflect.Descriptor instead.
 func (*MetricsHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{12}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *MetricsHistoryRequest) GetSelector() string {
@@ -1033,7 +1079,7 @@ type MetricBucket struct {
 
 func (x *MetricBucket) Reset() {
 	*x = MetricBucket{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[13]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1045,7 +1091,7 @@ func (x *MetricBucket) String() string {
 func (*MetricBucket) ProtoMessage() {}
 
 func (x *MetricBucket) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[13]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1058,7 +1104,7 @@ func (x *MetricBucket) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MetricBucket.ProtoReflect.Descriptor instead.
 func (*MetricBucket) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{13}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *MetricBucket) GetTsMs() int64 {
@@ -1105,7 +1151,7 @@ type MetricsHistoryResponse struct {
 
 func (x *MetricsHistoryResponse) Reset() {
 	*x = MetricsHistoryResponse{}
-	mi := &file_marshal_v1_daemon_proto_msgTypes[14]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1117,7 +1163,7 @@ func (x *MetricsHistoryResponse) String() string {
 func (*MetricsHistoryResponse) ProtoMessage() {}
 
 func (x *MetricsHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_marshal_v1_daemon_proto_msgTypes[14]
+	mi := &file_marshal_v1_daemon_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1130,7 +1176,7 @@ func (x *MetricsHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MetricsHistoryResponse.ProtoReflect.Descriptor instead.
 func (*MetricsHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{14}
+	return file_marshal_v1_daemon_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *MetricsHistoryResponse) GetBuckets() []*MetricBucket {
@@ -1184,6 +1230,8 @@ const file_marshal_v1_daemon_proto_rawDesc = "" +
 	"\x05_logsB\t\n" +
 	"\a_source\"7\n" +
 	"\fStartRequest\x12'\n" +
+	"\x04apps\x18\x01 \x03(\v2\x13.marshal.v1.AppSpecR\x04apps\";\n" +
+	"\x10UpdateEnvRequest\x12'\n" +
 	"\x04apps\x18\x01 \x03(\v2\x13.marshal.v1.AppSpecR\x04apps\"\"\n" +
 	"\bSelector\x12\x16\n" +
 	"\x06target\x18\x01 \x01(\tR\x06target\"\xe5\x03\n" +
@@ -1251,7 +1299,7 @@ const file_marshal_v1_daemon_proto_rawDesc = "" +
 	"\tLogStream\x12\x1a\n" +
 	"\x16LOG_STREAM_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11LOG_STREAM_STDOUT\x10\x01\x12\x15\n" +
-	"\x11LOG_STREAM_STDERR\x10\x022\x89\x06\n" +
+	"\x11LOG_STREAM_STDERR\x10\x022\xca\x06\n" +
 	"\x06Daemon\x127\n" +
 	"\x05Start\x12\x18.marshal.v1.StartRequest\x1a\x14.marshal.v1.ProcList\x122\n" +
 	"\x04Stop\x12\x14.marshal.v1.Selector\x1a\x14.marshal.v1.ProcList\x125\n" +
@@ -1266,7 +1314,8 @@ const file_marshal_v1_daemon_proto_rawDesc = "" +
 	"\x0eMetricsHistory\x12!.marshal.v1.MetricsHistoryRequest\x1a\".marshal.v1.MetricsHistoryResponse\x123\n" +
 	"\x05Reset\x12\x14.marshal.v1.Selector\x1a\x14.marshal.v1.ProcList\x12.\n" +
 	"\x05Flush\x12\x14.marshal.v1.Selector\x1a\x0f.marshal.v1.Ack\x129\n" +
-	"\fUpdateStatus\x12\x11.marshal.v1.Empty\x1a\x16.marshal.v1.UpdateInfoB\x18Z\x16marshal/internal/pb;pbb\x06proto3"
+	"\fUpdateStatus\x12\x11.marshal.v1.Empty\x1a\x16.marshal.v1.UpdateInfo\x12?\n" +
+	"\tUpdateEnv\x12\x1c.marshal.v1.UpdateEnvRequest\x1a\x14.marshal.v1.ProcListB\x18Z\x16marshal/internal/pb;pbb\x06proto3"
 
 var (
 	file_marshal_v1_daemon_proto_rawDescOnce sync.Once
@@ -1281,7 +1330,7 @@ func file_marshal_v1_daemon_proto_rawDescGZIP() []byte {
 }
 
 var file_marshal_v1_daemon_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_marshal_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_marshal_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_marshal_v1_daemon_proto_goTypes = []any{
 	(LogStream)(0),                 // 0: marshal.v1.LogStream
 	(*Empty)(nil),                  // 1: marshal.v1.Empty
@@ -1290,58 +1339,62 @@ var file_marshal_v1_daemon_proto_goTypes = []any{
 	(*GitSource)(nil),              // 4: marshal.v1.GitSource
 	(*AppSpec)(nil),                // 5: marshal.v1.AppSpec
 	(*StartRequest)(nil),           // 6: marshal.v1.StartRequest
-	(*Selector)(nil),               // 7: marshal.v1.Selector
-	(*ProcInfo)(nil),               // 8: marshal.v1.ProcInfo
-	(*ProcList)(nil),               // 9: marshal.v1.ProcList
-	(*LogRequest)(nil),             // 10: marshal.v1.LogRequest
-	(*LogRetention)(nil),           // 11: marshal.v1.LogRetention
-	(*LogLine)(nil),                // 12: marshal.v1.LogLine
-	(*MetricsHistoryRequest)(nil),  // 13: marshal.v1.MetricsHistoryRequest
-	(*MetricBucket)(nil),           // 14: marshal.v1.MetricBucket
-	(*MetricsHistoryResponse)(nil), // 15: marshal.v1.MetricsHistoryResponse
-	nil,                            // 16: marshal.v1.AppSpec.EnvEntry
+	(*UpdateEnvRequest)(nil),       // 7: marshal.v1.UpdateEnvRequest
+	(*Selector)(nil),               // 8: marshal.v1.Selector
+	(*ProcInfo)(nil),               // 9: marshal.v1.ProcInfo
+	(*ProcList)(nil),               // 10: marshal.v1.ProcList
+	(*LogRequest)(nil),             // 11: marshal.v1.LogRequest
+	(*LogRetention)(nil),           // 12: marshal.v1.LogRetention
+	(*LogLine)(nil),                // 13: marshal.v1.LogLine
+	(*MetricsHistoryRequest)(nil),  // 14: marshal.v1.MetricsHistoryRequest
+	(*MetricBucket)(nil),           // 15: marshal.v1.MetricBucket
+	(*MetricsHistoryResponse)(nil), // 16: marshal.v1.MetricsHistoryResponse
+	nil,                            // 17: marshal.v1.AppSpec.EnvEntry
 }
 var file_marshal_v1_daemon_proto_depIdxs = []int32{
-	16, // 0: marshal.v1.AppSpec.env:type_name -> marshal.v1.AppSpec.EnvEntry
-	11, // 1: marshal.v1.AppSpec.logs:type_name -> marshal.v1.LogRetention
+	17, // 0: marshal.v1.AppSpec.env:type_name -> marshal.v1.AppSpec.EnvEntry
+	12, // 1: marshal.v1.AppSpec.logs:type_name -> marshal.v1.LogRetention
 	4,  // 2: marshal.v1.AppSpec.source:type_name -> marshal.v1.GitSource
 	5,  // 3: marshal.v1.StartRequest.apps:type_name -> marshal.v1.AppSpec
-	8,  // 4: marshal.v1.ProcList.procs:type_name -> marshal.v1.ProcInfo
-	0,  // 5: marshal.v1.LogRequest.stream:type_name -> marshal.v1.LogStream
-	14, // 6: marshal.v1.MetricsHistoryResponse.buckets:type_name -> marshal.v1.MetricBucket
-	6,  // 7: marshal.v1.Daemon.Start:input_type -> marshal.v1.StartRequest
-	7,  // 8: marshal.v1.Daemon.Stop:input_type -> marshal.v1.Selector
-	7,  // 9: marshal.v1.Daemon.Restart:input_type -> marshal.v1.Selector
-	7,  // 10: marshal.v1.Daemon.Delete:input_type -> marshal.v1.Selector
-	1,  // 11: marshal.v1.Daemon.List:input_type -> marshal.v1.Empty
-	7,  // 12: marshal.v1.Daemon.Describe:input_type -> marshal.v1.Selector
-	1,  // 13: marshal.v1.Daemon.Save:input_type -> marshal.v1.Empty
-	1,  // 14: marshal.v1.Daemon.Resurrect:input_type -> marshal.v1.Empty
-	1,  // 15: marshal.v1.Daemon.Kill:input_type -> marshal.v1.Empty
-	10, // 16: marshal.v1.Daemon.Logs:input_type -> marshal.v1.LogRequest
-	13, // 17: marshal.v1.Daemon.MetricsHistory:input_type -> marshal.v1.MetricsHistoryRequest
-	7,  // 18: marshal.v1.Daemon.Reset:input_type -> marshal.v1.Selector
-	7,  // 19: marshal.v1.Daemon.Flush:input_type -> marshal.v1.Selector
-	1,  // 20: marshal.v1.Daemon.UpdateStatus:input_type -> marshal.v1.Empty
-	9,  // 21: marshal.v1.Daemon.Start:output_type -> marshal.v1.ProcList
-	9,  // 22: marshal.v1.Daemon.Stop:output_type -> marshal.v1.ProcList
-	9,  // 23: marshal.v1.Daemon.Restart:output_type -> marshal.v1.ProcList
-	9,  // 24: marshal.v1.Daemon.Delete:output_type -> marshal.v1.ProcList
-	9,  // 25: marshal.v1.Daemon.List:output_type -> marshal.v1.ProcList
-	9,  // 26: marshal.v1.Daemon.Describe:output_type -> marshal.v1.ProcList
-	2,  // 27: marshal.v1.Daemon.Save:output_type -> marshal.v1.Ack
-	9,  // 28: marshal.v1.Daemon.Resurrect:output_type -> marshal.v1.ProcList
-	2,  // 29: marshal.v1.Daemon.Kill:output_type -> marshal.v1.Ack
-	12, // 30: marshal.v1.Daemon.Logs:output_type -> marshal.v1.LogLine
-	15, // 31: marshal.v1.Daemon.MetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
-	9,  // 32: marshal.v1.Daemon.Reset:output_type -> marshal.v1.ProcList
-	2,  // 33: marshal.v1.Daemon.Flush:output_type -> marshal.v1.Ack
-	3,  // 34: marshal.v1.Daemon.UpdateStatus:output_type -> marshal.v1.UpdateInfo
-	21, // [21:35] is the sub-list for method output_type
-	7,  // [7:21] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	5,  // 4: marshal.v1.UpdateEnvRequest.apps:type_name -> marshal.v1.AppSpec
+	9,  // 5: marshal.v1.ProcList.procs:type_name -> marshal.v1.ProcInfo
+	0,  // 6: marshal.v1.LogRequest.stream:type_name -> marshal.v1.LogStream
+	15, // 7: marshal.v1.MetricsHistoryResponse.buckets:type_name -> marshal.v1.MetricBucket
+	6,  // 8: marshal.v1.Daemon.Start:input_type -> marshal.v1.StartRequest
+	8,  // 9: marshal.v1.Daemon.Stop:input_type -> marshal.v1.Selector
+	8,  // 10: marshal.v1.Daemon.Restart:input_type -> marshal.v1.Selector
+	8,  // 11: marshal.v1.Daemon.Delete:input_type -> marshal.v1.Selector
+	1,  // 12: marshal.v1.Daemon.List:input_type -> marshal.v1.Empty
+	8,  // 13: marshal.v1.Daemon.Describe:input_type -> marshal.v1.Selector
+	1,  // 14: marshal.v1.Daemon.Save:input_type -> marshal.v1.Empty
+	1,  // 15: marshal.v1.Daemon.Resurrect:input_type -> marshal.v1.Empty
+	1,  // 16: marshal.v1.Daemon.Kill:input_type -> marshal.v1.Empty
+	11, // 17: marshal.v1.Daemon.Logs:input_type -> marshal.v1.LogRequest
+	14, // 18: marshal.v1.Daemon.MetricsHistory:input_type -> marshal.v1.MetricsHistoryRequest
+	8,  // 19: marshal.v1.Daemon.Reset:input_type -> marshal.v1.Selector
+	8,  // 20: marshal.v1.Daemon.Flush:input_type -> marshal.v1.Selector
+	1,  // 21: marshal.v1.Daemon.UpdateStatus:input_type -> marshal.v1.Empty
+	7,  // 22: marshal.v1.Daemon.UpdateEnv:input_type -> marshal.v1.UpdateEnvRequest
+	10, // 23: marshal.v1.Daemon.Start:output_type -> marshal.v1.ProcList
+	10, // 24: marshal.v1.Daemon.Stop:output_type -> marshal.v1.ProcList
+	10, // 25: marshal.v1.Daemon.Restart:output_type -> marshal.v1.ProcList
+	10, // 26: marshal.v1.Daemon.Delete:output_type -> marshal.v1.ProcList
+	10, // 27: marshal.v1.Daemon.List:output_type -> marshal.v1.ProcList
+	10, // 28: marshal.v1.Daemon.Describe:output_type -> marshal.v1.ProcList
+	2,  // 29: marshal.v1.Daemon.Save:output_type -> marshal.v1.Ack
+	10, // 30: marshal.v1.Daemon.Resurrect:output_type -> marshal.v1.ProcList
+	2,  // 31: marshal.v1.Daemon.Kill:output_type -> marshal.v1.Ack
+	13, // 32: marshal.v1.Daemon.Logs:output_type -> marshal.v1.LogLine
+	16, // 33: marshal.v1.Daemon.MetricsHistory:output_type -> marshal.v1.MetricsHistoryResponse
+	10, // 34: marshal.v1.Daemon.Reset:output_type -> marshal.v1.ProcList
+	2,  // 35: marshal.v1.Daemon.Flush:output_type -> marshal.v1.Ack
+	3,  // 36: marshal.v1.Daemon.UpdateStatus:output_type -> marshal.v1.UpdateInfo
+	10, // 37: marshal.v1.Daemon.UpdateEnv:output_type -> marshal.v1.ProcList
+	23, // [23:38] is the sub-list for method output_type
+	8,  // [8:23] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_marshal_v1_daemon_proto_init() }
@@ -1350,14 +1403,14 @@ func file_marshal_v1_daemon_proto_init() {
 		return
 	}
 	file_marshal_v1_daemon_proto_msgTypes[4].OneofWrappers = []any{}
-	file_marshal_v1_daemon_proto_msgTypes[10].OneofWrappers = []any{}
+	file_marshal_v1_daemon_proto_msgTypes[11].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_marshal_v1_daemon_proto_rawDesc), len(file_marshal_v1_daemon_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

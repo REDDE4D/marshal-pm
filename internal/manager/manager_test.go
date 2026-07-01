@@ -514,3 +514,94 @@ func TestWithLogsCapturesOutputAndRemovesOnDelete(t *testing.T) {
 		t.Fatalf("removed = %v, want [a#0]", got)
 	}
 }
+
+func TestAddAssignsSequentialIDsWhenUnset(t *testing.T) {
+	m := New(context.Background())
+	for i, name := range []string{"a", "b", "c"} {
+		snaps, err := m.Add(config.App{Name: name, Cmd: "true", Instances: 1})
+		if err != nil {
+			t.Fatalf("Add %s: %v", name, err)
+		}
+		if snaps[0].ID != i+1 {
+			t.Fatalf("app %s got ID %d, want %d", name, snaps[0].ID, i+1)
+		}
+	}
+}
+
+func TestAddReusesPersistedIDAndAdvancesCounter(t *testing.T) {
+	m := New(context.Background())
+	snaps, err := m.Add(config.App{Name: "a", Cmd: "true", Instances: 1, ID: 5})
+	if err != nil {
+		t.Fatalf("Add a: %v", err)
+	}
+	if snaps[0].ID != 5 {
+		t.Fatalf("got ID %d, want 5", snaps[0].ID)
+	}
+	// A subsequent zero-ID add must not collide with 5.
+	snaps, err = m.Add(config.App{Name: "b", Cmd: "true", Instances: 1})
+	if err != nil {
+		t.Fatalf("Add b: %v", err)
+	}
+	if snaps[0].ID != 6 {
+		t.Fatalf("got ID %d, want 6", snaps[0].ID)
+	}
+}
+
+func TestAddDuplicateIncomingIDFallsBackToMaxPlusOne(t *testing.T) {
+	m := New(context.Background())
+	if _, err := m.Add(config.App{Name: "a", Cmd: "true", Instances: 1, ID: 3}); err != nil {
+		t.Fatalf("Add a: %v", err)
+	}
+	snaps, err := m.Add(config.App{Name: "b", Cmd: "true", Instances: 1, ID: 3}) // collides
+	if err != nil {
+		t.Fatalf("Add b: %v", err)
+	}
+	if snaps[0].ID != 4 {
+		t.Fatalf("collision not resolved: got ID %d, want 4", snaps[0].ID)
+	}
+}
+
+func TestLoadWithoutIDsAssignsContiguousThenSpecsCarriesThem(t *testing.T) {
+	m := New(context.Background())
+	// Simulate a pre-upgrade dump.json: apps with ID == 0, added in order.
+	for _, name := range []string{"x", "y", "z"} {
+		if _, err := m.Add(config.App{Name: name, Cmd: "true", Instances: 1}); err != nil {
+			t.Fatalf("Add %s: %v", name, err)
+		}
+	}
+	specs := m.Specs()
+	want := map[string]int{"x": 1, "y": 2, "z": 3}
+	for _, s := range specs {
+		if s.ID != want[s.Name] {
+			t.Fatalf("Specs()[%s].ID = %d, want %d", s.Name, s.ID, want[s.Name])
+		}
+	}
+}
+
+func TestUpdateEnvSwapsEnvRestartsAndKeepsID(t *testing.T) {
+	m := New(context.Background())
+	snaps, err := m.Add(config.App{Name: "a", Cmd: "true", Instances: 1, Env: map[string]string{"K": "old"}})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	origID := snaps[0].ID
+
+	out, err := m.UpdateEnv("a", map[string]string{"K": "new"})
+	if err != nil {
+		t.Fatalf("UpdateEnv: %v", err)
+	}
+	if out[0].ID != origID {
+		t.Fatalf("ID changed: got %d want %d", out[0].ID, origID)
+	}
+	specs := m.Specs()
+	if specs[0].Env["K"] != "new" {
+		t.Fatalf("env not updated: %v", specs[0].Env)
+	}
+}
+
+func TestUpdateEnvUnknownAppErrors(t *testing.T) {
+	m := New(context.Background())
+	if _, err := m.UpdateEnv("nope", nil); err == nil {
+		t.Fatal("expected error for unknown app")
+	}
+}
