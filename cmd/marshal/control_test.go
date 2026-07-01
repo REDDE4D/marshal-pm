@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -207,5 +208,78 @@ func TestAppToSpecCarriesMaxMemoryRestart(t *testing.T) {
 	})
 	if spec.GetMaxMemoryRestart() != 300<<20 {
 		t.Fatalf("MaxMemoryRestart = %d, want %d", spec.GetMaxMemoryRestart(), 300<<20)
+	}
+}
+
+func TestSelectorCmdAcceptsMultipleArgs(t *testing.T) {
+	cmd := selectorCmd("stop <name|id|all>", "stop", func(context.Context, pb.DaemonClient, *pb.Selector) (*pb.ProcList, error) {
+		return &pb.ProcList{}, nil
+	})
+	if cmd.Args == nil {
+		t.Fatal("expected an Args validator")
+	}
+	// MinimumNArgs(1): zero args is an error, two args is fine.
+	if err := cmd.Args(cmd, []string{}); err == nil {
+		t.Fatal("expected error for zero args")
+	}
+	if err := cmd.Args(cmd, []string{"a", "b"}); err != nil {
+		t.Fatalf("two args should be allowed, got %v", err)
+	}
+}
+
+func TestRestartCmdHasUpdateEnvFlagAndMultiArg(t *testing.T) {
+	cmd := restartCmd()
+	if cmd.Flags().Lookup("update-env") == nil {
+		t.Fatal("expected --update-env flag")
+	}
+	if err := cmd.Args(cmd, []string{"a", "b"}); err != nil {
+		t.Fatalf("restart should accept multiple args, got %v", err)
+	}
+}
+
+func TestRunRestartUpdateEnvRequiresConfigFile(t *testing.T) {
+	cmd := restartCmd()
+	err := runRestartUpdateEnv(cmd, []string{"UNOBot"}) // bare name, no .yaml
+	if err == nil {
+		t.Fatal("expected error requiring a marshal.yaml path")
+	}
+	if !strings.Contains(err.Error(), "marshal.yaml") {
+		t.Fatalf("error should mention the config-file requirement, got: %v", err)
+	}
+}
+
+func TestExpandSelectorArgs(t *testing.T) {
+	cases := []struct {
+		name      string
+		args      []string
+		want      []string
+		wantMulti bool
+	}{
+		{"single", []string{"a"}, []string{"a"}, false},
+		{"twoArgs", []string{"a", "b"}, []string{"a", "b"}, true},
+		{"commaList", []string{"a,b"}, []string{"a", "b"}, true},
+		{"mixedCommaAndArg", []string{"a,b", "c"}, []string{"a", "b", "c"}, true},
+		{"dedup", []string{"a", "a"}, []string{"a"}, false},
+		{"allShortCircuits", []string{"all", "b"}, []string{"all"}, false},
+		{"numericIDs", []string{"1", "2"}, []string{"1", "2"}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, multi, err := expandSelectorArgs(tc.args)
+			if err != nil {
+				t.Fatalf("err: %v", err)
+			}
+			if multi != tc.wantMulti {
+				t.Fatalf("multi = %v, want %v", multi, tc.wantMulti)
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Fatalf("got %v, want %v", got, tc.want)
+				}
+			}
+		})
 	}
 }

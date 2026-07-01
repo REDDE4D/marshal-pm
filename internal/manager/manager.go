@@ -71,7 +71,7 @@ type managedApp struct {
 type Manager struct {
 	ctx context.Context
 
-	// opMu serializes mutating operations (Add/Stop/Restart/Delete/StopAll) so a
+	// opMu serializes mutating operations (Add/Stop/Restart/Delete/StopAll/UpdateEnv) so a
 	// blocking stop cannot interleave with another mutator and orphan goroutines.
 	opMu sync.Mutex
 
@@ -148,8 +148,15 @@ func (m *Manager) Add(app config.App) ([]InstanceSnapshot, error) {
 			return nil, fmt.Errorf("app %q already exists", app.Name)
 		}
 	}
-	m.nextID++
-	ma := &managedApp{id: m.nextID, name: app.Name, spec: app}
+	id := app.ID
+	if id <= 0 || m.idTaken(id) {
+		id = m.maxAppID() + 1
+	}
+	if id > m.nextID {
+		m.nextID = id
+	}
+	app.ID = id
+	ma := &managedApp{id: id, name: app.Name, spec: app}
 	for idx := 0; idx < app.Instances; idx++ {
 		ma.insts = append(ma.insts, m.startInstance(app, idx))
 	}
@@ -291,6 +298,35 @@ func waitInstanceOnline(ctx context.Context, in *managedInstance, timeout time.D
 	}
 }
 
+// UpdateEnv replaces the named app's environment and restarts its instances in
+// place, preserving the app's id and listing position.
+func (m *Manager) UpdateEnv(name string, env map[string]string) ([]InstanceSnapshot, error) {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+	m.mu.Lock()
+	apps, err := m.resolve(name)
+	if err != nil {
+		m.mu.Unlock()
+		return nil, err
+	}
+	a := apps[0]
+	a.spec.Env = env
+	insts := collectInstances([]*managedApp{a})
+	m.mu.Unlock()
+
+	stopInstances(insts)
+
+	m.mu.Lock()
+	fresh := make([]*managedInstance, 0, a.spec.Instances)
+	for idx := 0; idx < a.spec.Instances; idx++ {
+		fresh = append(fresh, m.startInstance(a.spec, idx))
+	}
+	a.insts = fresh
+	m.mu.Unlock()
+
+	return m.Describe(name)
+}
+
 // ResetCounters zeroes the restart counters of the selected apps' instances and
 // returns their refreshed snapshots. It does not restart anything.
 func (m *Manager) ResetCounters(sel string) ([]InstanceSnapshot, error) {
@@ -391,6 +427,29 @@ func (m *Manager) StopAll() {
 	insts := collectInstances(m.apps)
 	m.mu.Unlock()
 	stopInstances(insts)
+}
+
+// maxAppID returns the largest id currently in use, or 0 if none.
+// Caller holds m.mu.
+func (m *Manager) maxAppID() int {
+	max := 0
+	for _, a := range m.apps {
+		if a.id > max {
+			max = a.id
+		}
+	}
+	return max
+}
+
+// idTaken reports whether any managed app already uses id.
+// Caller holds m.mu.
+func (m *Manager) idTaken(id int) bool {
+	for _, a := range m.apps {
+		if a.id == id {
+			return true
+		}
+	}
+	return false
 }
 
 // resolve maps a selector to apps. Caller holds m.mu. "all" -> every app;
