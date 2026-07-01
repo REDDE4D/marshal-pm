@@ -226,6 +226,44 @@ func isConfigFile(arg string) bool {
 	return err == nil && !info.IsDir()
 }
 
+// expandSelectorArgs turns CLI args — each possibly a comma-separated list, a
+// name/id, or a marshal.yaml path — into a flat, de-duplicated target list.
+// multi is true when more than one target results or any arg was a config file,
+// which switches callers to warn-and-continue error handling. "all" anywhere
+// short-circuits to a single "all" target.
+func expandSelectorArgs(args []string) (targets []string, multi bool, err error) {
+	seen := map[string]bool{}
+	fromFile := false
+	for _, raw := range args {
+		for _, part := range strings.Split(raw, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			ts, ff, e := targetsFromArg(part)
+			if e != nil {
+				return nil, false, e
+			}
+			fromFile = fromFile || ff
+			for _, t := range ts {
+				if !seen[t] {
+					seen[t] = true
+					targets = append(targets, t)
+				}
+			}
+		}
+	}
+	if len(targets) == 0 {
+		return nil, false, fmt.Errorf("no targets given")
+	}
+	for _, t := range targets {
+		if t == "all" {
+			return []string{"all"}, false, nil
+		}
+	}
+	return targets, fromFile || len(targets) > 1, nil
+}
+
 // enrollmentHeader returns a one-line status string indicating whether the host
 // is configured to enroll with a central server. A nil or empty-address config
 // means not enrolled.

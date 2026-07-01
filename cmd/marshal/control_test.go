@@ -209,3 +209,39 @@ func TestAppToSpecCarriesMaxMemoryRestart(t *testing.T) {
 		t.Fatalf("MaxMemoryRestart = %d, want %d", spec.GetMaxMemoryRestart(), 300<<20)
 	}
 }
+
+func TestExpandSelectorArgs(t *testing.T) {
+	cases := []struct {
+		name      string
+		args      []string
+		want      []string
+		wantMulti bool
+	}{
+		{"single", []string{"a"}, []string{"a"}, false},
+		{"twoArgs", []string{"a", "b"}, []string{"a", "b"}, true},
+		{"commaList", []string{"a,b"}, []string{"a", "b"}, true},
+		{"mixedCommaAndArg", []string{"a,b", "c"}, []string{"a", "b", "c"}, true},
+		{"dedup", []string{"a", "a"}, []string{"a"}, false},
+		{"allShortCircuits", []string{"all", "b"}, []string{"all"}, false},
+		{"numericIDs", []string{"1", "2"}, []string{"1", "2"}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, multi, err := expandSelectorArgs(tc.args)
+			if err != nil {
+				t.Fatalf("err: %v", err)
+			}
+			if multi != tc.wantMulti {
+				t.Fatalf("multi = %v, want %v", multi, tc.wantMulti)
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Fatalf("got %v, want %v", got, tc.want)
+				}
+			}
+		})
+	}
+}
