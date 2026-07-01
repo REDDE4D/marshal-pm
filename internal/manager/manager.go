@@ -298,6 +298,35 @@ func waitInstanceOnline(ctx context.Context, in *managedInstance, timeout time.D
 	}
 }
 
+// UpdateEnv replaces the named app's environment and restarts its instances in
+// place, preserving the app's id and listing position.
+func (m *Manager) UpdateEnv(name string, env map[string]string) ([]InstanceSnapshot, error) {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+	m.mu.Lock()
+	apps, err := m.resolve(name)
+	if err != nil {
+		m.mu.Unlock()
+		return nil, err
+	}
+	a := apps[0]
+	a.spec.Env = env
+	insts := collectInstances([]*managedApp{a})
+	m.mu.Unlock()
+
+	stopInstances(insts)
+
+	m.mu.Lock()
+	fresh := make([]*managedInstance, 0, a.spec.Instances)
+	for idx := 0; idx < a.spec.Instances; idx++ {
+		fresh = append(fresh, m.startInstance(a.spec, idx))
+	}
+	a.insts = fresh
+	m.mu.Unlock()
+
+	return m.Describe(name)
+}
+
 // ResetCounters zeroes the restart counters of the selected apps' instances and
 // returns their refreshed snapshots. It does not restart anything.
 func (m *Manager) ResetCounters(sel string) ([]InstanceSnapshot, error) {

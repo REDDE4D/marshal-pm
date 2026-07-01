@@ -577,3 +577,31 @@ func TestLoadWithoutIDsAssignsContiguousThenSpecsCarriesThem(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdateEnvSwapsEnvRestartsAndKeepsID(t *testing.T) {
+	m := New(context.Background())
+	snaps, err := m.Add(config.App{Name: "a", Cmd: "true", Instances: 1, Env: map[string]string{"K": "old"}})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	origID := snaps[0].ID
+
+	out, err := m.UpdateEnv("a", map[string]string{"K": "new"})
+	if err != nil {
+		t.Fatalf("UpdateEnv: %v", err)
+	}
+	if out[0].ID != origID {
+		t.Fatalf("ID changed: got %d want %d", out[0].ID, origID)
+	}
+	specs := m.Specs()
+	if specs[0].Env["K"] != "new" {
+		t.Fatalf("env not updated: %v", specs[0].Env)
+	}
+}
+
+func TestUpdateEnvUnknownAppErrors(t *testing.T) {
+	m := New(context.Background())
+	if _, err := m.UpdateEnv("nope", nil); err == nil {
+		t.Fatal("expected error for unknown app")
+	}
+}
