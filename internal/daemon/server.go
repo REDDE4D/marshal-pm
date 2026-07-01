@@ -166,6 +166,24 @@ func (s *Server) Restart(_ context.Context, sel *pb.Selector) (*pb.ProcList, err
 	return s.mutate(s.mgr.Restart, sel)
 }
 
+// UpdateEnv refreshes the env of each named app in place and restarts it. Apps
+// that aren't currently managed are skipped (not an error), so a config file
+// listing not-yet-started apps degrades gracefully. Updated apps are persisted.
+func (s *Server) UpdateEnv(_ context.Context, req *pb.UpdateEnvRequest) (*pb.ProcList, error) {
+	var out []manager.InstanceSnapshot
+	for _, spec := range req.GetApps() {
+		snaps, err := s.mgr.UpdateEnv(spec.GetName(), spec.GetEnv())
+		if err != nil {
+			continue // skip unknown/absent apps
+		}
+		out = append(out, snaps...)
+	}
+	if err := s.store.Save(s.mgr.Specs()); err != nil {
+		return nil, status.Errorf(codes.Internal, "persist: %v", err)
+	}
+	return s.procList(out), nil
+}
+
 func (s *Server) Delete(_ context.Context, sel *pb.Selector) (*pb.ProcList, error) {
 	snaps, err := s.mgr.Delete(sel.GetTarget())
 	if err != nil {

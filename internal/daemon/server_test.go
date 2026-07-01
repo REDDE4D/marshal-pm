@@ -13,6 +13,7 @@ import (
 	"github.com/REDDE4D/marshal-pm/internal/manager"
 	"github.com/REDDE4D/marshal-pm/internal/metrics"
 	"github.com/REDDE4D/marshal-pm/internal/pb"
+	"github.com/REDDE4D/marshal-pm/internal/store"
 	"github.com/REDDE4D/marshal-pm/internal/updatecheck"
 
 	"google.golang.org/grpc/codes"
@@ -234,5 +235,38 @@ func TestUpdateStatusNilUpdater(t *testing.T) {
 	}
 	if info.GetOutdated() || info.GetLatest() != "" {
 		t.Fatalf("nil updater should yield empty UpdateInfo, got %+v", info)
+	}
+}
+
+func TestServerUpdateEnvPersistsAndSkipsUnknown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	st := store.NewAt(t.TempDir())
+	srv := &Server{mgr: manager.New(ctx), store: st}
+	defer srv.mgr.StopAll()
+
+	if _, err := srv.Start(context.Background(), &pb.StartRequest{Apps: []*pb.AppSpec{
+		{Name: "a", Cmd: "true", Instances: 1, Env: map[string]string{"K": "old"}},
+	}}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	list, err := srv.UpdateEnv(context.Background(), &pb.UpdateEnvRequest{Apps: []*pb.AppSpec{
+		{Name: "a", Env: map[string]string{"K": "new"}},
+		{Name: "ghost", Env: map[string]string{"X": "1"}}, // not running → skipped
+	}})
+	if err != nil {
+		t.Fatalf("UpdateEnv: %v", err)
+	}
+	// Only "a" comes back.
+	if len(list.GetProcs()) != 1 || list.GetProcs()[0].GetName() != "a" {
+		t.Fatalf("unexpected procs: %+v", list.GetProcs())
+	}
+	// Persisted env reflects the change.
+	apps, err := srv.store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(apps) == 0 || apps[0].Env["K"] != "new" {
+		t.Fatalf("env not persisted: %v", apps)
 	}
 }
