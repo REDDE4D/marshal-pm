@@ -514,3 +514,49 @@ func TestWithLogsCapturesOutputAndRemovesOnDelete(t *testing.T) {
 		t.Fatalf("removed = %v, want [a#0]", got)
 	}
 }
+
+func TestAddAssignsSequentialIDsWhenUnset(t *testing.T) {
+	m := New(context.Background())
+	for i, name := range []string{"a", "b", "c"} {
+		snaps, err := m.Add(config.App{Name: name, Cmd: "true", Instances: 1})
+		if err != nil {
+			t.Fatalf("Add %s: %v", name, err)
+		}
+		if snaps[0].ID != i+1 {
+			t.Fatalf("app %s got ID %d, want %d", name, snaps[0].ID, i+1)
+		}
+	}
+}
+
+func TestAddReusesPersistedIDAndAdvancesCounter(t *testing.T) {
+	m := New(context.Background())
+	snaps, err := m.Add(config.App{Name: "a", Cmd: "true", Instances: 1, ID: 5})
+	if err != nil {
+		t.Fatalf("Add a: %v", err)
+	}
+	if snaps[0].ID != 5 {
+		t.Fatalf("got ID %d, want 5", snaps[0].ID)
+	}
+	// A subsequent zero-ID add must not collide with 5.
+	snaps, err = m.Add(config.App{Name: "b", Cmd: "true", Instances: 1})
+	if err != nil {
+		t.Fatalf("Add b: %v", err)
+	}
+	if snaps[0].ID != 6 {
+		t.Fatalf("got ID %d, want 6", snaps[0].ID)
+	}
+}
+
+func TestAddDuplicateIncomingIDFallsBackToMaxPlusOne(t *testing.T) {
+	m := New(context.Background())
+	if _, err := m.Add(config.App{Name: "a", Cmd: "true", Instances: 1, ID: 3}); err != nil {
+		t.Fatalf("Add a: %v", err)
+	}
+	snaps, err := m.Add(config.App{Name: "b", Cmd: "true", Instances: 1, ID: 3}) // collides
+	if err != nil {
+		t.Fatalf("Add b: %v", err)
+	}
+	if snaps[0].ID != 4 {
+		t.Fatalf("collision not resolved: got ID %d, want 4", snaps[0].ID)
+	}
+}

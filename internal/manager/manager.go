@@ -148,8 +148,15 @@ func (m *Manager) Add(app config.App) ([]InstanceSnapshot, error) {
 			return nil, fmt.Errorf("app %q already exists", app.Name)
 		}
 	}
-	m.nextID++
-	ma := &managedApp{id: m.nextID, name: app.Name, spec: app}
+	id := app.ID
+	if id <= 0 || m.idTaken(id) {
+		id = m.maxAppID() + 1
+	}
+	if id > m.nextID {
+		m.nextID = id
+	}
+	app.ID = id
+	ma := &managedApp{id: id, name: app.Name, spec: app}
 	for idx := 0; idx < app.Instances; idx++ {
 		ma.insts = append(ma.insts, m.startInstance(app, idx))
 	}
@@ -391,6 +398,29 @@ func (m *Manager) StopAll() {
 	insts := collectInstances(m.apps)
 	m.mu.Unlock()
 	stopInstances(insts)
+}
+
+// maxAppID returns the largest id currently in use, or 0 if none.
+// Caller holds m.mu.
+func (m *Manager) maxAppID() int {
+	max := 0
+	for _, a := range m.apps {
+		if a.id > max {
+			max = a.id
+		}
+	}
+	return max
+}
+
+// idTaken reports whether any managed app already uses id.
+// Caller holds m.mu.
+func (m *Manager) idTaken(id int) bool {
+	for _, a := range m.apps {
+		if a.id == id {
+			return true
+		}
+	}
+	return false
 }
 
 // resolve maps a selector to apps. Caller holds m.mu. "all" -> every app;
