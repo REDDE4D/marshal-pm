@@ -637,7 +637,51 @@ func printLogLine(cmd *cobra.Command, ln *pb.LogLine) {
 	fmt.Fprintf(w, "%s | %s\n", prefix, ln.GetLine())
 }
 
-// runRestartUpdateEnv is implemented in Group 3 (Task 9).
+// runRestartUpdateEnv re-reads env/env_file from the given marshal.yaml file(s)
+// and applies it to the matching running apps via the UpdateEnv RPC. It requires
+// at least one config-file argument, since the daemon cannot re-read env without
+// the file. Apps listed in the file but not currently running are warned, not failed.
 func runRestartUpdateEnv(cmd *cobra.Command, args []string) error {
-	return fmt.Errorf("--update-env not yet implemented")
+	var specs []*pb.AppSpec
+	requested := map[string]bool{}
+	for _, raw := range args {
+		for _, part := range strings.Split(raw, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			if !isConfigFile(part) {
+				return fmt.Errorf("marshal restart --update-env requires a marshal.yaml path "+
+					"(the daemon cannot re-read env without the config file); %q is not one", part)
+			}
+			cfg, err := config.Load(part)
+			if err != nil {
+				return err
+			}
+			for _, a := range cfg.Apps {
+				specs = append(specs, &pb.AppSpec{Name: a.Name, Env: a.Env})
+				requested[a.Name] = true
+			}
+		}
+	}
+	if len(specs) == 0 {
+		return fmt.Errorf("marshal restart --update-env: no apps found in the given config file(s)")
+	}
+	return withClient(func(ctx context.Context, c pb.DaemonClient) error {
+		list, err := c.UpdateEnv(ctx, &pb.UpdateEnvRequest{Apps: specs})
+		if err != nil {
+			return err
+		}
+		printProcs(cmd, list)
+		got := map[string]bool{}
+		for _, p := range list.GetProcs() {
+			got[p.GetName()] = true
+		}
+		for name := range requested {
+			if !got[name] {
+				fmt.Fprintf(cmd.ErrOrStderr(), "marshal: %s: not running; env not applied\n", name)
+			}
+		}
+		return nil
+	})
 }

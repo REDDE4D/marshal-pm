@@ -237,6 +237,17 @@ func TestRestartCmdHasUpdateEnvFlagAndMultiArg(t *testing.T) {
 	}
 }
 
+func TestRunRestartUpdateEnvRequiresConfigFile(t *testing.T) {
+	cmd := restartCmd()
+	err := runRestartUpdateEnv(cmd, []string{"UNOBot"}) // bare name, no .yaml
+	if err == nil {
+		t.Fatal("expected error requiring a marshal.yaml path")
+	}
+	if !strings.Contains(err.Error(), "marshal.yaml") {
+		t.Fatalf("error should mention the config-file requirement, got: %v", err)
+	}
+}
+
 func TestExpandSelectorArgs(t *testing.T) {
 	cases := []struct {
 		name      string

@@ -16,6 +16,10 @@ promoted to `main` when a release is finished. See `CLAUDE.md` for the workflow.
 - `stop`, `restart`, `delete`, and `reset` now accept multiple targets and
   comma-separated lists (e.g. `marshal restart 2 3`, `marshal delete 2,3`). An
   unknown target in a multi-target call warns and the rest still run.
+- `marshal restart <marshal.yaml> --update-env` reloads an app's environment
+  (inline `env:` and `env_file:`) from the config file and restarts it in place,
+  preserving its ID and restart history. Other spec fields still require
+  `delete` + `start`.
 
 ### Changed
 - App IDs are now stable: the daemon persists each app's ID in `dump.json` and
